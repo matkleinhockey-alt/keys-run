@@ -76,6 +76,16 @@ export function createUnderwaterWorld(deps: UnderwaterDeps): UnderwaterWorld {
 
   let godRays: GodRaysRig | null = null;
   let lensWetting: LensWettingEffect | null = null;
+  // The merged EffectPass (caustics + lensWetting + godRays) — kept so `update()` can refresh its
+  // shared EffectMaterial's cameraNear/cameraFar uniforms every frame. Needed because
+  // `postprocessing` only copies those from `camera.near`/`camera.far` once, when the pass (or its
+  // mainCamera) is set up — it does not notice later in-place mutation of the same camera object.
+  // The debug/QA dive hook below does exactly that (camera.near=0.05, to get close to the seafloor
+  // without near-plane clipping), which left caustics.ts's depth-buffer reconstruction silently
+  // using a stale near (0.5) against a depth buffer actually rendered with near=0.05 — the two
+  // disagreeing is what was producing garbage world-positions and making caustics never appear at
+  // all, confirmed by dumping the live compiled shader + its actual uniform values.
+  let postEffectPass: EffectPass | null = null;
 
   // --- Sky-dome hide + background swap once fully submerged. ---
   // Why this is needed on top of fog-override.ts's global `fog_fragment` override: that override
@@ -114,6 +124,16 @@ export function createUnderwaterWorld(deps: UnderwaterDeps): UnderwaterWorld {
       const ambientK = Math.exp(-cameraDepth / AMBIENT_HALF_DEPTH);
       bgColor.setRGB(INSCATTER_COLOR.r * ambientK, INSCATTER_COLOR.g * ambientK, INSCATTER_COLOR.b * ambientK);
     }
+  }
+
+  /** See `postEffectPass`'s own comment: keeps caustics.ts's depth-buffer reconstruction honest
+   * whenever `camera.near`/`camera.far` change after the pass was built (today, only the debug dive
+   * hook below does this; a real diver rig doing the same would hit the identical staleness). */
+  function refreshPostEffectCamera(): void {
+    if (!postEffectPass) return;
+    const uniforms = (postEffectPass.fullscreenMaterial as THREE.ShaderMaterial).uniforms;
+    if (uniforms.cameraNear) uniforms.cameraNear.value = camera.near;
+    if (uniforms.cameraFar) uniforms.cameraFar.value = camera.far;
   }
 
   // --- Temporary debug/QA hook: drive the camera underwater without a diver entity. ---
@@ -168,6 +188,7 @@ export function createUnderwaterWorld(deps: UnderwaterDeps): UnderwaterWorld {
 
     transition.update(dt);
     applySkyUnderwaterState();
+    refreshPostEffectCamera();
 
     if (godRays) {
       godRays.lightMesh.position.copy(sunDisc.position);
@@ -197,7 +218,8 @@ export function createUnderwaterWorld(deps: UnderwaterDeps): UnderwaterWorld {
       scene.add(godRays.lightMesh);
       effects.push(godRays.effect);
     }
-    composer.addPass(new EffectPass(camera, ...effects));
+    postEffectPass = new EffectPass(camera, ...effects);
+    composer.addPass(postEffectPass);
   }
 
   return {
@@ -210,6 +232,7 @@ export function createUnderwaterWorld(deps: UnderwaterDeps): UnderwaterWorld {
       marineSnow.dispose();
       if (godRays) { scene.remove(godRays.lightMesh); godRays.dispose(); godRays = null; }
       if (skyHidden) { sky.visible = true; sunDisc.visible = true; scene.background = originalBackground; }
+      postEffectPass = null; // the composer that owned it is already being torn down by postfx.dispose()
       transition.dispose();
       if (typeof window !== 'undefined') delete (window as unknown as { __uwDebug?: unknown }).__uwDebug;
     },

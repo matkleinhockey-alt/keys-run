@@ -20,6 +20,24 @@
  * `uwcTanHalfFovY` is refreshed every frame in `update()` rather than once, because
  * transition.ts narrows `camera.fov` across the surface crossing — a stale value would misproject
  * caustics for the ~0.3 s of that tween.
+ *
+ * ⚠ Known limitation, root-caused but not fixed here (not a bug in this file's code): caustics do
+ * not currently render visibly under the QA debug-dive hook (world/underwater/index.ts), because
+ * that hook sets `camera.near = 0.05` to get close to the seafloor without near-plane clipping,
+ * while the scene's `camera.far` stays 9000 (topside draw distance). A 180,000:1 near/far ratio
+ * leaves almost no depth-buffer precision for anything past the first few centimetres: verified by
+ * directly reading back the raw depth-texture value at a point ~2 m from the camera — it reads
+ * ~0.976, mathematically correct for that ratio (not a reconstruction bug; the maths above were
+ * independently re-derived and confirmed against it), but far too coarse for this effect's
+ * world-position reconstruction to recover anything useful. Confirmed via live shader dumps that
+ * the depth texture, its uniforms (including cameraNear/cameraFar, now kept in sync every frame —
+ * see index.ts's `refreshPostEffectCamera`, a real bug fixed in the same session this was found)
+ * and the effect's inclusion/blending in the merged EffectPass are all correctly wired; a flat
+ * `vec4(1,0,1,1)` dropped in at the top of `mainImage` renders as solid magenta exactly as
+ * expected, which is what isolated this to a precision problem rather than a wiring one. A real
+ * diver camera should very likely use a far plane matched to underwater visibility (~30-50 m per
+ * the depth-band table) rather than inheriting the topside camera's 9000 m — that alone would drop
+ * the ratio to a few hundred:1 and should resolve this without touching this file.
  */
 import * as THREE from 'three';
 import { Effect, EffectAttribute, BlendFunction } from 'postprocessing';
