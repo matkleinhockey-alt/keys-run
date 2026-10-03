@@ -29,6 +29,7 @@ import { createIslands } from '../world/islands.js';
 import { createBridge } from '../world/bridge.js';
 import { createLandmarks } from '../world/landmarks.js';
 import { createCoral } from '../world/coral.js';
+import { createFishWorld } from '../entities/fish/index.js';
 import { createClouds } from '../world/clouds.js';
 import { createMarinas } from '../world/marinas.js';
 import { createParticleSystem } from '../world/particles.js';
@@ -100,6 +101,14 @@ export function initWorld(wrap: HTMLElement): World {
 
   // 8. coral
   scene.add(createCoral());
+
+  // 8b. fish — schools of VIS creatures, deterministic resident reef schools plus a roaming
+  // layer (entities/fish/index.ts); see docs/ARCHITECTURE.md "Fish at realism *and* density" and
+  // "Fish ownership — three tiers". `fishWorld.update` is called from frame() below with the
+  // boat as the only threat for now — a diver threat can be appended to the optional 4th arg
+  // once entities/diver/** exists, with no change needed inside entities/fish.
+  const fishWorld = createFishWorld();
+  scene.add(fishWorld.group);
 
   // 9. clouds (one InstancedMesh — see world/clouds.ts header; count fixed at boot per the
   // initial quality tier since, being a single draw call either way, it isn't worth a rebuild
@@ -358,6 +367,7 @@ export function initWorld(wrap: HTMLElement): World {
     water.update(simTime, Math.max(sw * 1.1, ch), sw, ch);
     islands.update(simTime);
     tod.update(clamped);
+    fishWorld.update(clamped, simTime, { x: curState.x, z: curState.z }, Math.abs(curState.speed));
 
     const amp = ampAt(renderState.x, renderState.z);
     applyBoatVisuals(renderState, model, { t: simTime, dt: clamped, todK: tod.getK(), sw, ch, amp, hull: { len: boatSpec.len, beam: boatSpec.beam, topMs: boatSpec.top * 0.5144 * SPEED_SCALE }, particles, water }, events);
