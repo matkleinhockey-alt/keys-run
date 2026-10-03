@@ -114,3 +114,69 @@ describe('graceful shutdown (end to end over a real ws connection)', () => {
     }
   }, 15000);
 });
+
+describe('reconnect-and-resume', () => {
+  it('a player with a saved resume row is welcomed back at that exact position, not a fresh spawn', async () => {
+    const appHandle = testDbHandle();
+    const app = buildSimApp({ pool: appHandle.pool, maxPlayers: 8, autosaveIntervalMs: 3_600_000 });
+    const port = await listen(app);
+
+    try {
+      const user = await createTestUserWithSession(appHandle);
+      const savedResume = { x: -1234.5, z: 2345.6, h: 1.2345, speed: 7.89, hullIndex: 3, savedAtMs: Date.now() };
+      await handle.pool.query('INSERT INTO players (user_id, resume) VALUES ($1, $2::jsonb)', [user.userId, JSON.stringify(savedResume)]);
+
+      let welcome: WelcomeMsg | null = null;
+      const client = new SimTestClient(`ws://127.0.0.1:${port}`, { onWelcome: (w) => (welcome = w) });
+      await client.waitOpen();
+      client.sendHello(user.token);
+
+      const deadline = Date.now() + 5000;
+      while (!welcome) {
+        if (Date.now() > deadline) throw new Error('never received WELCOME on reconnect');
+        await new Promise((r) => setTimeout(r, 10));
+      }
+
+      const w = welcome as WelcomeMsg;
+      // Quantized over the wire (see Q.X/Q.Z/Q.H/Q.SPEED in proto/messages.ts) — compare within
+      // that documented error, not exact equality.
+      expect(w.x).toBeCloseTo(savedResume.x, 0);
+      expect(w.z).toBeCloseTo(savedResume.z, 0);
+      expect(w.h).toBeCloseTo(savedResume.h, 2);
+      expect(w.speed).toBeCloseTo(savedResume.speed, 1);
+      expect(w.hullIndex).toBe(savedResume.hullIndex);
+
+      client.close();
+    } finally {
+      app.stopLoops();
+      await new Promise<void>((resolve) => app.httpServer.close(() => resolve()));
+      await appHandle.close();
+    }
+  }, 10000);
+
+  it('a brand-new player (no resume row) gets the default spawn, not an error', async () => {
+    const appHandle = testDbHandle();
+    const app = buildSimApp({ pool: appHandle.pool, maxPlayers: 8, autosaveIntervalMs: 3_600_000 });
+    const port = await listen(app);
+
+    try {
+      const user = await createTestUserWithSession(appHandle);
+      let welcome: WelcomeMsg | null = null;
+      const client = new SimTestClient(`ws://127.0.0.1:${port}`, { onWelcome: (w) => (welcome = w) });
+      await client.waitOpen();
+      client.sendHello(user.token);
+
+      const deadline = Date.now() + 5000;
+      while (!welcome) {
+        if (Date.now() > deadline) throw new Error('never received WELCOME for a new player');
+        await new Promise((r) => setTimeout(r, 10));
+      }
+      expect(Number.isFinite((welcome as WelcomeMsg).x)).toBe(true);
+      client.close();
+    } finally {
+      app.stopLoops();
+      await new Promise<void>((resolve) => app.httpServer.close(() => resolve()));
+      await appHandle.close();
+    }
+  }, 10000);
+});
