@@ -37,6 +37,7 @@ import { createMarinas } from '../world/marinas.js';
 import { createParticleSystem } from '../world/particles.js';
 
 import { makeBoat, type BoatModel } from '../entities/boat/model.js';
+import { createCrewSystem } from '../entities/crew-model/index.js';
 import { createElectronics, type BoatReadout } from '../entities/boat/electronics.js';
 import { applyBoatVisuals, sampleWaterHeight } from '../entities/boat/visuals.js';
 import { createBoatInput, bindBoatInput, type BoatStateBox } from '../entities/boat/input.js';
@@ -184,6 +185,17 @@ export function initWorld(wrap: HTMLElement): World {
   shadows.applyToSubtree(scene);
   let postfx = createPostFX(renderer, scene, camera, quality.post);
 
+  // 12b-2. deck crew (docs/ARCHITECTURE.md's first external 3D asset — see
+  // entities/crew-model/index.ts and docs/ASSET-LICENCES.md). Loads async in the background and
+  // never blocks this function returning; figures pop onto the boat whenever the glTF resolves.
+  // Parented to model.group (via attachTo), not scene, so crew ride the hull's heave/pitch/roll
+  // like everything else aboard. Deliberately built *after* 12b just above (not back at 12 with
+  // the rest of boat/electronics setup) so the onGroupReady hook below can close over a `shadows`
+  // that already exists — every (re)build, sync or from the async glTF arriving later, re-runs
+  // applyToSubtree on just the new crew group so their materials get the CSM cascade setup too.
+  const crewSystem = createCrewSystem(quality.tier, (group) => shadows.applyToSubtree(group));
+  crewSystem.attachTo(model, boatSpec);
+
   // 12c. underwater world (docs/ARCHITECTURE.md "The underwater world" → "Rendering") — marine
   // snow, the surface-crossing transition, and the caustics/lens-wetting/(High+) god-rays post
   // effects appended onto postfx's composer. Built after postfx so attachPostFX has a composer to
@@ -241,6 +253,7 @@ export function initWorld(wrap: HTMLElement): World {
     postfx.dispose();
     postfx = createPostFX(renderer, scene, camera, quality.post);
     underwater.attachPostFX(postfx.composer, quality.tier);
+    crewSystem.setQuality(quality.tier);
     resize();
     setQualityLabels(tier, announce);
   }
@@ -394,6 +407,7 @@ export function initWorld(wrap: HTMLElement): World {
     scene.remove(model.group);
     model = makeBoat(spec, { lightMats: tod.lightMats, todK: tod.getK(), mfdTex: electronics.mfdTex, gpsTex: electronics.gpsTex, sonTex: electronics.sonTex });
     scene.add(model.group);
+    crewSystem.attachTo(model, spec); // re-applies CSM setup to the new crew group itself (see its onGroupReady hook above)
     shadows.applyToSubtree(model.group);
     const label = document.getElementById('gBoat');
     if (label) label.textContent = (spec.nickname ? '"' + spec.nickname + '" · ' : '') + spec.brand + ' ' + spec.name + ' · ' + spec.power;

@@ -4,6 +4,9 @@ node_modules
 dist
 *.tsbuildinfo
 .no-three-out
+# assets-pipeline build output — intermediate scratch; committed artifacts live under
+# apps/client/public/models/** instead (see packages/assets-pipeline/scripts/build-crew.sh).
+packages/assets-pipeline/build/
 .env
 .env.*
 !.env.example
