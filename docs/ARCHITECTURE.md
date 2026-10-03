@@ -294,6 +294,23 @@ ticks for everyone on the shard. Structure-of-arrays typed arrays for entity
 state, preallocated snapshot buffers, no closures in the tick loop. Target
 **zero allocation in the steady-state tick.**
 
+⚠ **This collides with the `step*(state, input, dt) → state` convention below,
+which allocates a new state object per call.** Measured in phase 2: ~2 small
+objects per player per tick, sub-5 ms GC pauses at 100 boats — immaterial. The
+resolution, in priority order:
+
+1. **Keep the functional signature in `packages/shared`.** It is what makes the
+   physics testable and what client-side prediction needs for rollback, and
+   those matter more than the allocation at boat densities.
+2. **Where profiling shows it hurts, add an in-place sibling** —
+   `stepBoatInto(out, state, input, dt)` — used only by the server hot path, with
+   the functional version delegating to it so there is one implementation, not two.
+3. **The threshold is fish, not boats.** 100 boats is 200 objects/tick. Tier-3
+   tracked fish at ~1,700 entities is 3,400 objects/tick, an order of magnitude
+   worse. Do the in-place variant when fish land (phase 4), not before.
+
+Do not pre-optimise this. Do measure it again when tracked fish arrive.
+
 ### Graceful shutdown (non-negotiable)
 
 Railway restarts the process on every deploy.
@@ -432,6 +449,7 @@ skip ahead.
 | **0** | monorepo; extract `shared`; split `waveH`/`wakeH`; seed placement RNG; fixed 30 Hz boat step; split sim from presentation. **Still single-player.** | feel is indistinguishable from legacy, verified against recorded input traces |
 | **1** | `api`, auth, Postgres, leaderboard tables. **No catch-write endpoint, ever** — catches reach the DB only via the sim service (phase 3) or seed/test fixtures | — |
 | **2** | `sim`: 30 Hz loop, interest grid, boat replication | it is a shared world of boats |
+| **2.5** | **deferred from phase 2** — delta-against-ack-baseline snapshots, per-client 9-bit slot remapping, 600 m coarse boat tier, dispersed-player bandwidth measurement | needed before fish multiply entity counts |
 | **3** | **server-authoritative rod fishing**; delete client `chooseFish` | leaderboard becomes trustworthy — do not promote it before this |
 | **4** | fish tiering, resident schools | — |
 | **5** | diver, free-dive, spearfishing with lag compensation | — |
