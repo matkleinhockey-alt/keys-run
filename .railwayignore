@@ -1,0 +1,36 @@
+# Keep `railway up` uploads small. Without this the CLI uploads the whole
+# working directory — including node_modules and any git worktrees — which is
+# gigabytes and fails the upload with a TLS error partway through.
+#
+# Everything here is either reinstalled or rebuilt inside the Dockerfile, so
+# none of it needs to travel.
+
+node_modules
+**/node_modules
+
+# build output — Dockerfiles build from source
+dist
+**/dist
+.next
+*.tsbuildinfo
+
+# agent worktrees (each is a full checkout with its own node_modules)
+.claude
+
+.git
+.github
+
+# the original single-file game, kept for reference but not deployed
+legacy
+
+# local-only
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+
+# test artifacts
+**/test/screenshots
+coverage
+.no-three-out

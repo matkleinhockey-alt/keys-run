@@ -11,11 +11,11 @@
  */
 import * as THREE from 'three';
 import { chainZ } from '@keysrun/shared/world/chain';
-import { WORLD, WB } from '@keysrun/shared/world/depth';
+import { WB } from '@keysrun/shared/world/depth';
 import { BOATS, SPEED_SCALE, type Boat } from '@keysrun/shared/content/boats';
 import { SEA_STATES } from '@keysrun/shared/waves';
 import { ampAt } from '@keysrun/shared/sim/depth-grid';
-import { createBoatState, stepBoat, type BoatState, type BoatEnv, type DockRect, type Piling, type SimEvent } from '@keysrun/shared/sim/boat';
+import { createBoatState, stepBoat, type BoatState, type BoatEnv, type DockRect, type Piling, type SimEvent, type FightTarget } from '@keysrun/shared/sim/boat';
 
 import { createScene, isTouch } from '../core/scene.js';
 import { createTimeOfDay } from '../core/time-of-day.js';
@@ -24,11 +24,14 @@ import { createCascadedShadows } from '../core/shadows.js';
 import { createPostFX } from '../core/postfx.js';
 import { createProfiler } from '../ui/profiler.js';
 import { createWater } from '../world/water.js';
+import { installUnderwaterFog } from '../world/underwater/fog-override.js';
+import { createUnderwaterWorld } from '../world/underwater/index.js';
 import { createSeafloor } from '../world/seafloor.js';
 import { createIslands } from '../world/islands.js';
 import { createBridge } from '../world/bridge.js';
 import { createLandmarks } from '../world/landmarks.js';
-import { createCoral } from '../world/coral.js';
+import { createReef } from '../world/reef/index.js';
+import { createFishWorld } from '../entities/fish/index.js';
 import { createClouds } from '../world/clouds.js';
 import { createMarinas } from '../world/marinas.js';
 import { createParticleSystem } from '../world/particles.js';
@@ -38,6 +41,11 @@ import { createElectronics, type BoatReadout } from '../entities/boat/electronic
 import { applyBoatVisuals, sampleWaterHeight } from '../entities/boat/visuals.js';
 import { createBoatInput, bindBoatInput, type BoatStateBox } from '../entities/boat/input.js';
 import { createCamState, createFpState, updateCamera, cycleView, bindCameraPointerControls } from '../entities/camera.js';
+
+import { createFishing } from './fishing/index.js';
+import { F as FishF, lineOut as fishingLineOut } from './fishing/state.js';
+import { createCatchFlow } from './catch/catch-flow.js';
+import { bindCatchInput } from './catch/input.js';
 
 import { updateHUD } from '../ui/hud.js';
 import { createMinimap } from '../ui/minimap.js';
@@ -66,6 +74,11 @@ function hullOf(spec: Boat) {
 }
 
 export function initWorld(wrap: HTMLElement): World {
+  // 0. Underwater global fog override (docs/ARCHITECTURE.md "The underwater world" →
+  // "Rendering") — must run before anything compiles a shader that includes `<fog_fragment>`, so
+  // first thing, before any create*() below.
+  installUnderwaterFog();
+
   // 1. renderer / scene / sky / lighting
   const sceneCtx = createScene(wrap);
   const { renderer, scene, camera, sunDir } = sceneCtx;
@@ -85,7 +98,8 @@ export function initWorld(wrap: HTMLElement): World {
   const tod = createTimeOfDay(sceneCtx, water.uniforms.uSky);
 
   // 4. sea floor
-  scene.add(createSeafloor(WORLD.x0, WORLD.z0, WORLD.size));
+  const seafloor = createSeafloor();
+  scene.add(seafloor.group);
 
   // 5. islands + vegetation + runway
   const islands = createIslands();
@@ -98,8 +112,20 @@ export function initWorld(wrap: HTMLElement): World {
   // 7. landmarks (Sombrero light, Faro Blanco, reef moorings)
   scene.add(createLandmarks());
 
-  // 8. coral
-  scene.add(createCoral());
+  // 8. reef — chunked, deterministic, LOD'd (see world/reef/index.ts; this replaces the old
+  // flat 620-icosahedra coral scatter per docs/ARCHITECTURE.md's "Reef"). Resident chunks follow
+  // the camera (reef.update call in frame() below), not the boat, since that's what's actually
+  // rendered — see world/reef/chunk-manager.ts's header.
+  const reef = createReef();
+  scene.add(reef.group);
+
+  // 8b. fish — schools of VIS creatures, deterministic resident reef schools plus a roaming
+  // layer (entities/fish/index.ts); see docs/ARCHITECTURE.md "Fish at realism *and* density" and
+  // "Fish ownership — three tiers". `fishWorld.update` is called from frame() below with the
+  // boat as the only threat for now — a diver threat can be appended to the optional 4th arg
+  // once entities/diver/** exists, with no change needed inside entities/fish.
+  const fishWorld = createFishWorld();
+  scene.add(fishWorld.group);
 
   // 9. clouds (one InstancedMesh — see world/clouds.ts header; count fixed at boot per the
   // initial quality tier since, being a single draw call either way, it isn't worth a rebuild
@@ -142,6 +168,14 @@ export function initWorld(wrap: HTMLElement): World {
   shadows.registerCustomMaterial(islands.frondMaterial, islands.frondBaseCompile);
   shadows.applyToSubtree(scene);
   let postfx = createPostFX(renderer, scene, camera, quality.post);
+
+  // 12c. underwater world (docs/ARCHITECTURE.md "The underwater world" → "Rendering") — marine
+  // snow, the surface-crossing transition, and the caustics/lens-wetting/(High+) god-rays post
+  // effects appended onto postfx's composer. Built after postfx so attachPostFX has a composer to
+  // attach to; re-attached below every time applyQuality() rebuilds that composer.
+  const underwater = createUnderwaterWorld({ scene, camera, renderer, sunDisc: sceneCtx.sunDisc, sky: sceneCtx.sky });
+  underwater.attachPostFX(postfx.composer, quality.tier);
+
   const profiler = createProfiler();
   // The postprocessing composer issues several internal renderer.render() calls per frame
   // (RenderPass, an optional NormalPass for SSAO, the final EffectPass blit); with autoReset left
@@ -191,6 +225,7 @@ export function initWorld(wrap: HTMLElement): World {
     }
     postfx.dispose();
     postfx = createPostFX(renderer, scene, camera, quality.post);
+    underwater.attachPostFX(postfx.composer, quality.tier);
     resize();
     setQualityLabels(tier, announce);
   }
@@ -214,12 +249,44 @@ export function initWorld(wrap: HTMLElement): World {
   const input = createBoatInput();
   const stateBox: BoatStateBox = { state: curState };
 
+  // Boat input (entities/boat/input.ts) owns the raw KeyT listener and doesn't know about
+  // Shift — fishing's drag (legacy "T tightens · Shift+T loosens", see fishing/input.ts's
+  // header) needs that distinction, so toggleTrim below tracks it itself rather than reaching
+  // into a module outside this task's scope.
+  let shiftHeld = false;
+  window.addEventListener('keydown', (e) => { if (e.key === 'Shift') shiftHeld = true; });
+  window.addEventListener('keyup', (e) => { if (e.key === 'Shift') shiftHeld = false; });
+
   let seaIdx = 1; // legacy's initial `seaIdx=1` ("Choppy")
   let sw = 0.9, ch = 1; // legacy's initial SW/CH (index.html:435)
   let game = { running: false };
 
+  // 13b. rod fishing + catch flow (docs/ARCHITECTURE.md "Rod fishing, server-authoritative").
+  // `fishing` owns cast/wait/bite/fight and the first-person rod view; `catchFlow` is the one
+  // shared landing path both it and entities/speargun (once the diver lands) feed into for the
+  // catch card / cooler / weigh-in.
+  const catchFlow = createCatchFlow({
+    scene,
+    getModel: () => model,
+    getBoatSpec: () => ({ id: boatSpec.id, brand: boatSpec.brand, name: boatSpec.name }),
+  });
+  const fishing = createFishing({
+    scene,
+    camera,
+    getModel: () => model,
+    fp: fpState,
+    camState,
+    particles,
+    boatInput: input,
+    getBoat: () => stateBox.state,
+    onLanded(fish) { catchFlow.landFish({ key: fish.key, weight: fish.weight, x: fish.fx, z: fish.fz, zone: fish.zone }); },
+    onActionWhileCaught() { catchFlow.releaseFish(); },
+  });
+  bindCatchInput(catchFlow, () => stateBox.state);
+
   bindBoatInput(input, stateBox, {
     toggleTrim() {
+      if (FishF.state === 'fight') { fishing.setDrag(FishF.drag + (shiftHeld ? -1 : 1)); return; }
       stateBox.state = { ...stateBox.state, trimMode: !stateBox.state.trimMode };
       input.fwd = false; input.back = false;
       toast(stateBox.state.trimMode ? 'Trim mode on — ▲ trims up, ▼ trims down. W/S still change throttle. T to exit.' : 'Trim mode off.');
@@ -281,6 +348,10 @@ export function initWorld(wrap: HTMLElement): World {
   populateBoatCards(BOATS, boatSpec, {
     onSelectBoat(spec) { if (!game.running) placeBoat(spec); else boatSpec = spec; },
     onGo() {
+      // legacy `if(F.state!=='idle'&&F.state!=='caught') reelIn();` — switching boats mid-cast
+      // would otherwise leave the fishing state machine holding a rod-tip/station reference into
+      // the boat model placeBoat() is about to replace.
+      if (FishF.state !== 'idle' && FishF.state !== 'caught') fishing.reelIn();
       placeBoat(boatSpec);
       unstick();
       showHud();
@@ -314,12 +385,19 @@ export function initWorld(wrap: HTMLElement): World {
     sw += (st.sw - sw) * k; ch += (st.ch - ch) * k;
 
     simTime += dt;
+    // legacy `game.running && F.state!=='caught'` / `F.state==='fight'` / `lineOut()` — read
+    // from *this* fixed step's starting fishing state, same one-frame-stale ordering as
+    // legacy's `updateBoat(dt,t); updateFishing(dt,t);` (fishing.update runs below, after
+    // stepBoat, using the boat position this step just produced).
+    const fightActive = FishF.state === 'fight';
+    const fightTarget: FightTarget | null = fightActive && FishF.fight ? { x: FishF.fx, z: FishF.fz, running: FishF.fight.running } : null;
     const env: BoatEnv = {
       t: simTime, hull: hullOf(boatSpec), sw, ch, worldBounds: WB, pilings, dockRects,
-      canDrive: game.running, fightActive: false, fightTarget: null, lineOut: false, luigiOn: false,
+      canDrive: game.running && FishF.state !== 'caught', fightActive, fightTarget, lineOut: fishingLineOut(), luigiOn: false,
     };
     const next = stepBoat(stateBox.state, input, env, dt);
     stateBox.state = next;
+    fishing.update(dt, simTime, next, sw, ch);
     return next.events;
   }
 
@@ -358,21 +436,56 @@ export function initWorld(wrap: HTMLElement): World {
     water.update(simTime, Math.max(sw * 1.1, ch), sw, ch);
     islands.update(simTime);
     tod.update(clamped);
+    // DEV/VERIFICATION HOOK ONLY — entities/diver/** doesn't exist yet in this branch (a
+    // different agent's work this phase), so there is no real diver threat to pass fishWorld
+    // yet. `window.__fishDebugDiver` lets a Playwright screenshot script stand in a synthetic
+    // diver position to verify entities/fish's diver-flee response (behavior.ts) ahead of that
+    // integration; unset in every normal run, so this is a no-op outside of test scripts.
+    const debugDiver = (window as unknown as { __fishDebugDiver?: { x: number; z: number } }).__fishDebugDiver;
+    const fishThreats = debugDiver ? [{ ...debugDiver, kind: 'diver' as const, speed: 0.6 }] : undefined;
+    fishWorld.update(clamped, simTime, { x: curState.x, z: curState.z }, Math.abs(curState.speed), fishThreats);
 
     const amp = ampAt(renderState.x, renderState.z);
     applyBoatVisuals(renderState, model, { t: simTime, dt: clamped, todK: tod.getK(), sw, ch, amp, hull: { len: boatSpec.len, beam: boatSpec.beam, topMs: boatSpec.top * 0.5144 * SPEED_SCALE }, particles, water }, events);
 
     particles.update(clamped, simTime, (x, z, t, a) => sampleWaterHeight(curState, x, z, t, a, sw, ch));
+    catchFlow.updateReleased(clamped, simTime, (x, z, t) => sampleWaterHeight(curState, x, z, t, ampAt(x, z), sw, ch));
 
     for (const b of marinas.dockBoats) {
       b.position.y = sampleWaterHeight(curState, b.position.x, b.position.z, simTime, ampAt(b.position.x, b.position.z), sw, ch) - 0.05;
     }
 
     updateCamera(clamped, { camera, sky: sceneCtx.sky, sunDisc: sceneCtx.sunDisc, sunDir }, camState, fpState, model, renderState, game.running, boatSpec.len);
+    // DEV/VERIFICATION HOOK ONLY — lets a Playwright screenshot script place the camera directly
+    // for entities/fish visual verification. Unset in every normal run, so this is a no-op outside
+    // of test scripts. Applied after updateCamera so it wins for this frame instead of being
+    // immediately overwritten.
+    const camOverride = (window as unknown as {
+      __fishDebugCamera?: { x: number; y: number; z: number; lookX: number; lookY: number; lookZ: number };
+    }).__fishDebugCamera;
+    if (camOverride) {
+      camera.position.set(camOverride.x, camOverride.y, camOverride.z);
+      camera.lookAt(camOverride.lookX, camOverride.lookY, camOverride.lookZ);
+      camera.updateMatrixWorld(true);
+    }
+    // After the override, so terrain chunks stream around wherever the camera actually ended up —
+    // otherwise a debug-placed camera would sit over unbuilt seabed.
+    seafloor.update(camera.position);
+    // Reef chunk residency follows the (now up-to-date) camera position — a no-op unless the
+    // viewer crossed into a new 50 m chunk this frame; never a per-frame rebuild.
+    reef.update(camera.position.x, camera.position.z);
+    // Needs the final camera position (override included) to know the viewer's depth, and must
+    // run before anything renders so the extinction/fog state is right for this frame.
+    underwater.update(clamped);
+    // Last: needs the model's and camera's matrixWorld both up to date (applyBoatVisuals /
+    // updateCamera above, plus any override), same as legacy's `drawLine(time)` running after
+    // both `updateBoat`/`updateCamera`.
+    fishing.render(simTime, curState, sw, ch);
     electronics.update(clamped, simTime, fpState.driveOn);
     if (game.running) {
       updateHUD(clamped, curState, { boatLabel: hudBoatLabel(boatSpec), draft: boatSpec.draft, running: game.running });
       minimap.draw(simTime, curState);
+      catchFlow.updateTouchDock(curState);
     }
 
     // Cascades reposition from the camera's up-to-date matrix (updateCamera just finalized it)
@@ -388,6 +501,10 @@ export function initWorld(wrap: HTMLElement): World {
     // at 50 ms for the physics accumulator and would make the HUD misreport every real frame
     // slower than 20 fps as exactly 20 fps.
     profiler.sample(dt, renderer, quality.tier);
+    // legacy `if(F.state==='caught') renderPortrait(time);` — an isolated off-screen render (see
+    // game/catch/portrait.ts's header), run after the real frame so it never perturbs the
+    // profiler's per-frame draw-call count sampled just above.
+    if (FishF.state === 'caught') catchFlow.renderPortrait(simTime, renderer);
   }
 
   function resize(): void {
@@ -398,6 +515,24 @@ export function initWorld(wrap: HTMLElement): World {
     postfx.setSize(w, h);
     shadows.updateFrustums();
   }
+
+  // DEV/VERIFICATION HOOK ONLY (see the __fishDebugDiver comment above frame()'s fishWorld.update
+  // call) — lets test/capture-fish-screenshots.mjs find a deterministic resident of a given
+  // species and teleport the boat there, instead of guessing world coordinates blind. No normal
+  // code path reads `window.__fishDebug`.
+  (window as unknown as { __fishDebug?: unknown }).__fishDebug = {
+    findResidentNear: fishWorld.findResidentNear,
+    waterColumnAt: fishWorld.waterColumnAt,
+    activeSchools: fishWorld.debugActiveSchools,
+    poolStats: fishWorld.debugPoolStats,
+    stats: () => fishWorld.stats,
+    teleport(x: number, z: number, h?: number): void {
+      stateBox.state = { ...stateBox.state, x, z, h: h ?? stateBox.state.h, speed: 0 };
+      curState = stateBox.state;
+      model.group.position.set(x, stateBox.state.y, z);
+      model.group.rotation.y = stateBox.state.h;
+    },
+  };
 
   return { resize, frame, renderer };
 
