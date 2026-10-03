@@ -59,7 +59,15 @@ export function createSpeciesPool(group: THREE.Group, key: string, V: CreatureVi
   const vat = bakeVAT(profile);
   const mat = createFishMaterial(key, V, vat, profile.uScl, profile.uShn);
 
-  const capacity = Math.max(6, V.school[1] * 4);
+  // Capacity is a slot-count ceiling, not a draw/triangle cost — `mesh.count` (render.ts's
+  // high-water mark) tracks active instances, not capacity, so sizing generously here only
+  // guards against starving a popular species when several of its schools (adjacent resident
+  // chunks, roamers, both at once) are active at the same time; it costs a little typed-array/GPU
+  // buffer memory, not fill rate. Bumped from legacy's `*4` now that density is world-scaled
+  // (spawn.ts) rather than player-scaled — see docs/ARCHITECTURE.md's performance budget note and
+  // this task's "< 300 draw calls / < 2.5M triangles" ceiling, which is enforced by *density*
+  // tuning (spawn.ts), not by this cap.
+  const capacity = Math.max(16, V.school[1] * 8);
   const mesh = new THREE.InstancedMesh(geo, mat, capacity);
   mesh.frustumCulled = false;
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);

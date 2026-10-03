@@ -88,14 +88,37 @@ export const VIS: Record<string, CreatureVis> = {
   dolphin:{kind:'dolphin',len:2.4,back:'#646d78',belly:'#d9dde2',level:'surface',speed:3,school:[3,6],spread:4.5,dMin:3,dMax:1e5,act:'porpoise'}
 };
 
+/**
+ * Per-habitat ambient-life tables, keyed primarily by `Zone` (@keysrun/shared/world/depth) but
+ * with two extra keys — `ReefWall` and `Humps` — that are *not* zone names. `zoneAt` only ever
+ * returns the seven `Zone` strings; `ReefWall`/`Humps` are a finer habitat split that
+ * apps/client/src/entities/fish/spawn.ts layers on top of `zoneAt` using depth (the reef crest vs.
+ * the 3.4->45.4 m wall drop) and proximity to a named `HUMPS` structure, so this table can tell
+ * "shallow patch reef" apart from "ledge/drop" and "real offshore structure" apart from "open
+ * water" without changing `zoneAt`'s return type or touching `packages/shared/src/world` at all.
+ * See docs/ARCHITECTURE.md's depth-band table and "The Humps" in the task brief.
+ */
 export const ZONE_LIFE: Record<string, Array<[string, number]>> = {
-  'Creek':[['snook',3],['redfish',2],['tarpon',1.5],['manatee',1],['mangrove',3],['ladyfish',2]],
-  'Flats':[['bonefish',5],['permit',2],['stingray',3],['barracuda',2],['blacktip',1.5],['lemonshark',1],['ladyfish',2]],
-  'Backcountry':[['redfish',4],['snook',3],['trout',3],['tarpon',2],['manatee',1.2],['stingray',2],['jackcrevalle',2],['ladyfish',2],['tripletail',.6]],
-  'Bridge':[['tarpon',5],['snook',2],['mangrove',3],['eagleray',1],['sheepshead',3],['goliath',.6],['jackcrevalle',1.5]],
-  'Hawk Channel':[['mangrove',4],['eagleray',2],['turtle',1.5],['barracuda',2],['nurse',1.5],['mutton',2],['dolphin',1],['cero',2],['pompano',1.5],['cobia',1],['graytrigger',1.2]],
+  // Mangrove creek channels — juveniles sheltering along the edges.
+  'Creek':[['snook',3],['redfish',2.5],['tarpon',1.5],['manatee',1],['mangrove',3.5],['ladyfish',2.5],['trout',1.5],['jackcrevalle',1]],
+  // Very shallow skinny water — bonefish/permit on the sand, small sharks cruising the edges.
+  'Flats':[['bonefish',5],['permit',2.2],['stingray',3],['redfish',1.5],['barracuda',2],['blacktip',1.5],['lemonshark',1],['eagleray',1],['ladyfish',3],['pompano',1.2]],
+  // Florida Bay backcountry — juvenile snapper, small barracuda, rays on the sand, baitfish schools.
+  'Backcountry':[['redfish',4],['snook',3],['trout',3],['mangrove',2.5],['tarpon',2],['bonefish',1.5],['permit',1],['barracuda',1.2],['manatee',1.2],['stingray',2.2],['jackcrevalle',2],['ladyfish',3],['pompano',1.5],['tripletail',.6]],
+  // Bridge pilings and the channels that run under them — structure-holders in current.
+  'Bridge':[['tarpon',5],['snook',2],['mangrove',3],['eagleray',1],['sheepshead',3],['goliath',.6],['jackcrevalle',1.5],['nurse',1],['cobia',1],['barracuda',1]],
+  // Mixed mid-water schools, mackerel and jacks between the Bay and the reef line.
+  'Hawk Channel':[['mangrove',4],['eagleray',2],['turtle',1.5],['barracuda',2],['nurse',1.5],['mutton',2],['dolphin',1],['cero',2],['pompano',1.5],['cobia',1],['graytrigger',1.2],['jackcrevalle',1.8],['yellowtail',1.5],['sheepshead',1.2]],
+  // Patch reef / Sombrero crest — the existing shallow reef life (depthAt < REEF_WALL_DEPTH).
   'Reef':[['yellowtail',5],['parrotfish',3],['angelfish',2],['hogfish',2],['grouper',2],['gag',1.2],['redgrouper',1.2],['nurse',1],['turtle',1.5],['barracuda',1.5],['mutton',2],['lionfish',1.5],['graytrigger',2],['cero',2],['goliath',.4]],
-  'Offshore':[['mahi',5],['flyingfish',4],['dolphin',2],['blackfin',3],['sailfish',1.5],['wahoo',1],['turtle',.8],['marlin',.6],['blackmarlin',.25],['swordfish',.3],['yellowfin',2.5],['albacore',1.2],['bluefin',.8],['kingfish',1.5],['amberjack',1.5],['hammerhead',.3]]
+  // The reef wall's ledges and drop-off (depthAt >= REEF_WALL_DEPTH, spawn.ts) — grouper holding on
+  // ledges, bigger snapper/jack schools working the drop.
+  'ReefWall':[['grouper',3],['gag',2],['redgrouper',2],['yellowtail',4],['mutton',2.5],['amberjack',2],['kingfish',1.5],['cero',1.5],['nurse',1],['goliath',.6],['graytrigger',1.2],['lionfish',1],['hammerhead',.3],['cobia',1]],
+  // Gulf Stream / open offshore — pelagics (roaming layer only; see spawn.ts).
+  'Offshore':[['mahi',5],['flyingfish',4],['dolphin',2],['blackfin',3],['sailfish',1.5],['wahoo',1],['turtle',.8],['marlin',.6],['blackmarlin',.25],['swordfish',.3],['yellowfin',2.5],['albacore',1.2],['bluefin',.8],['kingfish',1.5],['amberjack',1.5],['hammerhead',.3]],
+  // The Humps (Marathon Hump, West Hump) and other named structure far offshore — real relief that
+  // concentrates bottom fish and jacks well out in otherwise-open water.
+  'Humps':[['amberjack',4],['grouper',2.5],['gag',1.5],['redgrouper',1.5],['cobia',2],['mutton',2],['yellowtail',2],['kingfish',1.5],['barracuda',1.5],['goliath',.5],['bullshark',.4],['nurse',1]]
 };
 
 /** [startU, endU, heightScale, finStyle] along the body, used by finEdge/buildFishGeo. */

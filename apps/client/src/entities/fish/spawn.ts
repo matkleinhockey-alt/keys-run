@@ -22,14 +22,23 @@
  *    render range is frozen, not deleted, and reappears exactly as it was for
  *    `DORMANT_TTL_S` seconds before it is finally recycled.
  *
- * Resident chunks are gated to every zone except Offshore — Offshore has no reef/structure for a
- * school to "belong to" (docs/ARCHITECTURE.md: "same species, same patch reef"), so its species
- * list (`ZONE_LIFE.Offshore`) is only ever reached through the roaming layer.
+ * Resident chunks are gated to every zone except open Offshore water — Offshore has no
+ * reef/structure for a school to "belong to" (docs/ARCHITECTURE.md: "same species, same patch
+ * reef"), so its species list (`ZONE_LIFE.Offshore`) is only ever reached through the roaming
+ * layer. The one exception is the Humps (`HUMPS` in @keysrun/shared/world/depth, `nearestHumpDist`
+ * below): Marathon Hump and West Hump are real named relief sitting in Offshore water, exactly the
+ * kind of structure a resident school *can* belong to, so a chunk within `HUMP_RADIUS` of one gets
+ * `ZONE_LIFE.Humps` residents regardless of the zone underneath it.
+ *
+ * `lifeTableFor` also splits the Reef zone by depth (`REEF_WALL_DEPTH`): the shallow crest keeps
+ * `ZONE_LIFE.Reef`, the wall/ledge drop gets the bigger-bodied `ZONE_LIFE.ReefWall`. Both
+ * `ReefWall` and `Humps` are habitat refinements layered on top of `zoneAt`'s seven real zones,
+ * not zones themselves — see creatures.ts's `ZONE_LIFE` doc comment.
  */
 import { hashCell, weightedPick } from '@keysrun/shared/rng';
 import { VIS, ZONE_LIFE, type CreatureVis } from '@keysrun/shared/content/creatures';
-import { depthAt, zoneAt, WB, type Zone } from '@keysrun/shared/world/depth';
-import { shoreInfo } from '@keysrun/shared/world/chain';
+import { depthAt, zoneAt, WB, HUMPS, type Zone } from '@keysrun/shared/world/depth';
+import { shoreInfo, chainZ } from '@keysrun/shared/world/chain';
 import { memberScale } from './school.js';
 import type { FishMember, SchoolState } from './types.js';
 
@@ -44,11 +53,74 @@ const SALT = {
   ROAM_GATE: 9601, ROAM_SPECIES: 9602, ROAM_COUNT: 9603, ROAM_OFFSET_X: 9604, ROAM_OFFSET_Z: 9605, ROAM_HEADING: 9606,
 } as const;
 
-/** Resident density per zone — reef and structure-rich zones carry more fixed schools than open
- * sand/grass. Purely a tuning table, not gameplay-critical maths. */
-const RESIDENT_DENSITY: Partial<Record<Zone, number>> = {
-  Reef: 0.62, 'Hawk Channel': 0.38, Flats: 0.3, Backcountry: 0.24, Bridge: 0.5, Creek: 0.28,
+/**
+ * How "busy" each habitat is, 0..1 — structure (reef, bridge pilings, the Humps) carries far more
+ * fixed life than open sand/grass. This is the single density knob both layers tune from:
+ * `residentsForChunk` gates directly on it; `tryRoamCell` gates on it scaled by
+ * `ROAM_DENSITY_FACTOR` (roamers are the sparser layer *on top of* residents, not a second copy of
+ * the same density — see this file's header). Keyed by `ZONE_LIFE`'s habitat keys, which include
+ * the two non-`Zone` refinements `ReefWall` and `Humps` (see creatures.ts's `ZONE_LIFE` doc
+ * comment) alongside the seven real `Zone` strings.
+ *
+ * `Offshore`'s entry only reaches roamers in practice — `lifeTableFor` always returns null for
+ * residents in open Offshore water (residents need structure to "belong to"; see `instantiateResident`'s
+ * doc comment and docs/ARCHITECTURE.md's "Resident schools" note) — but it still needs a real
+ * value here because roamers *are* the pelagic layer offshore.
+ */
+const HABITAT_DENSITY: Record<string, number> = {
+  Creek: 0.34, Flats: 0.36, Backcountry: 0.3, Bridge: 0.56, 'Hawk Channel': 0.46,
+  Reef: 0.68, ReefWall: 0.52, Offshore: 0.5, Humps: 0.62,
 };
+/** Roamers sit on top of residents as a sparser, moving layer — see this file's header. */
+const ROAM_DENSITY_FACTOR = 0.5;
+/** Depth (m) past which the Reef zone's shallow crest table (`ZONE_LIFE.Reef`) hands off to the
+ * wall/ledge table (`ZONE_LIFE.ReefWall`) — docs/ARCHITECTURE.md bands 2 (5-10 m, patch reef) vs.
+ * 3/4 (10-20 m, reef wall top / ledges): the wall itself only spans dz 1460-1650, dropping
+ * 3.4 m -> 45.4 m over 190 m, so this is a depth threshold, not a position threshold. */
+const REEF_WALL_DEPTH = 12;
+/** Radius (m) within which a named, non-patch Hump's relief visibly concentrates fish — large
+ * enough to read as "busier than the open water around it" without swallowing the whole Offshore
+ * zone. The two `patch: true` HUMPS entries (Coffins Patch, Delta Shoal) are shallow enough that
+ * `zoneAt`/`depthAt` already route them through the normal Flats/Hawk Channel/Reef(Wall) tables —
+ * only the two deep offshore bumps (Marathon Hump, West Hump) need this override to host anything
+ * at all, since plain Offshore hosts no residents. */
+const HUMP_RADIUS = 260;
+
+/** Distance (m) from `(x,z)` to the nearest non-patch Hump, or Infinity if none — see `HUMP_RADIUS`. */
+function nearestHumpDist(x: number, z: number): number {
+  const dz = z - chainZ(x);
+  let best = Infinity;
+  for (const H of HUMPS) {
+    if (H.patch) continue;
+    const d = Math.hypot(x - H.x, dz - H.dz);
+    if (d < best) best = d;
+  }
+  return best;
+}
+
+interface LifeTable {
+  table: ReadonlyArray<readonly [string, number]>;
+  density: number;
+}
+
+/**
+ * Resolves which `ZONE_LIFE` table and gate density apply at a world point, layering structure
+ * (the Humps) and depth (reef crest vs. wall) refinements on top of the plain `zoneAt` zone —
+ * see this file's header and creatures.ts's `ZONE_LIFE` doc comment. `allowOffshore` distinguishes
+ * the resident caller (open Offshore water hosts no residents — nothing to "belong to" away from a
+ * Hump) from the roamer caller (Offshore *is* the pelagic roaming table).
+ */
+function lifeTableFor(x: number, z: number, zone: Zone, d: number, allowOffshore: boolean): LifeTable | null {
+  if (nearestHumpDist(x, z) < HUMP_RADIUS) {
+    const table = ZONE_LIFE.Humps;
+    if (table && table.length > 0) return { table, density: HABITAT_DENSITY.Humps };
+  }
+  if (zone === 'Offshore' && !allowOffshore) return null;
+  const key: string = zone === 'Reef' && d >= REEF_WALL_DEPTH ? 'ReefWall' : zone;
+  const table = ZONE_LIFE[key];
+  if (!table || table.length === 0) return null;
+  return { table, density: HABITAT_DENSITY[key] ?? 0.2 };
+}
 
 export function chunkOf(x: number, z: number): [number, number] {
   return [Math.floor(x / CHUNK_SIZE), Math.floor(z / CHUNK_SIZE)];
@@ -101,13 +173,11 @@ export interface ResidentSpec {
 export function residentsForChunk(seed: number, cx: number, cz: number): ResidentSpec | null {
   const [ccx, ccz] = chunkCenter(cx, cz);
   const zone = zoneAt(ccx, ccz);
-  if (zone === 'Offshore') return null;
-  const density = RESIDENT_DENSITY[zone] ?? 0.2;
-  if (hashCell(seed, cx, cz, SALT.RESIDENT_GATE) >= density) return null;
+  const life = lifeTableFor(ccx, ccz, zone, depthAt(ccx, ccz), false);
+  if (!life) return null;
+  if (hashCell(seed, cx, cz, SALT.RESIDENT_GATE) >= life.density) return null;
 
-  const table = ZONE_LIFE[zone];
-  if (!table || table.length === 0) return null;
-  const type = weightedPick(() => hashCell(seed, cx, cz, SALT.RESIDENT_SPECIES), table);
+  const type = weightedPick(() => hashCell(seed, cx, cz, SALT.RESIDENT_SPECIES), life.table);
   const V = VIS[type];
   if (!V) return null;
 
@@ -144,10 +214,16 @@ export function instantiateResident(spec: ResidentSpec, cx: number, cz: number):
 
 export const ROAM_CELL = 48;
 export const ROAM_MIN_R = 50;
-export const ROAM_MAX_R = 190;
-export const ROAM_TARGET = 18;
-export const DORMANT_TTL_S = 60;
-const ROAM_GATE_DENSITY = 0.22;
+/** Roamers now reach well past the old 190 m cliff — see this file's header and the task brief's
+ * "scale density to view distance": topside view distance is ~1900 m, and a hard stop at 190 m
+ * is exactly the "looks good up close, dies at range" failure mode being fixed. 320 m keeps the
+ * instance/triangle cost bounded (`ROAM_TARGET` below, plus pool.ts's capacity headroom) while
+ * roughly tripling the area that can host a roamer relative to the old [50,190] annulus. */
+export const ROAM_MAX_R = 320;
+/** Scaled up from the roamer radius increase (see `ROAM_MAX_R`), but sub-linearly — the point is
+ * a lower-density *penumbra* beyond the resident radius, not uniformly re-flooding a 3x area. */
+export const ROAM_TARGET = 36;
+export const DORMANT_TTL_S = 90;
 
 export interface RoamSpawn {
   type: string;
@@ -160,14 +236,17 @@ export interface RoamSpawn {
 
 /** One deterministic roll for a single roamer candidate cell — legacy `trySpawn`'s per-attempt
  * body (index.html:2490-2502), but keyed by the cell's own coordinates (`hashCell`) instead of
- * `Math.random()`, so the decision is placement-derived, not iteration-order-derived. */
+ * `Math.random()`, so the decision is placement-derived, not iteration-order-derived. Density and
+ * table come from `lifeTableFor` with `allowOffshore: true` — roamers are the only layer that ever
+ * reaches `ZONE_LIFE.Offshore` (see this file's header), scaled by `ROAM_DENSITY_FACTOR` since
+ * roamers sit on top of residents rather than duplicating their density. */
 export function tryRoamCell(seed: number, cellX: number, cellZ: number): RoamSpawn | null {
-  if (hashCell(seed, cellX, cellZ, SALT.ROAM_GATE) >= ROAM_GATE_DENSITY) return null;
   const [cx, cz] = [cellX * ROAM_CELL + ROAM_CELL / 2, cellZ * ROAM_CELL + ROAM_CELL / 2];
   const zone = zoneAt(cx, cz);
-  const table = ZONE_LIFE[zone];
-  if (!table || table.length === 0) return null;
-  const type = weightedPick(() => hashCell(seed, cellX, cellZ, SALT.ROAM_SPECIES), table);
+  const life = lifeTableFor(cx, cz, zone, depthAt(cx, cz), true);
+  if (!life) return null;
+  if (hashCell(seed, cellX, cellZ, SALT.ROAM_GATE) >= life.density * ROAM_DENSITY_FACTOR) return null;
+  const type = weightedPick(() => hashCell(seed, cellX, cellZ, SALT.ROAM_SPECIES), life.table);
   const V = VIS[type];
   if (!V) return null;
   const x = cx + (hashCell(seed, cellX, cellZ, SALT.ROAM_OFFSET_X) - 0.5) * ROAM_CELL;
