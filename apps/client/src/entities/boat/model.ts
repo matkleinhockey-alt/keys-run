@@ -64,7 +64,7 @@ export interface BoatModel {
    */
   rodPivot: THREE.Group;
   rodTip: THREE.Object3D;
-  stations: Array<{ pos: THREE.Vector3; spot: THREE.Vector3 }>;
+  stations: Array<{ pos: THREE.Vector3; out: THREE.Vector3; spot: THREE.Vector3 }>;
   /** Mutable: which station (index into `stations`) the angler is currently fishing from. */
   station: number;
   captain: HumanStub;
@@ -366,9 +366,9 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
 
   const S0 = hullStation(H, L, B, 0.02), rp = rodPivot.position;
   const stations = [
-    { pos: V3(rp.x, rp.y, rp.z), spot: V3(rp.x - 0.5, soleAt(rp.z), rp.z + 0.15) },
-    { pos: V3(-rp.x, rp.y, rp.z), spot: V3(-rp.x + 0.5, soleAt(rp.z), rp.z + 0.15) },
-    { pos: V3(B * 0.22, S0.ys + 0.05, S0.z - cap * 0.5), spot: V3(B * 0.22, soleAt(S0.z - cap - 0.6), S0.z - cap - 0.6) },
+    { pos: V3(rp.x, rp.y, rp.z), out: V3(1, 0, 0), spot: V3(rp.x - 0.5, soleAt(rp.z), rp.z + 0.15) },
+    { pos: V3(-rp.x, rp.y, rp.z), out: V3(-1, 0, 0), spot: V3(-rp.x + 0.5, soleAt(rp.z), rp.z + 0.15) },
+    { pos: V3(B * 0.22, S0.ys + 0.05, S0.z - cap * 0.5), out: V3(0, 0, 1), spot: V3(B * 0.22, soleAt(S0.z - cap - 0.6), S0.z - cap - 0.6) },
   ];
   const fishSpot = stations[0].spot.clone();
 

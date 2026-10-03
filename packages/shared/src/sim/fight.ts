@@ -123,11 +123,20 @@ export interface FightParams {
   drag: number;
 }
 
+/** legacy `showHooked`/`setupPhoto`'s `clamp(Math.cbrt(weight/avgWeight),.75,1.5)` size scale,
+ * applied to `VIS[key].len` — how big to draw/size a given catch relative to its species'
+ * average. Exported so presentation code (the hooked-fish mesh, the catch portrait) can size a
+ * mesh identically to how `fightParamsFor` derives `lenM`, without duplicating the formula. */
+export function scaledLenM(key: string, weight: number): number {
+  const S = SPECIES[key];
+  const scale = clamp(Math.cbrt(weight / ((S.min + S.max) / 2)), 0.75, 1.5);
+  return VIS[key].len * scale;
+}
+
 export function fightParamsFor(key: string, weight: number, drag: number): FightParams {
   const S = SPECIES[key];
   const sizeT = (weight - S.min) / (S.max - S.min);
   const str = S.str * (0.8 + 0.55 * sizeT);
-  const scale = clamp(Math.cbrt(weight / ((S.min + S.max) / 2)), 0.75, 1.5);
   return {
     key, weight, str,
     maxLine: S.str > 1.2 ? 320 : 200,
@@ -135,7 +144,7 @@ export function fightParamsFor(key: string, weight: number, drag: number): Fight
     kingfish: key === 'kingfish',
     billfish: BILLFISH.has(key),
     sounder: SOUNDERS.has(key),
-    lenM: VIS[key].len * scale,
+    lenM: scaledLenM(key, weight),
     drag,
   };
 }
