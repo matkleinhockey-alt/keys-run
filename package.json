@@ -11,7 +11,10 @@
     "lint": "eslint .",
     "typecheck": "pnpm -r run typecheck",
     "build": "pnpm -r run build",
-    "test": "pnpm -r run test"
+    "test": "pnpm -r run test",
+    "db:generate": "pnpm --filter @keysrun/api run db:generate",
+    "db:migrate": "pnpm --filter @keysrun/api run db:migrate",
+    "db:seed": "pnpm --filter @keysrun/api run db:seed"
   },
   "dependencies": {
     "serve": "^14.2.4"
