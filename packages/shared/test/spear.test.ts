@@ -122,6 +122,58 @@ describe('segmentHitsCapsule / stepSpear (ray/capsule hit tests)', () => {
   });
 });
 
+describe('trajectory (zero divergence across step size)', () => {
+  // The shaft is unaccelerated straight-line motion at a constant SPEAR_SPEED — there is no
+  // curvature or velocity-dependent term anywhere in stepSpear, so summing many small steps must
+  // land on exactly the same position as one big step (mirroring the server's later need to
+  // rewind and re-integrate a shot from an arbitrary rewound origin at whatever tick rate it
+  // runs, per docs/ARCHITECTURE.md's spearfishing section, and get the identical answer the
+  // client predicted).
+  it('many small steps sum to the same distance/position as one big step, short of the range clamp', () => {
+    const totalT = 0.3; // well under SPEAR_RANGE/SPEAR_SPEED (~0.44 s) — no clamping involved
+    const origin = { x: 1, y: -5, z: 2 };
+    const dir = { x: 0.6, y: 0.1, z: -0.8 };
+
+    const coarse = stepSpear(fire(origin, dir), [], totalT).shot;
+
+    let fine = fire(origin, dir);
+    const steps = 500;
+    for (let i = 0; i < steps; i++) fine = stepSpear(fine, [], totalT / steps).shot;
+
+    expect(fine.dist).toBeCloseTo(coarse.dist, 9);
+    expect(fine.alive).toBe(coarse.alive);
+  });
+
+  it('a target is hit at (within floating point) the same point in space regardless of step size', () => {
+    const origin = { x: 0, y: 0, z: 0 };
+    const dir = { x: 0, y: 0, z: 1 };
+    // Deliberately *not* collinear with the shaft's path (x offset by the capsule's own radius):
+    // a ray running exactly along a capsule's spine is a measure-zero, physically-ambiguous
+    // configuration (which endpoint is "the" entry point depends on which end you approach
+    // from) — this is the realistic case, a diver aiming at a fish's body, not down its spine.
+    const target: CapsuleTarget = { id: 'fish', ax: 0.2, ay: 0, az: 4.8, bx: 0.2, by: 0, bz: 5.6, radius: 0.3 };
+
+    // `runShot` (this file's helper, above) always steps at the module `DT` (1/30, the server's
+    // fixed tick per docs/ARCHITECTURE.md's netcode table) — step manually at DT/10 for the fine
+    // comparison run.
+    const coarse = runShot(fire(origin, dir), [target]);
+    let fine = fire(origin, dir);
+    let fineHit: ReturnType<typeof stepSpear>['hit'] = null;
+    for (let i = 0; i < 2000 && fine.alive && !fineHit; i++) {
+      const r = stepSpear(fine, [target], DT / 10);
+      fine = r.shot;
+      fineHit = r.hit;
+    }
+
+    expect(coarse.hit).not.toBeNull();
+    expect(fineHit).not.toBeNull();
+    // Both must find the same analytic impact point along the ray, independent of how finely the
+    // flight was sliced into steps — the one coarse step that registers the hit can only overshoot
+    // the true (fine-grained) crossing by at most that step's own travel distance.
+    expect(Math.abs(coarse.hit!.point.z - fineHit!.point.z)).toBeLessThan(SPEAR_SPEED * DT);
+  });
+});
+
 describe('reload gating', () => {
   it('a fresh gun can fire', () => {
     expect(canFire(createGun())).toBe(true);

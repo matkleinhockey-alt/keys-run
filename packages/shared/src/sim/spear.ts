@@ -124,7 +124,13 @@ export function closestDistSqSegmentSegment(
     } else {
       const b = d1x * d2x + d1y * d2y + d1z * d2z;
       const denom = a * e - b * b;
-      s = denom > EPS ? clamp((b * f - c * e) / denom, 0, 1) : 0;
+      // Relative, not absolute, tolerance: `denom` is a difference of two products that scale
+      // with `a*e` (squared segment lengths), so an absolute epsilon is too strict for long
+      // segments and too loose for short ones — exactly the shape of bug this hit-tests against
+      // every size of step (see test/spear.test.ts's "trajectory" describe block, which is what
+      // surfaced this). Near-parallel (not just exactly parallel) segments fall into the same
+      // s=0-then-correct-via-t-clamping branch below, which still finds the right point.
+      s = denom > 1e-10 * a * e ? clamp((b * f - c * e) / denom, 0, 1) : 0;
       t = (b * s + f) / e;
       if (t < 0) { t = 0; s = clamp(-c / a, 0, 1); }
       else if (t > 1) { t = 1; s = clamp((b - c) / a, 0, 1); }
