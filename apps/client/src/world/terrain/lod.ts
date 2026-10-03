@@ -57,6 +57,13 @@ const WORLD_CHUNK_MARGIN = 3; // chunks of slack outside WORLD bounds before sca
 const FAR_SKIRT_RADIUS = 1900; // matches the topside horizon exactly (docs/ARCHITECTURE.md)
 const FAR_SKIRT_SEGS = 44;
 const FAR_SKIRT_RESAMPLE_DIST = 180;
+// The skirt is one disc reaching all the way from the camera out to FAR_SKIRT_RADIUS — it isn't
+// an annulus starting past the near rings, so it fully underlaps whatever real chunk geometry is
+// resident near the camera too (both sample the same seafloorHeightAt). Without this, the two
+// independently-tessellated surfaces would sit almost exactly coincident there and z-fight.
+// Dropping the skirt a little guarantees the real (finer, lit) chunk mesh always wins the depth
+// test wherever both exist; it's invisible past the rings, where the skirt is the only geometry.
+const FAR_SKIRT_Y_BIAS = 0.5;
 
 const key = (cx: number, cz: number): string => `${cx},${cz}`;
 
@@ -180,7 +187,7 @@ export function createSeafloorManager(): SeafloorManager {
     const col = new Float32Array(p.count * 3);
     for (let i = 0; i < p.count; i++) {
       const wx = camX + f(p.getX(i)), wz = camZ + f(p.getZ(i));
-      const y = seafloorHeightAt(wx, wz);
+      const y = seafloorHeightAt(wx, wz) - FAR_SKIRT_Y_BIAS;
       p.setX(i, wx); p.setY(i, y); p.setZ(i, wz);
       const c = seafloorColorAt(wx, wz, -y);
       col[i * 3] = c[0]; col[i * 3 + 1] = c[1]; col[i * 3 + 2] = c[2];
@@ -241,6 +248,10 @@ export function createSeafloorManager(): SeafloorManager {
     buildQueue.length = 0;
     queued.clear();
     material.dispose();
+    // `grainTex` hands back a fresh, uniquely-owned DataTexture per call (unlike `normalTex`,
+    // which is cache-shared across every caller — see core/textures.ts — and must NOT be disposed
+    // here, since other systems may hold the same cached instance).
+    material.map?.dispose();
     skirtGeo.dispose();
     skirtMaterial.dispose();
     backstop.geometry.dispose();
