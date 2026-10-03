@@ -7,3 +7,6 @@ dist
 .env
 .env.*
 !.env.example
+
+# agent worktrees — local scratch, never committed
+.claude/
