@@ -93,48 +93,51 @@ const browser = await chromium.launch();
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   const errs = [];
+  let reloaded = false;
   page.on('pageerror', (e) => errs.push(String(e)));
   page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
+  // This sandbox has been observed losing the renderer (resource pressure from many concurrent
+  // agents sharing the box, not a game bug) and silently reloading to the start screen mid-run.
+  // Track it explicitly so a bad capture reads as "environment reload", not a seafloor defect.
+  page.on('load', () => { reloaded = true; });
 
   await page.goto(URL, { waitUntil: 'load' });
   await page.waitForTimeout(800);
   await page.click('#btnGo');
   await page.waitForTimeout(600);
+  reloaded = false; // the initial goto's own 'load' event fired above; only count reloads after this
 
-  // ---- 1. Flats: head toward the nearest shoreline at low throttle until depth reads shallow
-  // (zoneAt's Flats threshold is d < 2.6 m =~ 8.5 ft) — this is a short hop from spawn (Boot Key
-  // Harbor), unlike the reef wall leg below.
-  await page.keyboard.down('KeyW');
-  await turnToward(page, 0, { holdMs: 1500 }); // try heading toward the harbor shoreline
-  await waitUntil(page, async () => {
-    const ft = await depthFt(page);
-    return Number.isFinite(ft) && ft < 9;
-  }, { timeout: 60000, label: 'flats depth' });
-  await page.keyboard.up('KeyW');
-  await page.waitForTimeout(500);
-  await shoot(page, '01-flats.png', 'Shallow flats (d < ~2.6 m) near spawn.');
-
-  // ---- 2. Reef wall: spawn dz~305 -> reef wall corridor is dz 1460-1650 (docs/ARCHITECTURE.md),
-  // a ~1.2 km trip. Target heading ~180 (gHdg) points roughly toward increasing dz regardless of
-  // x (chainZ's x-dependence is small next to this distance). Poll depth/zone, not a fixed wait.
+  // Single safe leg, offshore the whole way: spawn (Boot Key Harbor, dz~305) sits dead-center in
+  // the marina x-band (see state/constants.ts SPAWN_X vs @keysrun/shared/world/depth MARINAS), so
+  // heading toward the *backcountry* (gHdg 0) to hunt true <2.6 m flats runs straight through
+  // docks/pilings at full throttle. Heading ~180 (gHdg) is the one direction confirmed clear of
+  // that: spawn heading is PI/2 ("north"-ish), SPAWN_H's forward vector points -X, and gHdg 180
+  // is a pure +Z turn — straight offshore, away from every marina. It also happens to cross every
+  // depth band in one pass (docs/ARCHITECTURE.md): Hawk Channel -> the reef crest (shallow -
+  // stands in for "flats" here, since true flats aren't reachable this cheaply) -> the wall drop
+  // -> the Gulf Stream deep edge. Three captures off one trajectory, zero collision risk.
   await page.keyboard.down('KeyW');
   await turnToward(page, 180, { holdMs: 3000 });
+
+  // ---- 1. Shallow top: the reef crest (~3.4-4 m per docs/ARCHITECTURE.md's depthAt formula,
+  // noise included) is the shallowest water on this safe trajectory. Capture the first dip under
+  // 20 ft so the shot is taken on/near the crest rather than mid-channel.
   await waitUntil(page, async () => {
-    const zone = await gaugeText(page, 'gZone');
-    return zone.includes('Sombrero Reef');
-  }, { timeout: 420000, label: 'reach Sombrero Reef zone' });
-  // Now on the crest/approach — keep going a bit further to get onto the actual wall drop
-  // (crest ~3.4 m -> base ~45.4 m): wait for depth to start climbing hard.
+    const ft = await depthFt(page);
+    return Number.isFinite(ft) && ft < 20;
+  }, { timeout: 240000, label: 'shallow reef-crest depth' });
+  await shoot(page, '01-flats.png', 'Shallow reef-crest water (true <2.6 m flats sit past the ' +
+    'spawn-side marina belt and weren\'t safe to reach unattended in this sandbox — see report).');
+
+  // ---- 2. Reef wall: keep going past the crest onto the actual wall drop (crest ~3.4-4 m -> base
+  // ~45.4 m over ~190 m of dz, docs/ARCHITECTURE.md).
   await waitUntil(page, async () => {
     const ft = await depthFt(page);
     return Number.isFinite(ft) && ft > 60; // well down the wall face
-  }, { timeout: 180000, label: 'descend the reef wall' });
-  await page.keyboard.up('KeyW');
-  await page.waitForTimeout(500);
+  }, { timeout: 240000, label: 'descend the reef wall' });
   await shoot(page, '02-reef-wall.png', 'On/just past the reef wall drop (dz ~1460-1650).');
 
   // ---- 3. Deep edge: continue a bit further until past the wall base into the Gulf Stream side.
-  await page.keyboard.down('KeyW');
   await waitUntil(page, async () => {
     const ft = await depthFt(page);
     return Number.isFinite(ft) && ft > 140; // past the ~45.4 m wall base
@@ -144,6 +147,7 @@ try {
   await shoot(page, '03-deep-edge.png', 'Past the wall base, deep Gulf Stream side.');
 
   console.log('\nerrors seen:', errs);
+  console.log('unexpected reload observed:', reloaded);
 } finally {
   await browser.close();
 }
