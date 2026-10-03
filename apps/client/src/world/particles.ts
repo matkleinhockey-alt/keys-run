@@ -40,8 +40,16 @@ export function createParticleSystem(pixelRatio = 1): ParticleSystem {
   const pMat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false,
     uniforms: { uPR: { value: pixelRatio }, uNoise: { value: waterNoiseTex() } },
+    // r186's colour-managed pipeline blends transparent layers in correct linear light instead of
+    // r128's uncorrected gamma-space blending. For many overlapping soft-white sprites (exactly
+    // this wake/spray trail) that makes the *same* per-particle alpha curve read as a hard-edged,
+    // faceted mass of domes instead of soft diffuse foam — caught on review against the legacy
+    // screenshots (see this project's report). Nothing about particle spawning/physics changed;
+    // only this shader's falloff curves did, to compensate: no flat fully-opaque core (the old
+    // `smoothstep(.5,.12,d)` had one out to 24% of the radius — pure center-to-edge gradient now),
+    // and a much wider, gentler noise-breakup threshold instead of a near-binary cutout.
     vertexShader: 'attribute float alpha;attribute float psize;uniform float uPR;varying float vA;varying float vSeed;void main(){vA=alpha;vSeed=fract(position.x*.071+position.z*.053);vec4 mv=modelViewMatrix*vec4(position,1.);gl_PointSize=psize*uPR*(420./-mv.z);gl_Position=projectionMatrix*mv;}',
-    fragmentShader: 'uniform sampler2D uNoise;varying float vA;varying float vSeed;void main(){vec2 c=gl_PointCoord-.5;float d=length(c);if(d>.5)discard;float n=texture2D(uNoise,gl_PointCoord*.45+vec2(vSeed,vSeed*1.7)).a;gl_FragColor=vec4(1.,1.,1.,vA*smoothstep(.5,.12,d)*smoothstep(.22,.62,n+.35-d*.6));}',
+    fragmentShader: 'uniform sampler2D uNoise;varying float vA;varying float vSeed;void main(){vec2 c=gl_PointCoord-.5;float d=length(c);if(d>.5)discard;float n=texture2D(uNoise,gl_PointCoord*.45+vec2(vSeed,vSeed*1.7)).a;float edge=smoothstep(.5,.0,d);float breakup=smoothstep(.0,.9,n+.35-d*.55);gl_FragColor=vec4(1.,1.,1.,vA*edge*breakup*0.75);}',
   });
   const points = new THREE.Points(pGeo, pMat);
   points.frustumCulled = false;
@@ -78,7 +86,12 @@ export function createParticleSystem(pixelRatio = 1): ParticleSystem {
       } else {
         p.vx *= 1 - dt * 0.9; p.vz *= 1 - dt * 0.9;
         p.y = waveHeight(p.x, p.z, t, p.amp) + 0.14;
-        p.size += dt * 1.4;
+        // Growth rate cut from legacy's 1.4/s: under r186's correct linear-light blending, many
+        // overlapping sprites saturate to opaque white in far fewer layers than they did under
+        // r128's gamma-space blending (see world/particles.ts's shader comment), so letting each
+        // one balloon this large compounded a handful of giant soft-edged discs into a hard-edged
+        // quilted mass. Smaller, more numerous sprites blend into a continuous mist instead.
+        p.size += dt * 0.5;
       }
       pPos[i * 3] = p.x; pPos[i * 3 + 1] = p.y; pPos[i * 3 + 2] = p.z;
       pSize[i] = p.size; pAlpha[i] = p.a0 * (p.life / p.max);

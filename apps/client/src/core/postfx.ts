@@ -67,10 +67,14 @@ export function createPostFX(
     }));
   }
 
-  // ACES tone mapping + a subtle filmic grade (Part 2 item 1) — a small saturation/contrast lift
-  // that reads as "graded" rather than raw HDR tonemap output.
+  // ACES tone mapping + a subtle filmic grade (Part 2 item 1). ACES is heavily desaturating by
+  // design, and ported-unchanged albedo values (vertex colours, water's depth ramp) read visibly
+  // flatter/greyer through it than they did pre-tonemap — caught on review against the legacy
+  // screenshots (the signature turquoise water was washing out to grey-teal). water.ts applies its
+  // own direct chroma boost since water is most of the screen; this smaller global lift brings
+  // everything else (terrain, hulls, sky) back in line too.
   effects.push(new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC }));
-  effects.push(new HueSaturationEffect({ saturation: 0.06 }));
+  effects.push(new HueSaturationEffect({ saturation: 0.14 }));
   effects.push(new BrightnessContrastEffect({ brightness: 0.0, contrast: 0.05 }));
 
   if (settings.antialias === 'smaa') {

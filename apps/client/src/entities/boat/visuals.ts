@@ -151,14 +151,24 @@ function applySpray(state: BoatState, ctx: VisualsCtx, fx: number, fz: number, r
   while (wakeAcc > 1) {
     wakeAcc--;
     const sx = state.x - fx * L * 1.05, sz = state.z - fz * L * 1.05;
+    // Alpha cut ~15x from the legacy values (0.55/0.7) here only, and growth rate cut too (see
+    // world/particles.ts): r186's colour-managed transparent blending composites many overlapping
+    // soft-white sprites in correct linear light instead of r128's uncorrected gamma-space
+    // blending, and for this specific dense, slowly-growing trail that turned the same values into
+    // a hard-edged, faceted quilt instead of a soft wake (caught on review against the legacy
+    // screenshots — see this project's report; disabling this emitter entirely to isolate the two
+    // wake-rendering systems showed the water shader's own analytic wake foam, world/water.ts's
+    // wakeH()/vWake, already read correctly on its own — it carries the base look now, with these
+    // particles only a light shimmer accent on top; every intermediate, milder cut still showed
+    // visible faceting, which is why the final numbers are this much lower than the legacy ones).
     for (const sgn of [-1, 1]) {
       ctx.particles.spawnP(
         sx + rx * B * 0.8 * sgn, 0.1, sz + rz * B * 0.8 * sgn,
         rx * sgn * (1.2 + sp * 0.07) - fx * sp * 0.15, 0, rz * sgn * (1.2 + sp * 0.07) - fz * sp * 0.15,
-        rand(2.5, 4.5), rand(1.2, 2), 0.55, false, ctx.amp,
+        rand(2.5, 4.5), rand(1, 1.6), 0.035, false, ctx.amp,
       );
     }
-    ctx.particles.spawnP(sx + rand(-0.4, 0.4), 0.1, sz + rand(-0.4, 0.4), -fx * sp * 0.25, 0, -fz * sp * 0.25, rand(2, 3.5), rand(1.5, 2.4), 0.7, false, ctx.amp);
+    ctx.particles.spawnP(sx + rand(-0.4, 0.4), 0.1, sz + rand(-0.4, 0.4), -fx * sp * 0.25, 0, -fz * sp * 0.25, rand(2, 3.5), rand(1.2, 1.8), 0.045, false, ctx.amp);
   }
   const f = sp / ctx.hull.topMs;
   if (f > 0.3 && Math.random() < ctx.dt * sp * 0.8) {

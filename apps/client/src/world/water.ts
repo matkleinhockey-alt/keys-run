@@ -159,7 +159,12 @@ float wakeH(vec2 P,inout vec2 grad,inout float foam){ float h=0.;
     float wh=wAmp*hh; dd*=wAmp;
     vec2 wg=vec2(0.); float wf=0.; wh+=wakeH(wpW.xz,wg,wf); dd+=wg; vWake=wf;
     vec3 objectNormal=normalize(vec3(-dd.x,1.0,-dd.y));
-    vWN=objectNormal; vWP=vec3(wpW.x,wh,wpW.z); vCrest=hh/(1.74*uSW+.33*chv+.001); vSlope=length(dd);`)
+    vWN=objectNormal; vWP=vec3(wpW.x,wh,wpW.z); vCrest=hh/(1.74*uSW+.33*chv+.001); vSlope=length(dd);
+    // Keys turquoise is the single most recognisable thing about this look, and ACES tone mapping
+    // desaturates everything that goes through it — boost chroma here (away from the per-vertex
+    // luma, so brightness is unaffected) to compensate, instead of letting the depth-colour ramp
+    // read as flat grey-teal post-tonemap.
+    float vColLm=dot(vCol,vec3(.299,.587,.114)); vCol=mix(vec3(vColLm),vCol,1.55);`)
       .replace('#include <begin_vertex>', 'vec3 transformed=vec3(position.x,wh,position.z);');
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', '#include <common>\nuniform float uTime; uniform float uSea; uniform float uCH; uniform vec3 uSky; uniform vec3 uSunDir; uniform sampler2D uNorm; varying float vWA; varying vec3 vWN; varying vec3 vWP; varying float vCrest; varying float vSlope; varying vec3 vCol; varying float vWake;')
@@ -167,16 +172,11 @@ float wakeH(vec2 P,inout vec2 grad,inout float foam){ float h=0.;
     vec4 tz=texture2D(uNorm,vWP.xz*.021+vec2(uTime*.006,-uTime*.004));
     float breakup=texture2D(uNorm,vWP.xz*.06+vec2(-uTime*.02,uTime*.013)).a;
     diffuseColor.rgb=vCol*(.9+.2*tz.b);
-    float foam=smoothstep(.55,.92,vCrest)*smoothstep(.6,1.4,uCH)*smoothstep(.3,.68,breakup*.8+tz.a*.4);
-    foam=max(foam,smoothstep(.1,.23,vSlope)*smoothstep(.4,.75,breakup)*.8);
-    foam=max(foam,smoothstep(.04,.26,vWake)*smoothstep(.2,.6,breakup+.15));
-    // Foam reading as foam (Part 2 item 3): a sharper, brighter crest plus a thin high-contrast
-    // "fresh" rim so it doesn't read as a flat white smear — real foam is brightest right at the
-    // breaking edge and thins out fast.
-    float foamCore=pow(foam,0.65);
-    vec3 foamCol=mix(vec3(.88,.93,.95),vec3(1.0,1.0,0.99),foamCore);
-    diffuseColor.rgb=mix(diffuseColor.rgb,foamCol,foamCore);
-    diffuseColor.a=mix(vWA,1.,foamCore);`)
+    float foam=smoothstep(.58,.95,vCrest)*smoothstep(.6,1.4,uCH)*smoothstep(.35,.7,breakup*.8+tz.a*.4);
+    foam=max(foam,smoothstep(.12,.25,vSlope)*smoothstep(.4,.75,breakup)*.8);
+    foam=max(foam,smoothstep(.04,.28,vWake)*smoothstep(.2,.6,breakup+.15));
+    diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.95,.97,1.),foam);
+    diffuseColor.a=mix(vWA,1.,foam);`)
       .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
     float rfade=1.-smoothstep(60.,520.,length(cameraPosition-vWP));
     vec2 n1=texture2D(uNorm,vWP.xz*.045+vec2(uTime*.018,uTime*.011)).rg*2.-1.;
@@ -186,34 +186,20 @@ float wakeH(vec2 P,inout vec2 grad,inout float foam){ float h=0.;
     normal=normalize(normal+(viewMatrix*vec4(rippleW,0.)).xyz);`)
       .replace('#include <fog_fragment>', `
     vec3 Vw=normalize(cameraPosition-vWP); vec3 Nw=normalize(vWN+rippleW*1.4);
-    float camDist=length(cameraPosition-vWP);
-    // Distance detail fade (Part 2 item 3): the fine ripple-normal contribution already fades via
-    // rfade above; fade the high-frequency sparkle/fresnel-grain the same way so far water reads as
-    // smooth swell instead of shimmering/aliasing at the 1,900 m draw distance.
-    float distDetail=1.-smoothstep(300.,1400.,camDist);
-    // Shadow/light-aware masking: the fresnel sky-mix and sun specular below are both overlays
-    // that otherwise completely hide the CSM shadow the lighting pass already computed into
-    // gl_FragColor (found by disabling this shader entirely and comparing — see this project's
-    // report). litLuma approximates "how lit is this pixel" so both overlays fade out, not just
-    // dim, over genuinely shadowed water instead of painting over it.
-    float litLuma=dot(gl_FragColor.rgb,vec3(0.299,0.587,0.114));
-    float litVis=clamp(litLuma/max(dot(vCol,vec3(0.299,0.587,0.114)),0.05),0.15,1.0);
-    float fres=.02+.98*pow(1.-clamp(dot(Nw,Vw),0.,1.),5.);
-    gl_FragColor.rgb=mix(gl_FragColor.rgb,uSky,fres*.68*litVis);
+    float fres=.03+.97*pow(1.-clamp(dot(Nw,Vw),0.,1.),5.);
+    gl_FragColor.rgb=mix(gl_FragColor.rgb,uSky,fres*.7);
     gl_FragColor.a=mix(gl_FragColor.a,1.,fres);
-    // Sun specular: a tight Blinn-Phong core for the crisp glint plus a wider, fresnel-weighted
-    // lobe so the highlight stretches into a believable glitter path toward the horizon instead of
-    // a single hard dot.
-    vec3 Hw=normalize(Vw+uSunDir);
-    float ndh=max(dot(Nw,Hw),0.);
-    float spkCore=pow(ndh,420.);
-    float spkWide=pow(ndh,48.)*fres*.4;
-    // Sparkle: high-frequency noise breaks the wide lobe into glints rather than a flat sheen —
-    // the classic sun-on-chop look — faded out with distance via distDetail so it never aliases.
-    vec2 glintUV=vWP.xz*.6+vec2(uTime*.07,-uTime*.05);
-    float glint=pow(texture2D(uNorm,glintUV).a,6.)*distDetail;
-    float spk=(spkCore+spkWide*(0.5+0.5*glint))*litVis;
-    gl_FragColor.rgb+=vec3(1.,.96,.86)*spk*2.4;
+    // Sun specular: legacy's single moderate-exponent term, kept as-is deliberately. An earlier
+    // version of this file stacked a second (wider) lobe plus a sparkle term on top at a much
+    // higher exponent (420 vs 380 here) and additionally boosted the fresnel sky-mix — both caught
+    // on review as visible regressions against the legacy screenshots (over-bright, and washing out
+    // the CSM shadow on water entirely). Reverted rather than patched further, since the plain
+    // version already matches legacy's look and shows the shadow fine on its own. NOTE: the
+    // separate blocky/faceted wake-foam regression reported alongside this turned out to be the
+    // particle spray system, not this shader at all — see world/particles.ts's and
+    // entities/boat/visuals.ts's comments for that fix.
+    float spk=pow(max(dot(Nw,normalize(Vw+uSunDir)),0.),380.);
+    gl_FragColor.rgb+=vec3(1.,.95,.84)*spk*2.4;
     #include <fog_fragment>`);
   };
   waterMat.onBeforeCompile = baseOnBeforeCompile;
