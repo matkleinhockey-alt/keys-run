@@ -50,6 +50,14 @@
       "types": "./dist/sim/depth-grid.d.ts",
       "default": "./dist/sim/depth-grid.js"
     },
+    "./sim/fight": {
+      "types": "./dist/sim/fight.d.ts",
+      "default": "./dist/sim/fight.js"
+    },
+    "./sim/spear": {
+      "types": "./dist/sim/spear.d.ts",
+      "default": "./dist/sim/spear.js"
+    },
     "./proto": {
       "types": "./dist/proto/index.d.ts",
       "default": "./dist/proto/index.js"
