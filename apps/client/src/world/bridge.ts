@@ -16,7 +16,7 @@ import * as THREE from 'three';
 import { chainZ, shoreInfo } from '@keysrun/shared/world/chain';
 import { landH, OLDBR, WB } from '@keysrun/shared/world/depth';
 import type { Piling } from '@keysrun/shared/sim/boat';
-import { grainTex } from '../core/textures.js';
+import { grainTex, normalTex } from '../core/textures.js';
 
 interface Deck { mx: number; mz: number; ang: number; len: number; h: number; old: boolean }
 interface Rail { mx: number; mz: number; ang: number; h: number }
@@ -64,7 +64,10 @@ export function createBridge(): BridgeResult {
   build(WB.x0, WB.x1, 0, 7.2, false, null);
   build(OLDBR.x0, OLDBR.x1, OLDBR.dz, 6.2, true, OLDBR.gap);
 
-  const dm = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 10), new THREE.MeshStandardMaterial({ color: 0xe2dccb, flatShading: true, map: grainTex([4, 1], 0.85, 1.05) }), decks.length);
+  // Part 2 item 6: concrete deck/piling bump so the bridge doesn't read as a flat-shaded extrusion
+  // even at the 1,900 m vantage a boat running Hawk Channel sees it from.
+  const concreteNormal = normalTex([8, 2], 0.55);
+  const dm = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 10), new THREE.MeshStandardMaterial({ color: 0xe2dccb, flatShading: true, roughness: 0.9, map: grainTex([4, 1], 0.85, 1.05), normalMap: concreteNormal, normalScale: new THREE.Vector2(0.5, 0.5) }), decks.length);
   const col = new THREE.Color();
   decks.forEach((d, i) => {
     dummy.position.set(d.mx, d.h, d.mz); dummy.rotation.set(0, -d.ang, 0); dummy.scale.set(d.len + 0.4, d.old ? 0.8 : 1, d.old ? 0.75 : 1); dummy.updateMatrix();
@@ -87,7 +90,7 @@ export function createBridge(): BridgeResult {
     roadM.setMatrixAt(i, dummy.matrix);
   });
 
-  const pm = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.65, 0.8, 1, 8), new THREE.MeshStandardMaterial({ color: 0xd6cfbd, flatShading: true }), piles.length);
+  const pm = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.65, 0.8, 1, 8), new THREE.MeshStandardMaterial({ color: 0xd6cfbd, flatShading: true, roughness: 0.92, normalMap: concreteNormal, normalScale: new THREE.Vector2(0.4, 0.4) }), piles.length);
   piles.forEach((p, i) => {
     const top = p.h - 0.4, bot = -3;
     dummy.position.set(p.x, (top + bot) / 2, p.z); dummy.rotation.set(0, 0, 0); dummy.scale.set(p.old ? 1.6 : 1, top - bot, p.old ? 1.6 : 1); dummy.updateMatrix();

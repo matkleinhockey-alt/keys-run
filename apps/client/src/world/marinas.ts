@@ -18,7 +18,7 @@ import { depthAt, MARINAS, GOLF, type Marina } from '@keysrun/shared/world/depth
 import { HULLS } from '@keysrun/shared/content/boats';
 import type { DockRect } from '@keysrun/shared/sim/boat';
 import { buildHullGeo } from '../entities/boat/hull.js';
-import { grainTex } from '../core/textures.js';
+import { grainTex, normalTex } from '../core/textures.js';
 import { lerp } from '../core/math.js';
 import { WORLD_SEED, SALT, SPAWN_X, SPAWN_DZ } from '../state/constants.js';
 
@@ -71,7 +71,8 @@ export function createMarinas(): MarinasResult {
   const DOCK_RECTS: DockRect[] = [];
   const dockBoats: THREE.Group[] = [];
 
-  const wood = new THREE.MeshStandardMaterial({ color: 0x9c7a55, roughness: 0.9, flatShading: true, map: grainTex([2, 8], 0.75, 1.05) });
+  // Part 2 item 6: plank grain bump so the dock surface isn't perfectly flat under the sun.
+  const wood = new THREE.MeshStandardMaterial({ color: 0x9c7a55, roughness: 0.9, flatShading: true, map: grainTex([2, 8], 0.75, 1.05), normalMap: normalTex([2, 8], 0.8), normalScale: new THREE.Vector2(0.5, 0.5) });
   const pile = new THREE.MeshStandardMaterial({ color: 0x6e5a44, roughness: 1 });
   const piles: Array<[number, number]> = [];
   const addBox = (w: number, h: number, d: number, x: number, y: number, z: number, mat: THREE.Material, collide: boolean): THREE.Mesh => {
