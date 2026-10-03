@@ -8,9 +8,9 @@
  * from db/seed.ts and from test fixtures that need leaderboard data to
  * assert against.
  */
-import { and, eq, sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
-import { catches, globalRecords, speciesRecords } from '../db/schema.js';
+import { catches, globalRecords, speciesRecords, players } from '../db/schema.js';
 
 export interface CatchInput {
   userId: string;
@@ -58,7 +58,7 @@ export async function recordCatch(db: Db, input: CatchInput): Promise<{ catchId:
       .onConflictDoUpdate({
         target: speciesRecords.speciesKey,
         set: {
-          userId: sql`CASE WHEN ${speciesRecords.weightLb} < ${weightStr} THEN ${input.userId} ELSE ${speciesRecords.userId}`.append(sql` END`),
+          userId: sql`CASE WHEN ${speciesRecords.weightLb} < ${weightStr} THEN ${input.userId} ELSE ${speciesRecords.userId} END`,
           catchId: sql`CASE WHEN ${speciesRecords.weightLb} < ${weightStr} THEN ${catchId} ELSE ${speciesRecords.catchId} END`,
           weightLb: sql`GREATEST(${speciesRecords.weightLb}, ${weightStr})`,
           caughtAt: sql`CASE WHEN ${speciesRecords.weightLb} < ${weightStr} THEN ${caughtAt.toISOString()}::timestamptz ELSE ${speciesRecords.caughtAt} END`,
@@ -99,7 +99,12 @@ export async function getPlayerRecords(db: Db, userId: string): Promise<PlayerRe
   return { best, sp, count: rows.length };
 }
 
+/**
+ * Whether a `players` row exists for this user — i.e. whether the account
+ * has completed registration's player-row bootstrap. NOT whether they have
+ * any catches (an account with zero catches is still a valid player).
+ */
 export async function playerExists(db: Db, userId: string): Promise<boolean> {
-  const rows = await db.select({ userId: catches.userId }).from(catches).where(and(eq(catches.userId, userId))).limit(1);
+  const rows = await db.select({ userId: players.userId }).from(players).where(eq(players.userId, userId)).limit(1);
   return rows.length > 0;
 }
