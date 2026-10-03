@@ -150,21 +150,25 @@ function buildWaypoints(): Waypoint[] {
   const wps: Waypoint[] = [];
 
   // 1. Reef crest: Sombrero anchor, shallow/high-energy — aim at an elkhorn/staghorn cluster.
+  // Pulled back and raised from the first pass (eye was only ~8m out) — at this module's much
+  // higher density (see this module's report) the nearest instance to any point is now close
+  // enough that a tight framing ends up jammed inside one specimen's own branch crotch instead of
+  // showing the reef as a whole. An establishing shot needs to actually step back.
   {
     const target = findNear(['elkhorn', 'staghorn'], 250, 1380.75, 3) ?? { x: 250, y: -5, z: 1380.75 };
-    wps.push({ name: 'reef-crest', eye: [target.x - 6, target.y + 2.2, target.z - 6], look: [target.x, target.y + 0.6, target.z] });
+    wps.push({ name: 'reef-crest', eye: [target.x - 11, target.y + 3.4, target.z - 11], look: [target.x, target.y + 0.8, target.z] });
   }
 
   // 2. Mid-slope: deeper along the same wall — staghorn/brain/star transition.
   {
     const target = findNear(['staghorn', 'brain', 'star'], 250, 1500, 3) ?? { x: 250, y: -12, z: 1500 };
-    wps.push({ name: 'mid-slope', eye: [target.x - 7, target.y + 2.5, target.z - 7], look: [target.x, target.y + 0.5, target.z] });
+    wps.push({ name: 'mid-slope', eye: [target.x - 12, target.y + 3.6, target.z - 12], look: [target.x, target.y + 0.8, target.z] });
   }
 
   // 3. The wall: deep drop-off — barrel/tube sponges and brain/star on ledges.
   {
     const target = findNear(['barrelSponge', 'tubeSponge', 'brain', 'star'], 250, 1610, 4) ?? { x: 250, y: -35, z: 1610 };
-    wps.push({ name: 'the-wall', eye: [target.x - 8, target.y + 3, target.z - 4], look: [target.x, target.y + 0.5, target.z] });
+    wps.push({ name: 'the-wall', eye: [target.x - 12, target.y + 4.5, target.z - 7], look: [target.x, target.y + 1, target.z] });
   }
 
   // 4. Sand channel: the Sombrero spur-and-groove trough at x~276 (see placement.ts's
@@ -172,7 +176,7 @@ function buildWaypoints(): Waypoint[] {
   // either side so the bare-sand gap between coral heads actually reads in frame.
   {
     const cx0 = 276, cz0 = 1380.75;
-    wps.push({ name: 'sand-channel', eye: [cx0 - 10, -4, cz0 - 2], look: [cx0 + 10, -5, cz0 + 2] });
+    wps.push({ name: 'sand-channel', eye: [cx0 - 15, -5.5, cz0 - 3], look: [cx0 + 15, -6, cz0 + 3] });
   }
 
   // 5. Seagrass flat: shallow Hawk Channel flats, well clear of the reef/any patch.
