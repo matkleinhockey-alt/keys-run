@@ -1,0 +1,39 @@
+{
+  "name": "@keysrun/api",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Keys Run api service (Phase 1) — auth, persistence, leaderboard reads. Horizontally scaled; never runs the 30 Hz sim loop. See docs/ARCHITECTURE.md.",
+  "type": "module",
+  "scripts": {
+    "predev": "pnpm --filter @keysrun/shared run build",
+    "dev": "tsx watch src/index.ts",
+    "prebuild": "pnpm --filter @keysrun/shared run build",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "lint": "eslint src test",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "db:seed": "tsx src/db/seed.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.3.0",
+    "@fastify/rate-limit": "^11.2.0",
+    "@keysrun/shared": "workspace:*",
+    "argon2": "^0.45.1",
+    "drizzle-orm": "^0.45.3",
+    "fastify": "^5.12.5",
+    "fastify-plugin": "^6.0.0",
+    "pg": "^8.23.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "^0.31.11",
+    "tsx": "^4.23.15",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}

@@ -1,0 +1,29 @@
+name: keys-run
+
+# Local Postgres only. The api (and later sim) processes run on the host —
+# see docs/ARCHITECTURE.md's "Deployment" section: in production these are
+# separate Railway services, but nothing here needs containerizing except
+# the database itself.
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-keysrun}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-keysrun_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-keysrun}
+    ports:
+      # Host port 5433 (not 5432) because 5432 is commonly already bound by
+      # another local Postgres instance. Matches DATABASE_URL in .env.example.
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - keys_run_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-keysrun} -d ${POSTGRES_DB:-keysrun}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+volumes:
+  keys_run_pgdata:

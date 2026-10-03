@@ -1,0 +1,30 @@
+{
+  "name": "@keysrun/client",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Keys Run client app (Phase 0b) — Vite + TypeScript + three.js r186. See docs/ARCHITECTURE.md.",
+  "type": "module",
+  "scripts": {
+    "predev": "pnpm --filter @keysrun/shared run build",
+    "dev": "vite",
+    "prebuild": "pnpm --filter @keysrun/shared run build",
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "pretest": "pnpm --filter @keysrun/shared run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "lint": "eslint src test"
+  },
+  "dependencies": {
+    "@keysrun/shared": "workspace:*",
+    "postprocessing": "^6.39.5",
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/three": "0.186.0",
+    "playwright": "1.63.0",
+    "typescript": "^5.9.3",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8"
+  }
+}
