@@ -17,10 +17,24 @@ export interface FishingLogic {
   actionInput: { held: boolean };
 }
 
-export function bindFishingInput(logic: FishingLogic, fp: FpState, getBoat: () => BoatState): () => void {
+export function bindFishingInput(
+  logic: FishingLogic,
+  fp: FpState,
+  getBoat: () => BoatState,
+  isSuspended: () => boolean = () => false,
+): () => void {
   const onKeyDown = (e: KeyboardEvent): void => {
     const start = document.getElementById('start');
     if (start && !start.classList.contains('hidden')) return;
+    // Suspended while diving (game/world.ts passes `diver.mode === 'diver'`): this module's
+    // window-level Space listener has no idea the diver exists, and Space doubles as the diver's
+    // ascend key (entities/diver/input.ts) — without this guard, holding Space to surface also
+    // charges/fires a rod cast in the background (confirmed: a stray "N m cast into the reef"
+    // toast and a visible line/bobber mid-dive). Same root cause as entities/camera.ts's
+    // bindCameraPointerControls, which world.ts already works around for look/camera state; this
+    // is the fishing-input half of the same "boat-era global listener doesn't know diving exists"
+    // class of bug.
+    if (isSuspended()) return;
     if (e.code === 'Space') {
       e.preventDefault();
       if (!e.repeat) { logic.actionInput.held = true; logic.onAction(getBoat()); }
@@ -36,6 +50,7 @@ export function bindFishingInput(logic: FishingLogic, fp: FpState, getBoat: () =
     }
   };
   const onKeyUp = (e: KeyboardEvent): void => {
+    if (isSuspended()) return;
     if (e.code === 'Space') { logic.actionInput.held = false; logic.onActionUp(getBoat()); }
   };
   const onBlur = (): void => { logic.actionInput.held = false; };

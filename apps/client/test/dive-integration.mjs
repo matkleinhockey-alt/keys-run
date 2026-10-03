@@ -202,6 +202,13 @@ const browser = await chromium.launch();
   await page.keyboard.press('KeyJ'); // jump in
   await page.waitForTimeout(600);
 
+  // Buoyancy is *positive* above neutral depth (sim/diver.ts) — left alone, the diver floats
+  // straight back to the surface rather than staying among the coral. A short, gentle descend
+  // settles it a couple of metres down (band 1-2) without sprinting past the shallow reef.
+  await page.keyboard.down('KeyC');
+  await waitForDepth(page, (depth) => depth >= 2, 60_000);
+  await page.keyboard.up('KeyC');
+
   // Let the roaming-fish population (entities/fish/index.ts's manageRoamers, throttled every 0.4
   // *simulated* seconds) ramp up near the new focus point before judging "fish present" — this is
   // real game pacing, not an artificial wait for the screenshot's sake.
@@ -212,12 +219,15 @@ const browser = await chromium.launch();
   snapshotErrState('08-shallow-reef-coral-fish');
   report.leg2.shallowDepth = await depthM(page);
 
+  // Look up ~1.0 rad from the default ~-0.1 (matches test/capture-underwater.mjs's proven-good
+  // Snell's-window framing, pitch=0.99) rather than maxing out sim/diver.ts's +-1.3 clamp, which
+  // produced a broken (solid black) frame in an earlier pass of this script.
   const canvas = await page.$('canvas.gl');
-  await dragLook(page, canvas, 0, -450); // look up
+  await dragLook(page, canvas, 0, -245);
   await page.waitForTimeout(500);
   await page.screenshot({ path: path.join(OUT, '09-snells-window.png') });
   snapshotErrState('09-snells-window');
-  await dragLook(page, canvas, 0, 350); // look back toward the reef
+  await dragLook(page, canvas, 0, 245); // look back toward the reef
   await page.waitForTimeout(300);
 
   report.leg2.profilerUnderwaterShallow = await page.evaluate(() => {

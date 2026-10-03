@@ -276,7 +276,17 @@ export function initWorld(wrap: HTMLElement): World {
   let sw = 0.9, ch = 1; // legacy's initial SW/CH (index.html:435)
   let game = { running: false };
 
-  // 13b. rod fishing + catch flow (docs/ARCHITECTURE.md "Rod fishing, server-authoritative").
+  // 13b. diver (entities/diver/**): jump off the boat, free-dive, swim, climb back aboard. See
+  // controller.ts's header for the authority-handoff plan — the boat keeps stepping on a neutral
+  // input while its driver is over the side (see fixedStep below); the net agent wires real
+  // server-authoritative drift later behind that same seam. Created before fishing (next) so
+  // fishing's `isSuspended` guard can close over `diver` — see that call's own comment.
+  const diver = createDiverController({ canvas: renderer.domElement });
+  const diverModel = createDiverModel();
+  diverModel.group.visible = false;
+  scene.add(diverModel.group);
+
+  // 13c. rod fishing + catch flow (docs/ARCHITECTURE.md "Rod fishing, server-authoritative").
   // `fishing` owns cast/wait/bite/fight and the first-person rod view; `catchFlow` is the one
   // shared landing path both it and entities/speargun (once the diver lands) feed into for the
   // catch card / cooler / weigh-in.
@@ -296,17 +306,12 @@ export function initWorld(wrap: HTMLElement): World {
     getBoat: () => stateBox.state,
     onLanded(fish) { catchFlow.landFish({ key: fish.key, weight: fish.weight, x: fish.fx, z: fish.fz, zone: fish.zone }); },
     onActionWhileCaught() { catchFlow.releaseFish(); },
+    // Space doubles as the diver's ascend key (entities/diver/input.ts) and this module's own
+    // window-level Space listener has no idea diving exists — see fishing/input.ts's
+    // `isSuspended` doc comment for the bug this closes (a stray rod cast firing mid-dive).
+    isSuspended: () => diver.mode === 'diver',
   });
   bindCatchInput(catchFlow, () => stateBox.state);
-
-  // 13c. diver (entities/diver/**): jump off the boat, free-dive, swim, climb back aboard. See
-  // controller.ts's header for the authority-handoff plan — the boat keeps stepping on a neutral
-  // input while its driver is over the side (see fixedStep below); the net agent wires real
-  // server-authoritative drift later behind that same seam.
-  const diver = createDiverController({ canvas: renderer.domElement });
-  const diverModel = createDiverModel();
-  diverModel.group.visible = false;
-  scene.add(diverModel.group);
 
   function setDiveUI(diving: boolean): void {
     document.getElementById('gauges')?.classList.toggle('hidden', diving);
