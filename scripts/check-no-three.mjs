@@ -28,6 +28,8 @@ const entryPoints = [
   'content/creatures.ts',
   'content/boats.ts',
   'content/economy.ts',
+  'sim/boat.ts',
+  'sim/depth-grid.ts',
 ].map((p) => path.join(SHARED_SRC, p));
 
 const result = await build({

@@ -1,12 +1,64 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Keys Run (client skeleton)</title>
-  </head>
-  <body>
-    <div id="app">Loading Keys Run client skeleton&hellip;</div>
-    <script type="module" src="/src/main.ts"></script>
-  </body>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Keys Run — center console fishing in the Florida Keys</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800;900&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+<div id="wrap">
+  <div id="hud" class="hidden">
+    <div id="gauges" class="panel">
+      <div id="gBoat">—</div>
+      <div class="gearrow"><span>Gear</span><b id="gGear" class="gD">D</b></div>
+      <div class="speed"><span id="gSpd">0</span><small>kn</small></div>
+      <div class="row"><span>Heading</span><b id="gHdg">180°</b></div>
+      <div class="row"><span>Depth</span><b id="gDep">—</b></div>
+      <div id="gZone">—</div>
+      <div id="gNear"></div>
+      <div class="thr"><i id="gThr"></i></div>
+      <div class="trimrow"><span id="gTrimLbl">Trim</span><div class="trimbar"><i id="gTrim"></i></div><b id="gTrimV">0%</b></div>
+      <div id="gWarn"></div>
+    </div>
+    <div id="mapbox" class="panel" role="button" tabindex="0" aria-label="Toggle chart size">
+      <canvas id="map" width="512" height="512"></canvas>
+      <div class="maplabel">Tap to enlarge the chart</div>
+    </div>
+    <div id="scorebox" class="panel">
+      <button id="btnMarina">Switch boat</button>
+      <button id="btnSea">Sea: choppy</button>
+      <button id="btnSun" aria-label="Sunset mode">🌅</button>
+      <button id="btnCam" aria-label="Switch camera view">🎥 3rd</button>
+    </div>
+    <div id="hint"></div>
+    <div id="toast"></div>
+  </div>
+
+  <div id="touch" class="hidden">
+    <button class="tbtn" id="tL" aria-label="Steer left">◀</button>
+    <button class="tbtn" id="tR" aria-label="Steer right">▶</button>
+    <button class="tbtn" id="tUp" aria-label="Throttle forward">▲</button>
+    <button class="tbtn" id="tDn" aria-label="Reverse">▼</button>
+    <button class="tbtn" id="tView" aria-label="Switch view">👁</button>
+  </div>
+
+  <div id="start" class="overlay">
+    <div class="startcard">
+      <h1 class="wordmark">Keys<span>Run</span></h1>
+      <p class="lede" id="lede">Pick a real center console — Robalo, Grady-White, Freeman, Midnight Express or MTI — and run Marathon in the Florida Keys: Boot Key Harbor, the Seven Mile Bridge, Sombrero Reef and the offshore Humps.</p>
+      <div class="boats" id="boats"></div>
+      <div class="gorow">
+        <button class="go" id="btnGo">Leave the dock</button>
+        <div class="controls"><kbd>W</kbd> <kbd>S</kbd> throttle · <kbd>A</kbd> <kbd>D</kbd> steer · <kbd>T</kbd> trim (then ▲▼) · <kbd>I</kbd> motors on/off · <kbd>U</kbd> gear D/N/R · <kbd>O</kbd> sunset · <kbd>1</kbd> camera view · <kbd>H</kbd> sea state · <kbd>C</kbd> zoom camera</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="/src/main.ts"></script>
+</body>
 </html>
