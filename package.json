@@ -9,6 +9,7 @@
     "start": "serve -s legacy -l tcp://0.0.0.0:${PORT:-3000}",
     "check:no-three": "node scripts/check-no-three.mjs",
     "lint": "eslint .",
+    "pretypecheck": "pnpm --filter @keysrun/shared run build",
     "typecheck": "pnpm -r run typecheck",
     "build": "pnpm -r run build",
     "test": "pnpm -r run test",
