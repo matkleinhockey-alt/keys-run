@@ -430,7 +430,7 @@ skip ahead.
 | phase | scope | gate |
 |---|---|---|
 | **0** | monorepo; extract `shared`; split `waveH`/`wakeH`; seed placement RNG; fixed 30 Hz boat step; split sim from presentation. **Still single-player.** | feel is indistinguishable from legacy, verified against recorded input traces |
-| **1** | `api`, auth, Postgres, leaderboard tables (still client-written, just to settle schema) | — |
+| **1** | `api`, auth, Postgres, leaderboard tables. **No catch-write endpoint, ever** — catches reach the DB only via the sim service (phase 3) or seed/test fixtures | — |
 | **2** | `sim`: 30 Hz loop, interest grid, boat replication | it is a shared world of boats |
 | **3** | **server-authoritative rod fishing**; delete client `chooseFish` | leaderboard becomes trustworthy — do not promote it before this |
 | **4** | fish tiering, resident schools | — |
