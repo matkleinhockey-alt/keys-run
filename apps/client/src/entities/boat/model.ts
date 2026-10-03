@@ -23,7 +23,7 @@ import { lerp } from '../../core/math.js';
 import { normalTex, grainTex } from '../../core/textures.js';
 import type { LightMatEntry } from '../../core/time-of-day.js';
 
-interface HumanStub { group: THREE.Group; hipY: number; pose(a: THREE.Vector3, b: THREE.Vector3): void }
+export interface HumanStub { group: THREE.Group; hipY: number; pose(a: THREE.Vector3, b: THREE.Vector3): void }
 // TODO(humans): real captain/crew/shower/pole-dancer models (legacy `makeHuman`, index.html:1244-1356).
 function makeHumanStub(hipY = 0.9): HumanStub {
   return { group: new THREE.Group(), hipY, pose() {} };
@@ -56,6 +56,18 @@ export interface BoatModel {
   cabin: THREE.Group;
   cabinLight: THREE.PointLight;
   cabinLight2: THREE.PointLight;
+  /**
+   * Rod/fishing-station rig (legacy `boat.model.rodPivot`/`.tip`/`.stations`/`.station`/
+   * `.fishSpot`/`.captain`) — geometry already existed in Phase 0b but was inert (nothing ever
+   * set `rodPivot.visible`). Wired up by game/fishing (Keys Run fishing port), see
+   * docs/ARCHITECTURE.md "Rod fishing, server-authoritative".
+   */
+  rodPivot: THREE.Group;
+  rodTip: THREE.Object3D;
+  stations: Array<{ pos: THREE.Vector3; spot: THREE.Vector3 }>;
+  /** Mutable: which station (index into `stations`) the angler is currently fishing from. */
+  station: number;
+  captain: HumanStub;
 }
 
 export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
@@ -320,8 +332,8 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
     outboards.push(ob);
   }
 
-  // fishing rod (shown while fishing) at the starboard aft gunwale — stays hidden; fishing is out
-  // of Phase 0 scope (nothing ever sets rodPivot.visible=true).
+  // fishing rod at the starboard aft gunwale — hidden until game/fishing's setRod(true) shows it
+  // (legacy index.html:2632 `setRod`).
   const rs = hullStation(H, L, B, 0.2);
   const rodPivot = new THREE.Group();
   rodPivot.position.set(rs.bs - cap * 0.5, rs.ys + 0.05, rs.z);
@@ -620,6 +632,7 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
     group: g, deckY: cs, props, helmPos, fishSpot, soleAt,
     wheel: helmWheel, tower, outboards, lights, flags,
     cabin, cabinLight, cabinLight2,
+    rodPivot, rodTip: tip, stations, station: 0, captain,
   };
 }
 
