@@ -41,8 +41,10 @@ function merge(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
 // Branching corals (elkhorn, staghorn) — a small recursive branch tree, merged into one geometry.
 // ---------------------------------------------------------------------------
 
-function branchSegment(length: number, baseR: number, tipR: number, radial: number, flatX: number, flatZ: number): THREE.BufferGeometry {
-  const g = new THREE.CylinderGeometry(tipR, baseR, length, radial, 1);
+/** `tipFlare` is the tip radius as a multiple of the base radius — <1 tapers (staghorn's round
+ * antler branches), >1 FLARES (elkhorn's paddles, which widen toward the tip; see elkhornGeo). */
+function branchSegment(length: number, baseR: number, tipFlare: number, radial: number, flatX: number, flatZ: number): THREE.BufferGeometry {
+  const g = new THREE.CylinderGeometry(baseR * tipFlare, baseR, length, radial, 1);
   g.translate(0, length / 2, 0);
   g.scale(flatX, 1, flatZ);
   return g;
@@ -60,14 +62,23 @@ interface BranchOpts {
   flatZ: number;
   lengthFalloff: number;
   radiusFalloff: number;
+  /** See branchSegment's header. Defaults to 0.6 (taper) when omitted. */
+  tipFlare?: number;
+  /** Chance, per branch per generation, that its branchFactor drops by one going into the next
+   * generation — this is what makes a tree thin out toward its crown. Defaults to 0.4. Staghorn
+   * sets this low (dense, barely-thinning thicket); a bare, visibly-thinning tree silhouette was
+   * exactly the "reads as a dead tree" complaint (see this module's report). */
+  branchDecayChance?: number;
 }
 
 function branchingCoral(opts: BranchOpts): THREE.BufferGeometry {
   const rng = mulberry32(opts.seed);
   const parts: THREE.BufferGeometry[] = [];
+  const tipFlare = opts.tipFlare ?? 0.6;
+  const decayChance = opts.branchDecayChance ?? 0.4;
 
   const grow = (mat: THREE.Matrix4, length: number, radius: number, depth: number, branchFactor: number): void => {
-    const seg = branchSegment(length, radius, radius * 0.6, opts.radial, opts.flatX, opts.flatZ);
+    const seg = branchSegment(length, radius, tipFlare, opts.radial, opts.flatX, opts.flatZ);
     seg.applyMatrix4(mat);
     parts.push(seg);
     if (depth <= 0) return;
@@ -78,7 +89,12 @@ function branchingCoral(opts: BranchOpts): THREE.BufferGeometry {
       const m = tip.clone()
         .multiply(new THREE.Matrix4().makeRotationY(yaw))
         .multiply(new THREE.Matrix4().makeRotationZ(tilt));
-      const nextFactor = Math.max(1, branchFactor - (rng() < 0.4 ? 1 : 0));
+      const nextFactor = Math.max(1, branchFactor - (rng() < decayChance ? 1 : 0));
+      // Plain radiusFalloff only — NOT re-multiplied by tipFlare. tipFlare already widens THIS
+      // segment's own tip (see branchSegment); folding it in again here compounds generation over
+      // generation (0.92 falloff * 1.4 flare ≈ 1.29x PER GENERATION), so outer twigs ended up
+      // wider than the trunk — a top-heavy, bulbous silhouette, not a tapering antler. Each new
+      // generation's base is simply a fraction of its parent's own base radius.
       grow(m, length * opts.lengthFalloff, radius * opts.radiusFalloff, depth - 1, nextFactor);
     }
   };
@@ -88,20 +104,33 @@ function branchingCoral(opts: BranchOpts): THREE.BufferGeometry {
 }
 
 function elkhornGeo(lod: 'near' | 'mid'): THREE.BufferGeometry {
-  // Flattened "antler" paddles (flatX wide, flatZ thin) — Acropora palmata's defining silhouette.
+  // Acropora palmata's whole identity is a FLAT, WIDE, FLARING paddle/antler — not a round stick.
+  // radial=4 gives a flattened rectangular (not round) cross-section; tipFlare>1 means each blade
+  // widens toward its tip instead of tapering, like a real elkhorn paddle flaring out from a
+  // sturdy trunk; flatX is pushed hard relative to flatZ so the blade reads as unmistakably flat
+  // even in silhouette from the side. Real trunks are ~10-15cm across and blades ~25-50cm wide —
+  // baseRadius/flatX are sized to that, NOT to the overall colony size (species.scale handles
+  // colony-to-colony size variation; conflating the two the first time through made one single
+  // blade several metres wide — see this module's report).
   return branchingCoral({
-    seed: 0xe1f0a, depth: lod === 'near' ? 2 : 1, branchFactor: 3, radial: lod === 'near' ? 5 : 4,
-    baseLength: 0.85, baseRadius: 0.22, spread: 0.85, flatX: 2.3, flatZ: 0.45,
-    lengthFalloff: 0.68, radiusFalloff: 0.72,
+    seed: 0xe1f0a, depth: lod === 'near' ? 2 : 1, branchFactor: 2, radial: 6,
+    baseLength: 0.95, baseRadius: 0.12, spread: 0.46, flatX: 2.6, flatZ: 0.34,
+    lengthFalloff: 0.88, radiusFalloff: 0.92, tipFlare: 1.35,
   });
 }
 
 function staghornGeo(lod: 'near' | 'mid'): THREE.BufferGeometry {
-  // Round, thin, deeply recursive — a dense thicket of antler branches.
+  // Dense, barely-thinning thicket of narrow round branches — Acropora cervicornis grows as an
+  // interlocking tangle, not a sparse tree skeleton (see this module's report: the first pass
+  // "reads as a dead tree"). branchDecayChance is pushed way down from branchingCoral's 0.4
+  // default so the branch count stays high all the way to the outer generations instead of
+  // thinning toward a few bare twigs at the crown, and branchFactor/depth are both high so each
+  // single instance is already a small bush before CANDIDATES_PER_CHUNK density even multiplies
+  // instances together into a continuous thicket.
   return branchingCoral({
-    seed: 0x57a6, depth: lod === 'near' ? 3 : 2, branchFactor: 2, radial: lod === 'near' ? 5 : 4,
-    baseLength: 0.62, baseRadius: 0.085, spread: 0.72, flatX: 1, flatZ: 1,
-    lengthFalloff: 0.74, radiusFalloff: 0.78,
+    seed: 0x57a6, depth: lod === 'near' ? 3 : 2, branchFactor: 4, radial: lod === 'near' ? 5 : 4,
+    baseLength: 0.5, baseRadius: 0.09, spread: 0.6, flatX: 1, flatZ: 1,
+    lengthFalloff: 0.82, radiusFalloff: 0.86, tipFlare: 0.7, branchDecayChance: 0.15,
   });
 }
 
@@ -132,17 +161,20 @@ function displaceBoulder(geo: THREE.BufferGeometry, amp: number, freq: number, s
   return geo;
 }
 
-function brainGeo(detail: 0 | 1): THREE.BufferGeometry {
+function brainGeo(detail: 0 | 1 | 2): THREE.BufferGeometry {
   const g = new THREE.IcosahedronGeometry(1, detail);
   g.scale(1, 0.56, 1); // smooth, flattened dome
-  if (detail === 1) displaceBoulder(g, 0.1, 2.2, 11);
+  // A light, large-scale dome displacement for an organic (not perfectly geometric) silhouette —
+  // the actual meandering-groove detail now comes from grooveNormalTex (materials.ts), not from
+  // per-vertex bumps, which read as lumps rather than ridges at this triangle budget.
+  if (detail > 0) displaceBoulder(g, 0.06, 1.6, 11);
   return g;
 }
 
-function starGeo(detail: 0 | 1): THREE.BufferGeometry {
+function starGeo(detail: 0 | 1 | 2): THREE.BufferGeometry {
   const g = new THREE.IcosahedronGeometry(1, detail);
   g.scale(1, 0.72, 1); // chunkier boulder than brain coral
-  if (detail === 1) displaceBoulder(g, 0.18, 3.1, 29);
+  if (detail > 0) displaceBoulder(g, 0.1, 2.2, 29);
   return g;
 }
 
@@ -182,13 +214,21 @@ function crossCardGeo(width: number, height: number): THREE.BufferGeometry {
   return merge([a, b]);
 }
 
-function seaFanGeo(double: boolean): THREE.BufferGeometry {
-  if (!double) return cardGeo(1.3, 1.1);
-  const a = cardGeo(1.3, 1.1);
-  const b = cardGeo(1.3, 1.1);
-  b.translate(0, 0, 0.04);
-  b.rotateY(0.25);
-  return merge([a, b]);
+/** A single flat card, taller than wide to match `fanAlphaTex`'s upward-flaring wedge. Real sea
+ * fans are a single genuinely flat plane (that's the whole point of "oriented broadside to the
+ * current" — placement.ts rotates the instance, not a crossed pair of cards, which would defeat
+ * the single-plane identity and muddy that orientation logic), so unlike the other branching
+ * species there is no separate "double"/bushy variant here — see geometryFor's seaFan case. */
+function seaFanGeo(): THREE.BufferGeometry {
+  return cardGeo(1.5, 1.7);
+}
+
+/** Generic lacy-round impostor card used for elkhorn/staghorn's own far-LOD tier (see
+ * geometryFor) — unrelated to the (now fan-specific-shaped) `seaFanGeo` above; this one pairs with
+ * `lacyAlphaTex`'s round silhouette, which is a fine stand-in blob at impostor distance for any
+ * bushy/branching species, not just a fan. */
+function impostorCardGeo(): THREE.BufferGeometry {
+  return cardGeo(1.3, 1.3);
 }
 
 function seaPlumeGeo(bushy: boolean): THREE.BufferGeometry {
@@ -263,29 +303,27 @@ export function geometryFor(species: SpeciesId): LodGeometry {
   let set: LodGeometry;
   switch (species) {
     case 'elkhorn':
-      set = { near: elkhornGeo('near'), mid: elkhornGeo('mid'), far: seaFanGeo(false) };
+      set = { near: elkhornGeo('near'), mid: elkhornGeo('mid'), far: impostorCardGeo() };
       break;
     case 'staghorn':
-      set = { near: staghornGeo('near'), mid: staghornGeo('mid'), far: seaFanGeo(false) };
+      set = { near: staghornGeo('near'), mid: staghornGeo('mid'), far: impostorCardGeo() };
       break;
-    case 'brain': {
-      const mid = brainGeo(0);
-      set = { near: brainGeo(1), mid, far: mid };
+    case 'brain':
+      // Proper 3-tier falloff now that detail=2 is affordable (see this module's report): a
+      // genuinely smooth near silhouette for the species the "reads as rock" complaint was about.
+      set = { near: brainGeo(2), mid: brainGeo(1), far: brainGeo(0) };
       break;
-    }
-    case 'star': {
-      const mid = starGeo(0);
-      set = { near: starGeo(1), mid, far: mid };
+    case 'star':
+      set = { near: starGeo(2), mid: starGeo(1), far: starGeo(0) };
       break;
-    }
     case 'encrusting': {
       const mid = encrustingGeo(0);
       set = { near: encrustingGeo(1), mid, far: mid };
       break;
     }
     case 'seaFan': {
-      const far = seaFanGeo(false);
-      set = { near: seaFanGeo(true), mid: seaFanGeo(true), far };
+      const fan = seaFanGeo();
+      set = { near: fan, mid: fan, far: fan };
       break;
     }
     case 'seaPlume': {
