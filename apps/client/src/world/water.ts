@@ -71,27 +71,44 @@ export interface WaterUniforms {
 
 export interface WaterHandles {
   water: THREE.Mesh;
+  /** The underlying MeshStandardMaterial, exposed so core/shadows.ts can register it for cascaded
+   * shadows without world/water.ts needing to know anything about CSM. */
+  material: THREE.MeshStandardMaterial;
+  /** The material's own, CSM-agnostic onBeforeCompile — see core/shadows.ts's header for why this
+   * exact (stable) reference, rather than material.onBeforeCompile at call time, must be what
+   * every CSM re-registration wraps. */
+  baseOnBeforeCompile: THREE.MeshStandardMaterial['onBeforeCompile'];
   uniforms: WaterUniforms;
   recenter(x: number, z: number): void;
   update(t: number, sea: number, sw: number, ch: number): void;
   /** Mirror the boat's physics wake ring (plain numbers) into the GPU uniform's Vector4[]. */
   syncWakeUniform(ring: Float64Array): void;
+  /** Rebuild the water plane at a new tessellation (quality tier change). Keeps the material/
+   * uniforms — only the displaced grid of vertices is recreated. */
+  setTessellation(segments: number): void;
 }
 
-export function createWater(sunDir: THREE.Vector3): WaterHandles {
+const WR = 1900, WA = 0.11;
+
+/** Non-uniform radial grid: dense near the camera, coarse toward the 1,900 m horizon — the same
+ * `f(s)` warp legacy used, just factored out so quality-tier changes can rebuild it. */
+function buildWaterGeometry(segments: number): THREE.BufferGeometry {
+  const wGeo = new THREE.PlaneGeometry(2, 2, segments, segments);
+  wGeo.rotateX(-Math.PI / 2);
+  const p = wGeo.attributes.position;
+  const f = (s: number) => Math.sign(s) * WR * (WA * Math.abs(s) + (1 - WA) * Math.abs(s) ** 3);
+  for (let i = 0; i < p.count; i++) { p.setX(i, f(p.getX(i))); p.setZ(i, f(p.getZ(i))); }
+  wGeo.computeBoundingSphere();
+  return wGeo;
+}
+
+export function createWater(sunDir: THREE.Vector3, waterSegments?: number): WaterHandles {
   const touch = isTouch();
   const depthTex = buildDepthTex();
   const wakeVecs: THREE.Vector4[] = Array.from({ length: WAKE_N }, () => new THREE.Vector4(0, 0, -999, 0));
 
-  const WR = 1900, WN = touch ? 150 : 220, WA = 0.11;
-  const wGeo = new THREE.PlaneGeometry(2, 2, WN, WN);
-  wGeo.rotateX(-Math.PI / 2);
-  {
-    const p = wGeo.attributes.position;
-    const f = (s: number) => Math.sign(s) * WR * (WA * Math.abs(s) + (1 - WA) * Math.abs(s) ** 3);
-    for (let i = 0; i < p.count; i++) { p.setX(i, f(p.getX(i))); p.setZ(i, f(p.getZ(i))); }
-    wGeo.computeBoundingSphere();
-  }
+  const WN = waterSegments ?? (touch ? 150 : 220);
+  const wGeo = buildWaterGeometry(WN);
 
   const uniforms: WaterUniforms = {
     uTime: { value: 0 }, uSea: { value: 1 }, uSW: { value: 1 }, uCH: { value: 1 },
@@ -101,7 +118,11 @@ export function createWater(sunDir: THREE.Vector3): WaterHandles {
   };
 
   const waterMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.16, metalness: 0.05, transparent: true });
-  waterMat.onBeforeCompile = (sh) => {
+  // Named (not an inline arrow assigned straight to onBeforeCompile) because core/shadows.ts's
+  // CSM integration needs a stable reference to re-wrap from on every quality-tier switch — see
+  // that module's header for why re-wrapping from "whatever onBeforeCompile is currently set"
+  // instead would either nest indefinitely or lose this entirely after a CSM dispose().
+  const baseOnBeforeCompile: THREE.MeshStandardMaterial['onBeforeCompile'] = (sh) => {
     Object.assign(sh.uniforms, uniforms);
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
@@ -146,11 +167,16 @@ float wakeH(vec2 P,inout vec2 grad,inout float foam){ float h=0.;
     vec4 tz=texture2D(uNorm,vWP.xz*.021+vec2(uTime*.006,-uTime*.004));
     float breakup=texture2D(uNorm,vWP.xz*.06+vec2(-uTime*.02,uTime*.013)).a;
     diffuseColor.rgb=vCol*(.9+.2*tz.b);
-    float foam=smoothstep(.58,.95,vCrest)*smoothstep(.6,1.4,uCH)*smoothstep(.35,.7,breakup*.8+tz.a*.4);
-    foam=max(foam,smoothstep(.12,.25,vSlope)*smoothstep(.4,.75,breakup)*.8);
-    foam=max(foam,smoothstep(.04,.28,vWake)*smoothstep(.2,.6,breakup+.15));
-    diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.95,.97,1.),foam);
-    diffuseColor.a=mix(vWA,1.,foam);`)
+    float foam=smoothstep(.55,.92,vCrest)*smoothstep(.6,1.4,uCH)*smoothstep(.3,.68,breakup*.8+tz.a*.4);
+    foam=max(foam,smoothstep(.1,.23,vSlope)*smoothstep(.4,.75,breakup)*.8);
+    foam=max(foam,smoothstep(.04,.26,vWake)*smoothstep(.2,.6,breakup+.15));
+    // Foam reading as foam (Part 2 item 3): a sharper, brighter crest plus a thin high-contrast
+    // "fresh" rim so it doesn't read as a flat white smear — real foam is brightest right at the
+    // breaking edge and thins out fast.
+    float foamCore=pow(foam,0.65);
+    vec3 foamCol=mix(vec3(.88,.93,.95),vec3(1.0,1.0,0.99),foamCore);
+    diffuseColor.rgb=mix(diffuseColor.rgb,foamCol,foamCore);
+    diffuseColor.a=mix(vWA,1.,foamCore);`)
       .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
     float rfade=1.-smoothstep(60.,520.,length(cameraPosition-vWP));
     vec2 n1=texture2D(uNorm,vWP.xz*.045+vec2(uTime*.018,uTime*.011)).rg*2.-1.;
@@ -160,13 +186,37 @@ float wakeH(vec2 P,inout vec2 grad,inout float foam){ float h=0.;
     normal=normalize(normal+(viewMatrix*vec4(rippleW,0.)).xyz);`)
       .replace('#include <fog_fragment>', `
     vec3 Vw=normalize(cameraPosition-vWP); vec3 Nw=normalize(vWN+rippleW*1.4);
-    float fres=.03+.97*pow(1.-clamp(dot(Nw,Vw),0.,1.),5.);
-    gl_FragColor.rgb=mix(gl_FragColor.rgb,uSky,fres*.7);
+    float camDist=length(cameraPosition-vWP);
+    // Distance detail fade (Part 2 item 3): the fine ripple-normal contribution already fades via
+    // rfade above; fade the high-frequency sparkle/fresnel-grain the same way so far water reads as
+    // smooth swell instead of shimmering/aliasing at the 1,900 m draw distance.
+    float distDetail=1.-smoothstep(300.,1400.,camDist);
+    // Shadow/light-aware masking: the fresnel sky-mix and sun specular below are both overlays
+    // that otherwise completely hide the CSM shadow the lighting pass already computed into
+    // gl_FragColor (found by disabling this shader entirely and comparing — see this project's
+    // report). litLuma approximates "how lit is this pixel" so both overlays fade out, not just
+    // dim, over genuinely shadowed water instead of painting over it.
+    float litLuma=dot(gl_FragColor.rgb,vec3(0.299,0.587,0.114));
+    float litVis=clamp(litLuma/max(dot(vCol,vec3(0.299,0.587,0.114)),0.05),0.15,1.0);
+    float fres=.02+.98*pow(1.-clamp(dot(Nw,Vw),0.,1.),5.);
+    gl_FragColor.rgb=mix(gl_FragColor.rgb,uSky,fres*.68*litVis);
     gl_FragColor.a=mix(gl_FragColor.a,1.,fres);
-    float spk=pow(max(dot(Nw,normalize(Vw+uSunDir)),0.),380.);
-    gl_FragColor.rgb+=vec3(1.,.95,.84)*spk*2.4;
+    // Sun specular: a tight Blinn-Phong core for the crisp glint plus a wider, fresnel-weighted
+    // lobe so the highlight stretches into a believable glitter path toward the horizon instead of
+    // a single hard dot.
+    vec3 Hw=normalize(Vw+uSunDir);
+    float ndh=max(dot(Nw,Hw),0.);
+    float spkCore=pow(ndh,420.);
+    float spkWide=pow(ndh,48.)*fres*.4;
+    // Sparkle: high-frequency noise breaks the wide lobe into glints rather than a flat sheen —
+    // the classic sun-on-chop look — faded out with distance via distDetail so it never aliases.
+    vec2 glintUV=vWP.xz*.6+vec2(uTime*.07,-uTime*.05);
+    float glint=pow(texture2D(uNorm,glintUV).a,6.)*distDetail;
+    float spk=(spkCore+spkWide*(0.5+0.5*glint))*litVis;
+    gl_FragColor.rgb+=vec3(1.,.96,.86)*spk*2.4;
     #include <fog_fragment>`);
   };
+  waterMat.onBeforeCompile = baseOnBeforeCompile;
 
   const water = new THREE.Mesh(wGeo, waterMat);
   water.receiveShadow = true;
@@ -174,9 +224,16 @@ float wakeH(vec2 P,inout vec2 grad,inout float foam){ float h=0.;
 
   return {
     water,
+    material: waterMat,
+    baseOnBeforeCompile,
     uniforms,
     recenter(x, z) { water.position.set(Math.round(x / 2) * 2, 0, Math.round(z / 2) * 2); },
     update(t, sea, sw, ch) { uniforms.uTime.value = t; uniforms.uSea.value = sea; uniforms.uSW.value = sw; uniforms.uCH.value = ch; },
+    setTessellation(segments) {
+      const next = buildWaterGeometry(segments);
+      water.geometry.dispose();
+      water.geometry = next;
+    },
     syncWakeUniform(ring) {
       for (let i = 0; i < WAKE_N; i++) {
         const o = i * 4;
