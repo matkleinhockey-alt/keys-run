@@ -29,6 +29,7 @@ import { createIslands } from '../world/islands.js';
 import { createBridge } from '../world/bridge.js';
 import { createLandmarks } from '../world/landmarks.js';
 import { createCoral } from '../world/coral.js';
+import { createFishWorld } from '../entities/fish/index.js';
 import { createClouds } from '../world/clouds.js';
 import { createMarinas } from '../world/marinas.js';
 import { createParticleSystem } from '../world/particles.js';
@@ -101,6 +102,14 @@ export function initWorld(wrap: HTMLElement): World {
 
   // 8. coral
   scene.add(createCoral());
+
+  // 8b. fish — schools of VIS creatures, deterministic resident reef schools plus a roaming
+  // layer (entities/fish/index.ts); see docs/ARCHITECTURE.md "Fish at realism *and* density" and
+  // "Fish ownership — three tiers". `fishWorld.update` is called from frame() below with the
+  // boat as the only threat for now — a diver threat can be appended to the optional 4th arg
+  // once entities/diver/** exists, with no change needed inside entities/fish.
+  const fishWorld = createFishWorld();
+  scene.add(fishWorld.group);
 
   // 9. clouds (one InstancedMesh — see world/clouds.ts header; count fixed at boot per the
   // initial quality tier since, being a single draw call either way, it isn't worth a rebuild
@@ -359,6 +368,14 @@ export function initWorld(wrap: HTMLElement): World {
     water.update(simTime, Math.max(sw * 1.1, ch), sw, ch);
     islands.update(simTime);
     tod.update(clamped);
+    // DEV/VERIFICATION HOOK ONLY — entities/diver/** doesn't exist yet in this branch (a
+    // different agent's work this phase), so there is no real diver threat to pass fishWorld
+    // yet. `window.__fishDebugDiver` lets a Playwright screenshot script stand in a synthetic
+    // diver position to verify entities/fish's diver-flee response (behavior.ts) ahead of that
+    // integration; unset in every normal run, so this is a no-op outside of test scripts.
+    const debugDiver = (window as unknown as { __fishDebugDiver?: { x: number; z: number } }).__fishDebugDiver;
+    const fishThreats = debugDiver ? [{ ...debugDiver, kind: 'diver' as const, speed: 0.6 }] : undefined;
+    fishWorld.update(clamped, simTime, { x: curState.x, z: curState.z }, Math.abs(curState.speed), fishThreats);
 
     const amp = ampAt(renderState.x, renderState.z);
     applyBoatVisuals(renderState, model, { t: simTime, dt: clamped, todK: tod.getK(), sw, ch, amp, hull: { len: boatSpec.len, beam: boatSpec.beam, topMs: boatSpec.top * 0.5144 * SPEED_SCALE }, particles, water }, events);
@@ -370,6 +387,20 @@ export function initWorld(wrap: HTMLElement): World {
     }
 
     updateCamera(clamped, { camera, sky: sceneCtx.sky, sunDisc: sceneCtx.sunDisc, sunDir }, camState, fpState, model, renderState, game.running, boatSpec.len);
+    // DEV/VERIFICATION HOOK ONLY — lets a Playwright screenshot script place the camera directly
+    // for entities/fish visual verification. Unset in every normal run, so this is a no-op outside
+    // of test scripts. Applied after updateCamera so it wins for this frame instead of being
+    // immediately overwritten.
+    const camOverride = (window as unknown as {
+      __fishDebugCamera?: { x: number; y: number; z: number; lookX: number; lookY: number; lookZ: number };
+    }).__fishDebugCamera;
+    if (camOverride) {
+      camera.position.set(camOverride.x, camOverride.y, camOverride.z);
+      camera.lookAt(camOverride.lookX, camOverride.lookY, camOverride.lookZ);
+      camera.updateMatrixWorld(true);
+    }
+    // After the override, so terrain chunks stream around wherever the camera actually ended up —
+    // otherwise a debug-placed camera would sit over unbuilt seabed.
     seafloor.update(camera.position);
     electronics.update(clamped, simTime, fpState.driveOn);
     if (game.running) {
@@ -400,6 +431,24 @@ export function initWorld(wrap: HTMLElement): World {
     postfx.setSize(w, h);
     shadows.updateFrustums();
   }
+
+  // DEV/VERIFICATION HOOK ONLY (see the __fishDebugDiver comment above frame()'s fishWorld.update
+  // call) — lets test/capture-fish-screenshots.mjs find a deterministic resident of a given
+  // species and teleport the boat there, instead of guessing world coordinates blind. No normal
+  // code path reads `window.__fishDebug`.
+  (window as unknown as { __fishDebug?: unknown }).__fishDebug = {
+    findResidentNear: fishWorld.findResidentNear,
+    waterColumnAt: fishWorld.waterColumnAt,
+    activeSchools: fishWorld.debugActiveSchools,
+    poolStats: fishWorld.debugPoolStats,
+    stats: () => fishWorld.stats,
+    teleport(x: number, z: number, h?: number): void {
+      stateBox.state = { ...stateBox.state, x, z, h: h ?? stateBox.state.h, speed: 0 };
+      curState = stateBox.state;
+      model.group.position.set(x, stateBox.state.y, z);
+      model.group.rotation.y = stateBox.state.h;
+    },
+  };
 
   return { resize, frame, renderer };
 
