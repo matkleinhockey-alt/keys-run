@@ -357,6 +357,17 @@ export function initWorld(wrap: HTMLElement): World {
   // internally by diver.step, not through toggleDive/btnMarina) still flips the DOM/model back —
   // see the mode-change check at the top of frame() below.
   let prevDiverMode: 'boat' | 'diver' = 'boat';
+  // entities/camera.ts's bindCameraPointerControls (bound once below, mode-agnostic — see its
+  // own header) keeps reading pointer drags on the canvas while diving, since it has no idea
+  // diving exists. That's harmless to the render (updateCamera is never called while
+  // diver.mode==='diver', see the branch below) but it silently mutates camState.yaw/pitchOff
+  // and fpState.dYaw/dPitch in the background the whole time the player is looking around
+  // underwater (look-to-steer drags the same canvas). Left alone, the topside camera would snap
+  // to wherever those drifted the instant control returns to the boat. Snapshot on dive-entry,
+  // restore on exit — covers both the manual reboard (toggleDive) and the involuntary
+  // post-blackout wake-up (diver.step flips mode on its own), since both only ever surface here,
+  // at the single mode-change check.
+  let savedBoatCam: { yaw: number; pitchOff: number; dYaw: number; dPitch: number } | null = null;
 
   function fixedStep(dt: number): SimEvent[] {
     const st = SEA_STATES[seaIdx], k = Math.min(1, dt * 0.5);
@@ -391,7 +402,17 @@ export function initWorld(wrap: HTMLElement): World {
     }
     curState = stateBox.state;
 
-    if (diver.mode !== prevDiverMode) { setDiveUI(diver.mode === 'diver'); prevDiverMode = diver.mode; }
+    if (diver.mode !== prevDiverMode) {
+      if (diver.mode === 'diver') {
+        savedBoatCam = { yaw: camState.yaw, pitchOff: camState.pitchOff, dYaw: fpState.dYaw, dPitch: fpState.dPitch };
+      } else if (savedBoatCam) {
+        camState.yaw = savedBoatCam.yaw; camState.pitchOff = savedBoatCam.pitchOff;
+        fpState.dYaw = savedBoatCam.dYaw; fpState.dPitch = savedBoatCam.dPitch;
+        savedBoatCam = null;
+      }
+      setDiveUI(diver.mode === 'diver');
+      prevDiverMode = diver.mode;
+    }
 
     // Render interpolates the leftover fraction of a step (docs/ARCHITECTURE.md requirement 2):
     // only the smoothly-varying transform fields are blended between the last two completed
