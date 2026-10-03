@@ -197,12 +197,20 @@ function solidObstaclesInChunk(cx: number, cz: number): ReefInstance[] {
  * footprint — see call site) would visibly intersect a solid obstacle instance. Uses each
  * obstacle's own *realized* half-footprint (`species.footprint * 0.5 * max(scaleX,scaleZ)`, from
  * that instance's own already-rolled scale), not the species' nominal footprint — a brain/star
- * coral can scale up to 2.2-2.4x (species.ts), and checking only the unscaled nominal size let an
- * oversized boulder's actual silhouette extend well past the heuristic's buffer. */
+ * coral can scale up to 2.2-2.8x (species.ts), and checking only the unscaled nominal size let an
+ * oversized boulder's actual silhouette extend well past the heuristic's buffer.
+ *
+ * `OVERLAP_FRACTION` shrinks the combined-radii test distance: at this module's much higher
+ * density (see constants.ts's report) a full edge-to-edge threshold rejects nearly every card
+ * candidate in a crowded chunk, since *something* obstacle-sized is within combined-radius
+ * distance almost everywhere — that collapsed sea fan/plume counts to near zero. Real fans do grow
+ * right up against, even touching, a neighbouring coral head; only a candidate landing well inside
+ * an obstacle's own silhouette needs rejecting. */
+const OVERLAP_FRACTION = 0.4;
 function collidesWithObstacle(x: number, z: number, cardRadius: number, obstacles: ReefInstance[]): boolean {
   for (const o of obstacles) {
     const obRadius = SPECIES[o.species].footprint * 0.5 * Math.max(o.scaleX, o.scaleZ);
-    if (Math.hypot(o.x - x, o.z - z) < cardRadius + obRadius) return true;
+    if (Math.hypot(o.x - x, o.z - z) < (cardRadius + obRadius) * OVERLAP_FRACTION) return true;
   }
   return false;
 }
