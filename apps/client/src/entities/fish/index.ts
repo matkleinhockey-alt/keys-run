@@ -31,6 +31,12 @@ export interface FishWorld {
   group: THREE.Group;
   update(dt: number, t: number, focus: { x: number; z: number }, boatSpeed: number, extraThreats?: Threat[]): void;
   readonly stats: { schools: number; fish: number; draws: number };
+  /** Scans resident chunks (via the same pure `residentsForChunk` activation uses — no game
+   * state touched) outward from `(originX, originZ)` out to `maxRadius` for the first species
+   * matching `wantType`. Verification-only (Playwright screenshot targeting — see
+   * test/capture-fish-screenshots.mjs): deterministic spawning means "where is the nearest X"
+   * is itself a pure query, so this needs no debug-only game-state backdoor to answer it. */
+  findResidentNear(wantType: string, originX: number, originZ: number, maxRadius: number): { x: number; z: number } | null;
 }
 
 interface DormantEntry {
@@ -168,5 +174,20 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
     stats.draws = touched.size;
   }
 
-  return { group, update, stats };
+  function findResidentNear(wantType: string, originX: number, originZ: number, maxRadius: number): { x: number; z: number } | null {
+    const [ocx, ocz] = chunkOf(originX, originZ);
+    const reach = Math.ceil(maxRadius / 64);
+    let best: { x: number; z: number } | null = null, bestD = Infinity;
+    for (let dx = -reach; dx <= reach; dx++) {
+      for (let dz = -reach; dz <= reach; dz++) {
+        const spec = residentsForChunk(seed, ocx + dx, ocz + dz);
+        if (!spec || spec.type !== wantType) continue;
+        const d = Math.hypot(spec.anchorX - originX, spec.anchorZ - originZ);
+        if (d < bestD) { bestD = d; best = { x: spec.anchorX, z: spec.anchorZ }; }
+      }
+    }
+    return best;
+  }
+
+  return { group, update, stats, findResidentNear };
 }
