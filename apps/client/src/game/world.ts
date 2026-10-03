@@ -652,6 +652,8 @@ export function initWorld(wrap: HTMLElement): World {
   // call) — lets test/capture-fish-screenshots.mjs find a deterministic resident of a given
   // species and teleport the boat there, instead of guessing world coordinates blind. No normal
   // code path reads `window.__fishDebug`.
+  // DEV/VERIFICATION HOOK ONLY — world/underwater/index.ts's `debugCaustics()` doc comment.
+  (window as unknown as { __uwInspect?: unknown }).__uwInspect = () => underwater.debugCaustics();
   (window as unknown as { __fishDebug?: unknown }).__fishDebug = {
     findResidentNear: fishWorld.findResidentNear,
     waterColumnAt: fishWorld.waterColumnAt,
