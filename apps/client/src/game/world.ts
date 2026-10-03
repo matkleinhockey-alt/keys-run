@@ -11,7 +11,7 @@
  */
 import * as THREE from 'three';
 import { chainZ } from '@keysrun/shared/world/chain';
-import { WORLD, WB } from '@keysrun/shared/world/depth';
+import { WB } from '@keysrun/shared/world/depth';
 import { BOATS, SPEED_SCALE, type Boat } from '@keysrun/shared/content/boats';
 import { SEA_STATES } from '@keysrun/shared/waves';
 import { ampAt } from '@keysrun/shared/sim/depth-grid';
@@ -85,7 +85,8 @@ export function initWorld(wrap: HTMLElement): World {
   const tod = createTimeOfDay(sceneCtx, water.uniforms.uSky);
 
   // 4. sea floor
-  scene.add(createSeafloor(WORLD.x0, WORLD.z0, WORLD.size));
+  const seafloor = createSeafloor();
+  scene.add(seafloor.group);
 
   // 5. islands + vegetation + runway
   const islands = createIslands();
@@ -369,6 +370,7 @@ export function initWorld(wrap: HTMLElement): World {
     }
 
     updateCamera(clamped, { camera, sky: sceneCtx.sky, sunDisc: sceneCtx.sunDisc, sunDir }, camState, fpState, model, renderState, game.running, boatSpec.len);
+    seafloor.update(camera.position);
     electronics.update(clamped, simTime, fpState.driveOn);
     if (game.running) {
       updateHUD(clamped, curState, { boatLabel: hudBoatLabel(boatSpec), draft: boatSpec.draft, running: game.running });
