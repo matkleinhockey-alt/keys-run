@@ -135,7 +135,7 @@ export function instantiateResident(spec: ResidentSpec, cx: number, cz: number):
     phase: spec.heading * 17.3, turn: 0, flee: 0, fleeHeading: spec.heading,
     glide: 0, dive: 0, diveTimer: 6 + 8 * spec.diveTimerSeed, diveTarget: 0,
     anchor: { x: spec.anchorX, z: spec.anchorZ, r: spec.anchorR },
-    resident: true, keepTimer: 0, dormantSince: null,
+    resident: true,
     members: spec.members,
   };
 }
@@ -190,7 +190,7 @@ export function instantiateRoamer(spawn: RoamSpawn): SchoolState {
     cx: spawn.x, cz: spawn.z, heading: spawn.heading,
     phase: spawn.heading * 11.7, turn: 0, flee: 0, fleeHeading: spawn.heading,
     glide: 0, dive: 0, diveTimer: 6, diveTarget: 0,
-    anchor: null, resident: false, keepTimer: 0, dormantSince: null,
+    anchor: null, resident: false,
     members: spawn.members,
   };
 }

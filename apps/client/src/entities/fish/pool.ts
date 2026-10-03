@@ -12,6 +12,15 @@
  * material tuning — see materials.ts), skipping the draw call entirely for a species with nothing
  * spawned keeps the "< 300 draw calls underwater" budget comfortable even though species count
  * went up from "1 shared material" to "49 materials".
+ *
+ * `mesh.count` tracks a *high-water mark* over active slots, not the pool's full `capacity`: an
+ * `InstancedMesh` draws every instance below `mesh.count`, so if `count` just jumped straight to
+ * `capacity` on first use, a pool sized for a max school of 18 (capacity 72) would submit 72
+ * instances' worth of triangles — most of them zero-scale parked dummies — for even a single lone
+ * fish. `free`'s pop-low/push-high ordering already keeps active slots compacted toward the low
+ * end (see `allocSlot`'s doc comment), so recomputing the mark by scanning `free` on every change
+ * (capacity ≤ 72, so this is cheap, and only runs on spawn/retire — a few times a second, not per
+ * frame) keeps the draw honest without needing swap-compaction.
  */
 import * as THREE from 'three';
 import type { CreatureVis } from '@keysrun/shared/content/creatures';
@@ -67,13 +76,24 @@ export function createSpeciesPool(group: THREE.Group, key: string, V: CreatureVi
   return { key, V, mesh, vat, capacity, free, inUse: 0, group };
 }
 
+/** Recomputes `mesh.count` as one past the highest still-active slot (see this module's header) —
+ * cheap at capacity ≤ 72 and only called from alloc/free, not per frame. */
+function recomputeCount(pool: SpeciesPool): void {
+  if (pool.inUse === 0) { pool.mesh.count = 0; return; }
+  const free = new Set(pool.free);
+  let hi = pool.capacity - 1;
+  while (hi >= 0 && free.has(hi)) hi--;
+  pool.mesh.count = hi + 1;
+}
+
 /** Allocates one slot, or null if the pool is exhausted (legacy's `VFREE[type].length<n` guard,
  * checked by the caller before calling alloc() per-member). */
 export function allocSlot(pool: SpeciesPool, swimPhase: number): number | null {
   const slot = pool.free.pop();
   if (slot === undefined) return null;
-  if (pool.inUse === 0) { pool.group.add(pool.mesh); pool.mesh.count = pool.capacity; }
+  if (pool.inUse === 0) pool.group.add(pool.mesh);
   pool.inUse++;
+  recomputeCount(pool);
   const iPhaseAttr = pool.mesh.geometry.attributes.iPhase as THREE.InstancedBufferAttribute;
   iPhaseAttr.setX(slot, swimPhase);
   iPhaseAttr.needsUpdate = true;
@@ -85,4 +105,5 @@ export function freeSlot(pool: SpeciesPool, slot: number): void {
   pool.free.push(slot);
   pool.inUse--;
   if (pool.inUse <= 0) { pool.inUse = 0; pool.mesh.count = 0; pool.group.remove(pool.mesh); }
+  else recomputeCount(pool);
 }

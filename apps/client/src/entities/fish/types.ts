@@ -70,10 +70,6 @@ export interface SchoolState {
   /** Resident schools are deterministic-forever per docs/ARCHITECTURE.md "Resident schools" —
    * never aged out, never swapped for a different roll of the dice. */
   resident: boolean;
-  keepTimer: number;
-  /** Simulation time this school last had a member rendered on-screen-range; schools past
-   * `DORMANT_TTL` get recycled. Null while active. See spawn.ts's dormant-list doc comment. */
-  dormantSince: number | null;
   members: FishMember[];
 }
 
