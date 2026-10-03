@@ -42,6 +42,13 @@ import { applyBoatVisuals, sampleWaterHeight } from '../entities/boat/visuals.js
 import { createBoatInput, bindBoatInput, type BoatStateBox } from '../entities/boat/input.js';
 import { createCamState, createFpState, updateCamera, cycleView, bindCameraPointerControls } from '../entities/camera.js';
 
+import type { DiverEvent } from '@keysrun/shared/sim/diver';
+import { createDiverController, NEUTRAL_BOAT_INPUT } from '../entities/diver/controller.js';
+import { createDiverModel } from '../entities/diver/model.js';
+import { applyDiverVisuals } from '../entities/diver/visuals.js';
+import { updateDiverCamera } from '../entities/diver/camera.js';
+import { updateDiverHud, showDiverHud, clearBlackoutOverlay } from '../entities/diver/hud.js';
+
 import { createFishing } from './fishing/index.js';
 import { F as FishF, lineOut as fishingLineOut } from './fishing/state.js';
 import { createCatchFlow } from './catch/catch-flow.js';
@@ -82,6 +89,14 @@ export function initWorld(wrap: HTMLElement): World {
   // 1. renderer / scene / sky / lighting
   const sceneCtx = createScene(wrap);
   const { renderer, scene, camera, sunDir } = sceneCtx;
+
+  // Topside near/far (core/scene.ts's defaults, 0.5/9000 — sized for the ~1,900 m horizon).
+  // entities/diver/camera.ts drives its own, much tighter near/far while submerged (its header
+  // explains why: that's the actual fix for caustics.ts's documented depth-precision bug); these
+  // are read once, here, before anything can have touched them, so frame()'s mode-change handling
+  // below can restore the exact original values the instant the diver climbs back aboard.
+  const TOPSIDE_CAMERA_NEAR = camera.near;
+  const TOPSIDE_CAMERA_FAR = camera.far;
 
   // 1b. quality tier: a saved choice wins, otherwise auto-detect from a quick GPU probe
   // (docs/ARCHITECTURE.md Part 2 "Quality tiers" — Low must run on an integrated GPU).
@@ -284,6 +299,48 @@ export function initWorld(wrap: HTMLElement): World {
   });
   bindCatchInput(catchFlow, () => stateBox.state);
 
+  // 13c. diver (entities/diver/**): jump off the boat, free-dive, swim, climb back aboard. See
+  // controller.ts's header for the authority-handoff plan — the boat keeps stepping on a neutral
+  // input while its driver is over the side (see fixedStep below); the net agent wires real
+  // server-authoritative drift later behind that same seam.
+  const diver = createDiverController({ canvas: renderer.domElement });
+  const diverModel = createDiverModel();
+  diverModel.group.visible = false;
+  scene.add(diverModel.group);
+
+  function setDiveUI(diving: boolean): void {
+    document.getElementById('gauges')?.classList.toggle('hidden', diving);
+    document.getElementById('mapbox')?.classList.toggle('hidden', diving);
+    document.getElementById('scorebox')?.classList.toggle('hidden', diving);
+    if (isTouch()) {
+      document.getElementById('touch')?.classList.toggle('hidden', diving);
+      document.getElementById('touchDiver')?.classList.toggle('hidden', !diving);
+    }
+    showDiverHud(diving);
+    diverModel.group.visible = diving;
+    if (!diving) clearBlackoutOverlay();
+  }
+
+  function toggleDive(): void {
+    if (!game.running) return;
+    if (diver.mode === 'boat') {
+      // legacy-mirroring guard (see the onGo/placeBoat reelIn call above): going overboard with a
+      // line out would otherwise leave fishing's state machine holding a rod-tip/bobber reference
+      // while nothing drives its update loop (fixedStep still runs, but the player's attention —
+      // and this frame's camera — is about to move to the diver rig).
+      if (FishF.state !== 'idle' && FishF.state !== 'caught') fishing.reelIn();
+      diver.enterWater(stateBox.state.x, stateBox.state.z, stateBox.state.h);
+      setDiveUI(true);
+      toast('Overboard — WASD/mouse to swim and look, Space/Ctrl to ascend/descend, Shift to sprint. J to climb back aboard.');
+    } else {
+      if (!diver.canReboard) { toast('Too far from the boat to climb aboard.'); return; }
+      diver.requestReboard();
+      setDiveUI(false);
+    }
+  }
+  document.getElementById('btnDive')?.addEventListener('click', toggleDive);
+  window.addEventListener('keydown', (e) => { if (e.code === 'KeyJ') toggleDive(); });
+
   bindBoatInput(input, stateBox, {
     toggleTrim() {
       if (FishF.state === 'fight') { fishing.setDrag(FishF.drag + (shiftHeld ? -1 : 1)); return; }
@@ -365,6 +422,7 @@ export function initWorld(wrap: HTMLElement): World {
   document.getElementById('btnMarina')?.addEventListener('click', () => {
     game.running = false;
     input.fwd = input.back = input.left = input.right = false;
+    if (diver.mode === 'diver') { diver.exitToBoat(); setDiveUI(false); }
     const lede = document.getElementById('lede');
     if (lede) lede.textContent = 'Switch boats any time.';
     const go = document.getElementById('btnGo');
@@ -379,6 +437,20 @@ export function initWorld(wrap: HTMLElement): World {
   let simTime = 0;
   let acc = 0;
   let prevState: BoatState = curState;
+  // Tracks diver.mode so the *involuntary* post-blackout "wake on the boat" recovery (flipped
+  // internally by diver.step, not through toggleDive/btnMarina) still flips the DOM/model/camera
+  // planes back — see the mode-change check at the top of frame() below.
+  let prevDiverMode: 'boat' | 'diver' = 'boat';
+  // entities/camera.ts's bindCameraPointerControls (bound once above, mode-agnostic — see its own
+  // header) keeps reading pointer drags on the canvas while diving, since it has no idea diving
+  // exists. That's harmless to the render (updateCamera is never called while diver.mode==='diver',
+  // see frame() below) but it silently mutates camState.yaw/pitchOff and fpState.dYaw/dPitch in the
+  // background the whole time the player is looking around underwater (look-to-steer drags the
+  // same canvas). Left alone, the topside camera would snap to wherever those drifted the instant
+  // control returns to the boat. Snapshot on dive-entry, restore on exit — covers both the manual
+  // reboard (toggleDive) and the involuntary post-blackout wake-up, since both only ever surface
+  // here, at the single mode-change check.
+  let savedBoatCam: { yaw: number; pitchOff: number; dYaw: number; dPitch: number } | null = null;
 
   function fixedStep(dt: number): SimEvent[] {
     const st = SEA_STATES[seaIdx], k = Math.min(1, dt * 0.5);
@@ -395,7 +467,11 @@ export function initWorld(wrap: HTMLElement): World {
       t: simTime, hull: hullOf(boatSpec), sw, ch, worldBounds: WB, pilings, dockRects,
       canDrive: game.running && FishF.state !== 'caught', fightActive, fightTarget, lineOut: fishingLineOut(), luigiOn: false,
     };
-    const next = stepBoat(stateBox.state, input, env, dt);
+    // While diving, the boat's "driver" is over the side: it keeps stepping (so it keeps existing,
+    // and keeps drifting under its own wave/current forces — stepBoat already applies those at
+    // zero throttle/steer) but never sees player input. See entities/diver/controller.ts.
+    const boatInput = diver.mode === 'diver' ? NEUTRAL_BOAT_INPUT : input;
+    const next = stepBoat(stateBox.state, boatInput, env, dt);
     stateBox.state = next;
     fishing.update(dt, simTime, next, sw, ch);
     return next.events;
@@ -406,13 +482,36 @@ export function initWorld(wrap: HTMLElement): World {
     acc += clamped;
     let steps = 0;
     const events: SimEvent[] = [];
+    const diverEvents: DiverEvent[] = [];
     while (acc >= DT && steps < 5) {
       prevState = stateBox.state;
       events.push(...fixedStep(DT));
+      diverEvents.push(...diver.step(simTime, DT, stateBox.state.x, stateBox.state.z));
       acc -= DT;
       steps++;
     }
     curState = stateBox.state;
+
+    if (diver.mode !== prevDiverMode) {
+      if (diver.mode === 'diver') {
+        savedBoatCam = { yaw: camState.yaw, pitchOff: camState.pitchOff, dYaw: fpState.dYaw, dPitch: fpState.dPitch };
+      } else {
+        // Restore the topside near/far entities/diver/camera.ts's header explains why diving
+        // narrows these — leaving its tight far plane applied topside would silently clip the
+        // 1,900 m far skirt (world/terrain/lod.ts) and reintroduce the same depth-precision
+        // problem this project's caustics fix exists to avoid, just in the other direction.
+        camera.near = TOPSIDE_CAMERA_NEAR;
+        camera.far = TOPSIDE_CAMERA_FAR;
+        camera.updateProjectionMatrix();
+        if (savedBoatCam) {
+          camState.yaw = savedBoatCam.yaw; camState.pitchOff = savedBoatCam.pitchOff;
+          fpState.dYaw = savedBoatCam.dYaw; fpState.dPitch = savedBoatCam.dPitch;
+          savedBoatCam = null;
+        }
+      }
+      setDiveUI(diver.mode === 'diver');
+      prevDiverMode = diver.mode;
+    }
 
     // Render interpolates the leftover fraction of a step (docs/ARCHITECTURE.md requirement 2):
     // only the smoothly-varying transform fields are blended between the last two completed
@@ -436,13 +535,19 @@ export function initWorld(wrap: HTMLElement): World {
     water.update(simTime, Math.max(sw * 1.1, ch), sw, ch);
     islands.update(simTime);
     tod.update(clamped);
-    // DEV/VERIFICATION HOOK ONLY — entities/diver/** doesn't exist yet in this branch (a
-    // different agent's work this phase), so there is no real diver threat to pass fishWorld
-    // yet. `window.__fishDebugDiver` lets a Playwright screenshot script stand in a synthetic
-    // diver position to verify entities/fish's diver-flee response (behavior.ts) ahead of that
-    // integration; unset in every normal run, so this is a no-op outside of test scripts.
-    const debugDiver = (window as unknown as { __fishDebugDiver?: { x: number; z: number } }).__fishDebugDiver;
-    const fishThreats = debugDiver ? [{ ...debugDiver, kind: 'diver' as const, speed: 0.6 }] : undefined;
+    // Real diver threat (entities/diver/**) — species-differentiated flee response
+    // (entities/fish/behavior.ts) now reacts to the actual diver position/speed, not a stand-in.
+    // `window.__fishDebugDiver` stays as a fallback for verification scripts that want to inject a
+    // synthetic diver without actually driving the dive flow (test/capture-fish-screenshots.mjs);
+    // it only applies while nobody is really diving.
+    const diverState = diver.state;
+    let fishThreats: Array<{ x: number; z: number; kind: 'boat' | 'diver'; speed: number }> | undefined;
+    if (diver.mode === 'diver' && diverState) {
+      fishThreats = [{ x: diverState.x, z: diverState.z, kind: 'diver', speed: Math.hypot(diverState.vx, diverState.vy, diverState.vz) }];
+    } else {
+      const debugDiver = (window as unknown as { __fishDebugDiver?: { x: number; z: number } }).__fishDebugDiver;
+      fishThreats = debugDiver ? [{ x: debugDiver.x, z: debugDiver.z, kind: 'diver', speed: 0.6 }] : undefined;
+    }
     fishWorld.update(clamped, simTime, { x: curState.x, z: curState.z }, Math.abs(curState.speed), fishThreats);
 
     const amp = ampAt(renderState.x, renderState.z);
@@ -455,38 +560,60 @@ export function initWorld(wrap: HTMLElement): World {
       b.position.y = sampleWaterHeight(curState, b.position.x, b.position.z, simTime, ampAt(b.position.x, b.position.z), sw, ch) - 0.05;
     }
 
-    updateCamera(clamped, { camera, sky: sceneCtx.sky, sunDisc: sceneCtx.sunDisc, sunDir }, camState, fpState, model, renderState, game.running, boatSpec.len);
-    // DEV/VERIFICATION HOOK ONLY — lets a Playwright screenshot script place the camera directly
-    // for entities/fish visual verification. Unset in every normal run, so this is a no-op outside
-    // of test scripts. Applied after updateCamera so it wins for this frame instead of being
-    // immediately overwritten.
-    const camOverride = (window as unknown as {
-      __fishDebugCamera?: { x: number; y: number; z: number; lookX: number; lookY: number; lookZ: number };
-    }).__fishDebugCamera;
-    if (camOverride) {
-      camera.position.set(camOverride.x, camOverride.y, camOverride.z);
-      camera.lookAt(camOverride.lookX, camOverride.lookY, camOverride.lookZ);
+    if (diver.mode === 'diver' && diverState) {
+      // applyBoatVisuals above already kept the (drifting) boat's own transform/wake current —
+      // just not its camera/HUD, which the diver owns while its driver is over the side.
+      applyDiverVisuals(diverState, diverModel, diverEvents, { t: simTime });
+      updateDiverCamera(camera, diver.cam, diverState, simTime, clamped);
+      updateDiverHud(diverState, { canReboard: diver.canReboard });
+      // entities/diver/model.ts's head/mask sit ~0.5-0.6 m in front of the model's own origin (so
+      // chase view reads correctly) — exactly where the mask camera's forward view also looks, so
+      // first-person mode was staring at the inside of its own face every frame (confirmed with a
+      // raycast: nearest hit was the head sphere at 0.49 m). Hide the model in mask view, same as
+      // every other first-person rig hides its own head; chase view wants it visible.
+      diverModel.group.visible = diver.cam.mode === 'chase';
+      // updateCamera (boat) does this itself at its own tail; updateDiverCamera doesn't, since it
+      // has no idea the sky dome/sun disc exist — replicate it here so the sky stays centred on
+      // the camera (and shadow frustums below see this frame's real matrixWorld) while diving too.
       camera.updateMatrixWorld(true);
+      sceneCtx.sky.position.copy(camera.position);
+      sceneCtx.sunDisc.position.copy(camera.position).addScaledVector(sunDir, 5000);
+      sceneCtx.sunDisc.lookAt(camera.position);
+    } else {
+      updateCamera(clamped, { camera, sky: sceneCtx.sky, sunDisc: sceneCtx.sunDisc, sunDir }, camState, fpState, model, renderState, game.running, boatSpec.len);
+      // DEV/VERIFICATION HOOK ONLY — lets a Playwright screenshot script place the camera directly
+      // for entities/fish visual verification. Unset in every normal run, so this is a no-op outside
+      // of test scripts. Applied after updateCamera so it wins for this frame instead of being
+      // immediately overwritten.
+      const camOverride = (window as unknown as {
+        __fishDebugCamera?: { x: number; y: number; z: number; lookX: number; lookY: number; lookZ: number };
+      }).__fishDebugCamera;
+      if (camOverride) {
+        camera.position.set(camOverride.x, camOverride.y, camOverride.z);
+        camera.lookAt(camOverride.lookX, camOverride.lookY, camOverride.lookZ);
+        camera.updateMatrixWorld(true);
+      }
+      electronics.update(clamped, simTime, fpState.driveOn);
+      if (game.running) {
+        updateHUD(clamped, curState, { boatLabel: hudBoatLabel(boatSpec), draft: boatSpec.draft, running: game.running });
+        minimap.draw(simTime, curState);
+        catchFlow.updateTouchDock(curState);
+      }
     }
-    // After the override, so terrain chunks stream around wherever the camera actually ended up —
-    // otherwise a debug-placed camera would sit over unbuilt seabed.
+    // After the camera's final position for this frame (diver rig, boat rig, or the debug
+    // override above) is set, so terrain chunks stream around wherever the viewer actually ended
+    // up — otherwise a debug-placed or just-submerged camera would sit over unbuilt seabed.
     seafloor.update(camera.position);
     // Reef chunk residency follows the (now up-to-date) camera position — a no-op unless the
     // viewer crossed into a new 50 m chunk this frame; never a per-frame rebuild.
     reef.update(camera.position.x, camera.position.z);
-    // Needs the final camera position (override included) to know the viewer's depth, and must
-    // run before anything renders so the extinction/fog state is right for this frame.
+    // Needs the final camera position to know the viewer's depth, and must run before anything
+    // renders so the extinction/fog state is right for this frame.
     underwater.update(clamped);
     // Last: needs the model's and camera's matrixWorld both up to date (applyBoatVisuals /
-    // updateCamera above, plus any override), same as legacy's `drawLine(time)` running after
-    // both `updateBoat`/`updateCamera`.
+    // updateCamera or updateDiverCamera above, plus any override), same as legacy's
+    // `drawLine(time)` running after both `updateBoat`/`updateCamera`.
     fishing.render(simTime, curState, sw, ch);
-    electronics.update(clamped, simTime, fpState.driveOn);
-    if (game.running) {
-      updateHUD(clamped, curState, { boatLabel: hudBoatLabel(boatSpec), draft: boatSpec.draft, running: game.running });
-      minimap.draw(simTime, curState);
-      catchFlow.updateTouchDock(curState);
-    }
 
     // Cascades reposition from the camera's up-to-date matrix (updateCamera just finalized it)
     // and the sun's current colour/intensity (time-of-day.ts mutated sceneCtx.sun above).
@@ -520,6 +647,8 @@ export function initWorld(wrap: HTMLElement): World {
   // call) — lets test/capture-fish-screenshots.mjs find a deterministic resident of a given
   // species and teleport the boat there, instead of guessing world coordinates blind. No normal
   // code path reads `window.__fishDebug`.
+  (window as unknown as { __debugScene?: unknown }).__debugScene = scene;
+  (window as unknown as { __THREE?: unknown }).__THREE = THREE;
   (window as unknown as { __fishDebug?: unknown }).__fishDebug = {
     findResidentNear: fishWorld.findResidentNear,
     waterColumnAt: fishWorld.waterColumnAt,
