@@ -4,6 +4,23 @@
  * the repo root for what each variable means.
  */
 import { z } from 'zod';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// Best-effort: load the repo-root `.env` into process.env before validating,
+// so `pnpm db:migrate` / `pnpm db:seed` / `pnpm dev` work right after
+// `cp .env.example .env` with no manual `export`. In production (Railway)
+// there is no `.env` file — env vars are injected directly — so a missing
+// file is silently ignored, and anything already present in process.env
+// (CI, Railway, a real shell export) is never overwritten.
+try {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const repoRoot = path.resolve(here, '../../..');
+  process.loadEnvFile(path.join(repoRoot, '.env'));
+} catch {
+  // No .env file (production) or Node too old to support loadEnvFile — fall
+  // through to whatever is already in process.env.
+}
 
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
