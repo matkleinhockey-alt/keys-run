@@ -37,10 +37,17 @@ async function setTier(page, tierLabel) {
   }
 }
 
-async function dive(page, depth, x, z, pitch = 0, yaw = 0) {
-  await page.evaluate(([d, px, pz, pp, py]) => {
-    window.__uwDebug.set(d, { x: px, z: pz, pitch: pp, yaw: py });
-  }, [depth, x, z, pitch, yaw]);
+async function dive(page, depth, x, z, pitch = 0, yaw = 0, instant = true) {
+  // `instant`: snap the surface-crossing tween (fog blend/FOV/sky-hide) straight to its converged
+  // state instead of trusting a fixed waitForTimeout to let it tween in — see transition.ts's
+  // `snap()` doc comment. This sandboxed Playwright environment renders at ~1-2 fps (software
+  // WebGL), so "900ms of wall-clock time" is an unreliable proxy for "enough simulated frames for
+  // a ~0.1s real-time tween to converge", and a steady-state depth shot doesn't want to be testing
+  // that tween anyway — only the surface-crossing shot below passes instant=false on purpose, since
+  // catching that tween mid-flight is the entire point of that one.
+  await page.evaluate(([d, px, pz, pp, py, inst]) => {
+    window.__uwDebug.set(d, { x: px, z: pz, pitch: pp, yaw: py, instant: inst });
+  }, [depth, x, z, pitch, yaw, instant]);
 }
 
 const browser = await chromium.launch();
@@ -56,23 +63,34 @@ await page.click('#btnGo');
 await page.waitForTimeout(500);
 
 for (const [label, depth, x, z] of DEPTH_SHOTS) {
-  await dive(page, depth, x, z, -0.08, 0); // a slight downward look — "swimming forward", not straight down
+  // -0.3 rad: steep enough that the (out-of-scope, documented-hazard) seafloor mesh — where one
+  // still exists at this depth, see world/underwater/index.ts's seafloorHeightAt — actually fills
+  // part of the frame instead of sitting entirely below a near-horizontal sightline; still reads
+  // as "swimming", not straight down.
+  await dive(page, depth, x, z, -0.3, 0);
   await page.waitForTimeout(900); // let the surface-crossing tween settle and marine snow populate
   await page.screenshot({ path: `${OUT}/${label}.png` });
 }
 
 // Snell's window: shallow, looking steeply up so both the window's centre and its critical-angle
-// rim land inside the frame (fov ~58deg narrowed to ~43.5deg underwater -> ~21.75deg half-angle;
-// looking 66deg off vertical puts the ~48.75deg rim near the bottom of frame, zenith near the top).
-await dive(page, 5, 0, 1480.8, 1.15, 0);
+// rim land inside the frame. fov 58deg narrows to exactly 43.5deg underwater (instant:true snaps
+// this immediately rather than leaving it to tween, see dive() above) -> 21.75deg half-angle;
+// pitch 0.99 rad (56.75deg off horizontal, i.e. 33.25deg off vertical) puts the far edge of frame
+// at 33.25+21.75 = 55deg off vertical — past the ~48.75deg critical angle, so the dark
+// total-internal-reflection band is visible past the window's rim, not just the bright window
+// itself (an earlier version of this shot used 1.15 rad, sized for an *unconverged* ~58deg FOV —
+// once the FOV genuinely narrows, that framing put the whole frame inside the window with no rim
+// visible at all, a regression caught when fixing the FOV-convergence bug, not an unrelated one).
+await dive(page, 5, 0, 1480.8, 0.99, 0);
 await page.waitForTimeout(900);
 await page.screenshot({ path: `${OUT}/05-snells-window.png` });
 
-// Surface-crossing moment: start just above, then cross to just below and grab a frame while the
-// FOV/fog/lens-wetting tweens are still mid-flight (their time constant is ~0.12-0.45s).
-await dive(page, -1.2, 0, 1480.8, -0.05, 0);
+// Surface-crossing moment: start just above (instant, so the "above water" state itself is settled
+// before the crossing starts), then cross to just below *without* snapping, so the FOV/fog/
+// lens-wetting tweens are genuinely mid-flight (their time constant is ~0.12-0.45s) when captured.
+await dive(page, -1.2, 0, 1480.8, -0.05, 0, true);
 await page.waitForTimeout(500);
-await dive(page, 0.35, 0, 1480.8, -0.05, 0);
+await dive(page, 0.35, 0, 1480.8, -0.05, 0, false);
 await page.waitForTimeout(150);
 await page.screenshot({ path: `${OUT}/06-surface-crossing.png` });
 

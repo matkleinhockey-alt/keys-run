@@ -28,6 +28,16 @@ const WETNESS_DECAY_TAU = 0.45;
 export interface SurfaceTransition {
   /** Call every frame, after the camera's final position for this frame is set. */
   update(dt: number): void;
+  /** Jump straight to the given state — `amount`/FOV set to their converged value immediately, no
+   * wetness pulse, no onCross callback (this is a teleport, not a gameplay crossing). For the
+   * world/underwater/index.ts debug/QA hook only: real play always goes through `update()`'s tween.
+   * Needed because this tween's ~0.1s real-time time constant does not reliably converge within a
+   * fixed `page.waitForTimeout()` in this project's sandboxed, software-rendered (1-2 fps)
+   * Playwright environment — a slow/irregular frame cadence means "900ms of wall-clock time" can
+   * correspond to as little as ~100ms of accumulated simulation `dt`, intermittently leaving
+   * `amount` well short of 1 and the sky dome still visible (see this project's underwater-render
+   * report for how this was diagnosed: a reproducible, isolated repro at depth=12m). */
+  snap(underwater: boolean): void;
   isUnderwater(): boolean;
   /** 0 (fully surface) .. 1 (fully submerged) — same shape of curve fog-override.ts's GLSL uses,
    * computed independently here since JS and a globally-shared GLSL chunk can't share state. */
@@ -75,6 +85,14 @@ export function createSurfaceTransition(camera: THREE.PerspectiveCamera): Surfac
         camera.fov = fov;
         camera.updateProjectionMatrix();
       }
+    },
+    snap(underwater) {
+      wasUnderwater = underwater;
+      amount = underwater ? 1 : 0;
+      wet = 0;
+      const fov = baseFov * (1 - (1 - UNDERWATER_FOV_SCALE) * amount);
+      camera.fov = fov;
+      camera.updateProjectionMatrix();
     },
     isUnderwater() { return wasUnderwater; },
     underwaterAmount() { return amount; },

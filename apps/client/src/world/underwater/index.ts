@@ -123,10 +123,34 @@ export function createUnderwaterWorld(deps: UnderwaterDeps): UnderwaterWorld {
   // calls window.__uwDebug.set(...).
   interface DebugDiveState { depth: number; x: number; z: number; yaw: number; pitch: number }
   let debugState: DebugDiveState | null = null;
+
+  // Anti-clip floor clamp, but only where the real (compressed) seafloor mesh is still a
+  // reasonable stand-in for the requested depth. Past ~10 m the mesh has already flattened
+  // toward its y≈-7.95 crush-bug ceiling (docs/ARCHITECTURE.md "Seafloor"), so clamping a
+  // "15 m"/"25 m" debug dive up to that floor would silently relabel it as an ~8 m shot instead.
+  // Trusting the requested depth there is the honest choice — it is open water with nothing
+  // underneath yet (no clipping risk either, since there is nothing solid down there to clip
+  // into) rather than a mislabelled shallow one.
+  function debugCameraY(depth: number, x: number, z: number): number {
+    const floorClearance = seafloorHeightAt(x, z) + 0.3;
+    return depth <= 10 ? Math.max(-depth, floorClearance) : -depth;
+  }
+
   if (typeof window !== 'undefined') {
     (window as unknown as { __uwDebug: unknown }).__uwDebug = {
-      set(depth: number, opts: Partial<Omit<DebugDiveState, 'depth'>> = {}): void {
+      /** `opts.instant`: also snap the surface-crossing tween (fog blend/FOV/sky-hide) straight to
+       * its converged state instead of leaving it to tween in over the next few real frames. Off by
+       * default so the organic crossing (the 06-surface-crossing capture, and anyone driving this
+       * by hand) still behaves like a real one. Playwright QA screenshots taken immediately after a
+       * teleport want this on — see transition.ts's `snap()` doc comment for why a fixed
+       * `page.waitForTimeout()` does not reliably let the tween converge on its own in this
+       * project's sandboxed, software-rendered test environment. */
+      set(depth: number, opts: Partial<Omit<DebugDiveState, 'depth'>> & { instant?: boolean } = {}): void {
         debugState = { depth, x: opts.x ?? 0, z: opts.z ?? 0, yaw: opts.yaw ?? 0, pitch: opts.pitch ?? 0 };
+        if (opts.instant) {
+          transition.snap(debugCameraY(debugState.depth, debugState.x, debugState.z) < 0);
+          applySkyUnderwaterState();
+        }
       },
       clear(): void { debugState = null; },
     };
@@ -134,15 +158,7 @@ export function createUnderwaterWorld(deps: UnderwaterDeps): UnderwaterWorld {
 
   function update(dt: number): void {
     if (debugState) {
-      // Anti-clip floor clamp, but only where the real (compressed) seafloor mesh is still a
-      // reasonable stand-in for the requested depth. Past ~10 m the mesh has already flattened
-      // toward its y≈-7.95 crush-bug ceiling (docs/ARCHITECTURE.md "Seafloor"), so clamping a
-      // "15 m"/"25 m" debug dive up to that floor would silently relabel it as an ~8 m shot instead.
-      // Trusting the requested depth there is the honest choice — it is open water with nothing
-      // underneath yet (no clipping risk either, since there is nothing solid down there to clip
-      // into) rather than a mislabelled shallow one.
-      const floorClearance = seafloorHeightAt(debugState.x, debugState.z) + 0.3;
-      const y = debugState.depth <= 10 ? Math.max(-debugState.depth, floorClearance) : -debugState.depth;
+      const y = debugCameraY(debugState.depth, debugState.x, debugState.z);
       camera.position.set(debugState.x, y, debugState.z);
       camera.near = 0.05;
       camera.rotation.set(debugState.pitch, debugState.yaw, 0, 'YXZ');

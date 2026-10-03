@@ -199,7 +199,18 @@ float wakeH(vec2 P,inout vec2 grad,inout float foam){ float h=0.;
     normal=normalize(normal+(viewMatrix*vec4(rippleW,0.)).xyz);`)
       .replace('#include <fog_fragment>', `
     vec3 Vw=normalize(cameraPosition-vWP); vec3 Nw=normalize(vWN+rippleW*1.4);
-    if (!gl_FrontFacing) {
+    // Which side of the surface is the camera actually on at THIS fragment? Deliberately not
+    // "if (!gl_FrontFacing)" — confirmed by an isolated repro (two single-file three.js test pages,
+    // one with this material's exact options, one trimmed down variable-by-variable) that r186
+    // mis-evaluates gl_FrontFacing specifically for a DoubleSide material that also has
+    // transparent:true (which this one needs, for the existing shallow-water alpha blend): a plane
+    // viewed from underneath still reports gl_FrontFacing == true. Toggling transparent off alone
+    // "fixes" it, which is what proved this isn't a geometry/winding bug in this file. Comparing the
+    // camera's own height against this fragment's actual (wave-displaced) surface height sidesteps
+    // the rasterizer flag entirely and is arguably more correct anyway — it answers the real
+    // question ("is the camera below the water surface here") directly, immune to whatever is
+    // causing gl_FrontFacing to misreport.
+    if (cameraPosition.y < vWP.y) {
       // Underside of the surface (camera below y=0 looking up) — Snell's window. ARCHITECTURE.md:
       // "looking up, the entire sky compresses into a ~96 deg cone; outside it the surface
       // totally-internally-reflects the seabed." Nw above is the SAME ripple-perturbed normal the
@@ -211,7 +222,15 @@ float wakeH(vec2 P,inout vec2 grad,inout float foam){ float h=0.;
       float windowT=clamp(thetaW/${SNELL_CRITICAL_ANGLE.toFixed(5)},0.,1.);
       // refract()'s normal must point back into the medium the ray is leaving (water), i.e. -Nw —
       // see this file's header derivation; GLSL returns exactly vec3(0) on total internal reflection.
-      vec3 refr=refract(rayDir,-Nw,${(1 / WATER_IOR).toFixed(5)});
+      // eta = n(medium the ray is leaving) / n(medium it is entering) = n_water / n_air = WATER_IOR,
+      // NOT its reciprocal — an earlier version of this file had this inverted (1/WATER_IOR = 0.75,
+      // the eta for AIR-into-WATER, the opposite transition). That is a real bug, not a style choice:
+      // GLSL's refract() can only return vec3(0) (the TIR case the branch below depends on) when
+      // eta > 1, so with eta < 1 that branch was unreachable — no viewing angle would ever show
+      // total internal reflection, only ever the "inside the window" branch, which is exactly what
+      // a direct raycast + render comparison caught (the window should disappear past the ~48.6deg
+      // critical angle and never did, at any pitch).
+      vec3 refr=refract(rayDir,-Nw,${WATER_IOR.toFixed(5)});
       if (dot(refr,refr) < 1e-5) {
         // Outside the window: TIR, "the surface reflects the seabed". We don't have a real
         // offscreen reflection buffer (that's the whole rest of the underwater scene, mirrored —
