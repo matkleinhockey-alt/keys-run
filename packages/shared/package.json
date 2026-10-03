@@ -37,6 +37,14 @@
     "./content/economy": {
       "types": "./dist/content/economy.d.ts",
       "default": "./dist/content/economy.js"
+    },
+    "./sim/boat": {
+      "types": "./dist/sim/boat.d.ts",
+      "default": "./dist/sim/boat.js"
+    },
+    "./sim/depth-grid": {
+      "types": "./dist/sim/depth-grid.d.ts",
+      "default": "./dist/sim/depth-grid.js"
     }
   },
   "scripts": {
