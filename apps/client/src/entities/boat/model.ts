@@ -366,12 +366,16 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
     for (const t of [0.08, 0.32, 0.58]) for (const sx of [-1, 1]) { const st3 = hullStation(H, L, B, t); spots.push([sx * (st3.b + 0.05), st3.z]); }
     const S0b = hullStation(H, L, B, 0);
     for (const x of [-0.5, 0.5]) spots.push([x * B * 0.6, S0b.z + 0.3]);
+    // r186's shadow-map-free point-light attenuation is now always the physically-correct inverse-
+    // square/decay curve (legacy r128 defaulted to a softer, non-physical cutoff) — these read much
+    // dimmer at the same nominal intensity than they did pre-upgrade, so they're boosted ~3x here to
+    // match the old glow radius/brightness at night and underwater.
     for (const sx of H.cat ? [-1, 1] : [0]) {
-      const pl = new THREE.PointLight(UWC, 2, 7, 1.4);
+      const pl = new THREE.PointLight(UWC, 6, 7, 1.4);
       pl.position.set(sx * B * 0.3, -0.45, S0b.z + 0.7);
       lights.add(pl);
     }
-    { const pl = new THREE.PointLight(UWC, 1.4, 6, 1.6); pl.position.set(0, -0.9, S0b.z - L * 0.18); lights.add(pl); }
+    { const pl = new THREE.PointLight(UWC, 4.2, 6, 1.6); pl.position.set(0, -0.9, S0b.z - L * 0.18); lights.add(pl); }
     spots.forEach(([x, z]) => {
       const pk = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), pm);
       pk.position.set(x, -0.25, z);
@@ -502,7 +506,7 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
       d.position.set(dx * tw, topY - 0.07, tz + dz * tl);
       cabin.add(d);
     }
-    cabinLight = new THREE.PointLight(0x2a5cff, 0.5, Math.max(7, L * 0.8), 1.8);
+    cabinLight = new THREE.PointLight(0x2a5cff, 1.5, Math.max(7, L * 0.8), 1.8);
     cabinLight.position.set(0, topY - 0.4, tz);
     cabin.add(cabinLight);
   }
@@ -527,7 +531,7 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
       stepLight.rotation.y = Math.PI;
       cabin.add(stepLight);
     }
-    cabinLight2 = new THREE.PointLight(0x1a3cff, 0.4, Math.max(6, L * 0.6), 2);
+    cabinLight2 = new THREE.PointLight(0x1a3cff, 1.2, Math.max(6, L * 0.6), 2);
     cabinLight2.position.set(0, soleAt(L * 0.18) + 0.35, L * 0.18);
     cabin.add(cabinLight2);
   }

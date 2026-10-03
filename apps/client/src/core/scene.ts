@@ -52,7 +52,18 @@ export function createScene(wrap: HTMLElement): SceneCtx {
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, touch ? 1.5 : 2));
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // r186 removed PCFSoftShadowMap (it silently downgraded to PCFShadowMap with a console warning);
+  // VSMShadowMap is the modern equivalent for soft, blurrable shadows and is what the cascaded
+  // shadow setup (core/shadows.ts) and quality tiers (core/quality.ts) tune per-tier.
+  renderer.shadowMap.type = THREE.VSMShadowMap;
+  // r186's colour-management migration: outputColorSpace already defaults to SRGBColorSpace, but
+  // set it explicitly since the whole lighting re-tune below is built around it. ACESFilmicToneMapping
+  // + a tuned exposure is what brings contrast back after the sRGB round-trip makes everything read
+  // flatter/washed out than the old (pre-color-managed) r128 pipeline — see docs/ARCHITECTURE.md's
+  // "Art direction" and this project's report for the full before/after.
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
   renderer.domElement.className = 'gl';
   wrap.prepend(renderer.domElement);
 
