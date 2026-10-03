@@ -28,7 +28,7 @@ import { createSeafloor } from '../world/seafloor.js';
 import { createIslands } from '../world/islands.js';
 import { createBridge } from '../world/bridge.js';
 import { createLandmarks } from '../world/landmarks.js';
-import { createCoral } from '../world/coral.js';
+import { createReef } from '../world/reef/index.js';
 import { createClouds } from '../world/clouds.js';
 import { createMarinas } from '../world/marinas.js';
 import { createParticleSystem } from '../world/particles.js';
@@ -98,8 +98,12 @@ export function initWorld(wrap: HTMLElement): World {
   // 7. landmarks (Sombrero light, Faro Blanco, reef moorings)
   scene.add(createLandmarks());
 
-  // 8. coral
-  scene.add(createCoral());
+  // 8. reef — chunked, deterministic, LOD'd (see world/reef/index.ts; this replaces the old
+  // flat 620-icosahedra coral scatter per docs/ARCHITECTURE.md's "Reef"). Resident chunks follow
+  // the camera (reef.update call in frame() below), not the boat, since that's what's actually
+  // rendered — see world/reef/chunk-manager.ts's header.
+  const reef = createReef();
+  scene.add(reef.group);
 
   // 9. clouds (one InstancedMesh — see world/clouds.ts header; count fixed at boot per the
   // initial quality tier since, being a single draw call either way, it isn't worth a rebuild
@@ -369,6 +373,9 @@ export function initWorld(wrap: HTMLElement): World {
     }
 
     updateCamera(clamped, { camera, sky: sceneCtx.sky, sunDisc: sceneCtx.sunDisc, sunDir }, camState, fpState, model, renderState, game.running, boatSpec.len);
+    // Reef chunk residency follows the (now up-to-date) camera position — a no-op unless the
+    // viewer crossed into a new 50 m chunk this frame; never a per-frame rebuild.
+    reef.update(camera.position.x, camera.position.z);
     electronics.update(clamped, simTime, fpState.driveOn);
     if (game.running) {
       updateHUD(clamped, curState, { boatLabel: hudBoatLabel(boatSpec), draft: boatSpec.draft, running: game.running });
