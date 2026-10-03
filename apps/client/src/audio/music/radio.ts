@@ -37,6 +37,16 @@ export interface MusicController {
   label(): string;
   /** 0..1 analyser-derived level, for anything that wants to pulse with the beat even without a `SpeakerSink` (e.g. a UI VU meter). */
   level(): number;
+  /** Current beats-per-minute — the current station's when the radio is on, else a steady 100
+   * (legacy `MUSIC.on?STATIONS[MUSIC.st].bpm():100`, index.html:3291) so the deck party and dance
+   * pole still sway gently to an implied beat with the radio off. `entities/life/deck-party.ts`'s
+   * whole "dancing is beat-synced to the radio" coupling reads this instead of reimplementing it. */
+  bpm(): number;
+  /** legacy `MUSIC.on&&!MUSIC.userOff` (index.html:4164): true once at boot, and again after an
+   * explicit `toggle()`-to-on, false forever after an explicit `toggle()`-to-off. Lets the
+   * "leave the dock" flow auto-start the house station a couple of seconds in without stomping
+   * on a station the user already chose (including "off"). */
+  shouldAutoStart(): boolean;
   playStation(index: 0 | 1 | 2): void;
   /** legacy `musicToggle` (index.html:3524-3529): Beno Bonanza -> Margaritaville -> Hip-hop -> off. */
   toggle(): void;
@@ -69,6 +79,7 @@ export function createMusicController(engine: AudioEngine): MusicController {
   let timer: ReturnType<typeof setInterval> | undefined;
   let level = 0;
   let djT: number | null = null;
+  let userOff = false;
 
   let stations: MusicStation[] | null = null;
   let dj: ReturnType<typeof createDj> | null = null;
@@ -129,10 +140,10 @@ export function createMusicController(engine: AudioEngine): MusicController {
 
   /** legacy `musicToggle` (index.html:3524-3529). */
   function toggle(): void {
-    if (!on) { playStation(2); toast('📻 Beno Bonanza — house music, four on the floor. P changes the station.'); }
+    if (!on) { userOff = false; playStation(2); toast('📻 Beno Bonanza — house music, four on the floor. P changes the station.'); }
     else if (stationIdx === 2) { playStation(0); toast('📻 Margaritaville — easygoing island songs.'); }
     else if (stationIdx === 0) { playStation(1); toast('📻 Hip-hop station — boom-bap beats on the boat speakers.'); }
-    else { off(); toast('📻 Radio off.'); }
+    else { off(); userOff = true; toast('📻 Radio off.'); }
   }
 
   function loadFile(file: File): void {
@@ -183,6 +194,8 @@ export function createMusicController(engine: AudioEngine): MusicController {
 
   function isOn(): boolean { return on; }
   function levelFn(): number { return level; }
+  function bpmFn(): number { return on && stations ? stations[stationIdx].bpm() : 100; }
+  function shouldAutoStart(): boolean { return !on && !userOff; }
 
   /** legacy's Luigi-mode hook (index.html:3617): `hypeCallout` ducks whatever's playing. Exposed
    * so `entities/life/luigi.ts` can call it without reaching into this module's internals. */
@@ -195,5 +208,5 @@ export function createMusicController(engine: AudioEngine): MusicController {
     stopFile();
   }
 
-  return { isOn, label, level: levelFn, playStation, toggle, off, loadFile, update, hypeCallout, sayCaelenLine, dispose };
+  return { isOn, label, level: levelFn, bpm: bpmFn, shouldAutoStart, playStation, toggle, off, loadFile, update, hypeCallout, sayCaelenLine, dispose };
 }

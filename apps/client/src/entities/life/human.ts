@@ -362,7 +362,7 @@ export function makeHuman(o: HumanOptions, womanIndex = 0): Human {
         A.hd.scale.set(0.95, 1.9, 0.6);
       });
     },
-    update(t: number): void {
+    update(t: number, boatSpeed = 0): void {
       head.rotation.y = Math.sin(t * 0.27 + h.ph) * 0.35 + Math.sin(t * 0.71 + h.ph * 2) * 0.1;
       head.rotation.x = Math.sin(t * 0.4 + h.ph) * 0.05;
       if (lids.length) {
@@ -372,13 +372,17 @@ export function makeHuman(o: HumanOptions, womanIndex = 0): Human {
         lids.forEach((l) => { l.scale.y = 0.15 + 0.85 * b; });
       }
       if (hairPiv) {
-        // Hair physics reacts to how fast the *boat* is moving through the air, not this person's
-        // own motion — legacy read the module-global `boat.speed`. The caller passes it in.
+        // legacy `h.update` (index.html:1348): hair whips back and blows in the wind as a
+        // function of how fast the *boat* is moving through the air, not this person's own
+        // motion — legacy read the module-global `boat.speed`; the caller passes it in.
+        const w = Math.min(1, Math.abs(boatSpeed) / 22);
+        hairPiv.rotation.x = -w * 0.45 + Math.sin(t * (1.6 + w * 6) + h.ph) * (0.03 + w * 0.07);
+        hairPiv.rotation.z = Math.sin(t * 1.1 + h.ph * 1.7) * (0.03 + w * 0.05);
       }
       if (o.bikini) g.scale.y = 1 + Math.sin(t * 1.5 + h.ph) * 0.004;
     },
   };
-  if (o.bikini && arms.some((a) => true)) {
+  if (o.bikini) {
     arms.forEach((A) => {
       const th = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 6), skinMat);
       th.position.set(A.sx * 0.022, -0.004, 0.012);
@@ -413,8 +417,10 @@ function solveIK(S: THREE.Vector3, tgt: THREE.Vector3, l1: number, l2: number, p
 export interface HumanRegistry {
   makeHuman(o: HumanOptions): Human;
   /** legacy `updateHumans` (index.html:1357) — distance-culled: only animates humans within 160m
-   * of `cameraPos`. */
-  updateHumans(t: number, cameraPos: { x: number; y: number; z: number }): void;
+   * of `cameraPos`. `boatSpeed` drives the hair-whip-in-the-wind effect (legacy read the
+   * module-global `boat.speed` directly; this registry has no boat of its own, so the caller —
+   * whichever boat a given human is riding on — passes it in). */
+  updateHumans(t: number, cameraPos: { x: number; y: number; z: number }, boatSpeed?: number): void;
 }
 
 export function createHumanRegistry(): HumanRegistry {
@@ -428,12 +434,12 @@ export function createHumanRegistry(): HumanRegistry {
       humans.push(h);
       return h;
     },
-    updateHumans(t: number, cameraPos: { x: number; y: number; z: number }): void {
+    updateHumans(t: number, cameraPos: { x: number; y: number; z: number }, boatSpeed = 0): void {
       campos.set(cameraPos.x, cameraPos.y, cameraPos.z);
       for (const h of humans) {
         if (!h.group.parent) continue;
         h.group.getWorldPosition(worldpos);
-        if (worldpos.distanceToSquared(campos) < 160 * 160) h.update(t);
+        if (worldpos.distanceToSquared(campos) < 160 * 160) h.update(t, boatSpeed);
       }
     },
   };

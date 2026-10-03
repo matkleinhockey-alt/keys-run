@@ -1,15 +1,15 @@
 /**
  * `makeBoat`: builds the full visual model for one of the 5 playable center consoles — hull,
  * console, top/tower, seating, bow, rails, outboards, electronics mounts, lights, flags,
- * cooler, speakers, cabin lighting, rod holders and boat-name lettering.
+ * cooler, speakers, cabin lighting, rod holders, boat-name lettering, and (deck-mount points
+ * owned by `entities/life/**`) the captain, bikini-clad crew, the Freeman's shower person, the
+ * Midnight Express's dance-pole person, and the walking/dancing deck party.
  *
- * Ported faithfully from legacy/index.html:1395-1654. Humans (captain, bikini-clad crew, the
- * Freeman's shower person, the Midnight Express's dance-pole person, and the walking/dancing
- * deck party) are explicitly out of Phase 0 scope (docs/ARCHITECTURE.md lists "humans" and
- * "deck party" separately from the boat itself) — `makeHumanStub` stands in for legacy's
- * `makeHuman`, giving every call site the handful of fields (`group`, `hipY`, `pose()`) the
- * in-scope boat code touches, with zero geometry. See this project's report for the full stub
- * list.
+ * Ported faithfully from legacy/index.html:1395-1654, including the humans — this used to stand
+ * them in with a zero-geometry `makeHumanStub` (docs/ARCHITECTURE.md Phase 0 scope listed
+ * "humans"/"deck party" separately from the boat itself); that phase boundary is gone, so this
+ * now calls the real `entities/life/human.ts` `makeHuman` and builds the `party`/`pole`/`shower`
+ * descriptors `entities/life/deck-party.ts` animates every frame.
  */
 import * as THREE from 'three';
 import type { Boat, HullSpec, HullStyle } from '@keysrun/shared/content/boats';
@@ -19,15 +19,18 @@ import {
 } from './hull.js';
 import { addHelmDisplay, addScreens } from './electronics.js';
 import { usFlagTex, jollyRogerTex, makeFlag, glowTex, quiltTex, type Flag } from './decor-textures.js';
-import { lerp } from '../../core/math.js';
+import { lerp, rand } from '../../core/math.js';
 import { normalTex, grainTex } from '../../core/textures.js';
 import type { LightMatEntry } from '../../core/time-of-day.js';
+import { makeHuman, type Human } from '../life/human.js';
+import { createPath } from '../life/path.js';
+import type { PartyMember, PoleRig, ShowerRig } from '../life/deck-party.js';
 
-export interface HumanStub { group: THREE.Group; hipY: number; pose(a: THREE.Vector3, b: THREE.Vector3): void }
-// TODO(humans): real captain/crew/shower/pole-dancer models (legacy `makeHuman`, index.html:1244-1356).
-function makeHumanStub(hipY = 0.9): HumanStub {
-  return { group: new THREE.Group(), hipY, pose() {} };
-}
+/** legacy `m.leds` entry (index.html:1588): the pod ring's own colour-managed material, exposed
+ * through this tiny structural shape — matching `audio/music/radio.ts`'s `SpeakerSink.leds` —
+ * rather than handing out the raw `THREE.MeshBasicMaterial` so this module stays the only thing
+ * that knows how an LED ring is actually drawn. */
+export interface LedHandle { base: { r: number; g: number; b: number }; setColor(r: number, g: number, b: number): void }
 
 export interface BoatBuildDeps {
   lightMats: LightMatEntry[];
@@ -44,6 +47,9 @@ export interface BoatModel {
   deckY: number;
   props: THREE.Group[];
   helmPos: THREE.Vector3;
+  /** legacy `helmPose` (index.html:1530): the captain's resting two-hand-on-the-wheel pose,
+   * reused by `entities/life/luigi.ts` for the one-hand-up beer pose's other (wheel) hand. */
+  helmPose: [THREE.Vector3, THREE.Vector3];
   fishSpot: THREE.Vector3;
   soleAt(z: number): number;
   wheel: THREE.Mesh;
@@ -67,7 +73,30 @@ export interface BoatModel {
   stations: Array<{ pos: THREE.Vector3; out: THREE.Vector3; spot: THREE.Vector3 }>;
   /** Mutable: which station (index into `stations`) the angler is currently fishing from. */
   station: number;
-  captain: HumanStub;
+  captain: Human;
+  /** legacy `crew` (index.html:1533-1536): the bikini-clad passenger lounging/seated near the
+   * bow or sunpad. */
+  crew: Human;
+  /** legacy `party` (index.html:1646-1650): the deck party, empty on boats too small for one
+   * (legacy still builds 3-5 on every hull; kept as-is for fidelity). Animated by
+   * `entities/life/deck-party.ts`'s `updateParty`. */
+  party: PartyMember[];
+  /** legacy `pole` (index.html:1619-1624): the Midnight Express's dance pole, `null` on every
+   * other boat. */
+  pole: PoleRig | null;
+  /** legacy `shower` (index.html:1609-1617): the Freeman's pull-down shower, `null` on every
+   * other boat. */
+  shower: ShowerRig | null;
+  /** legacy `leds` (index.html:1583-1591): the speaker pods' LED rings, pulsed on the music's
+   * beat level by `audio/music/radio.ts`'s `MusicController.update` via `SpeakerSink.leds`. */
+  leds: LedHandle[];
+  /** legacy `uwLights` (index.html:1544): the subset of underwater lights whose intensity rides
+   * the day/sunset blend (updated by `entities/life/deck-party.ts`'s `updatePole`, which also
+   * carries legacy's same-call cabin-light TOD boost — see that module's `DeckLifeDeps.todK`). */
+  uwLights: THREE.PointLight[];
+  /** legacy `speakerPos` (index.html:1651): local-space mount point the radio HRTF panner tracks
+   * (`audio/music/radio.ts`'s `SpeakerSink.position`). */
+  speakerPos: THREE.Vector3;
 }
 
 export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
@@ -349,7 +378,7 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
   rodPivot.visible = false;
   g.add(rodPivot);
 
-  const captain = makeHumanStub();
+  const captain = makeHuman({ shirt: 0x9cc8e0, shorts: 0xb9a77c, shortsLong: true, hair: 0x4a3020, cap: 0x1d3557, shoes: 0xf2f2f2, glasses: true });
   const helmPos = V3(cw * 0.18, cs, cz + cl / 2 + 0.4);
   const helmPose: [THREE.Vector3, THREE.Vector3] = [V3(-0.1, 0.92, 0.3), V3(0.16, 0.94, 0.28)];
   captain.group.position.copy(helmPos);
@@ -358,10 +387,16 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
   g.add(captain.group);
 
   const suit = ({ robalo: 0x2bb3a8, grady: 0xe4572e, freeman: 0xe86a92, midnight: 0xf2c14e, mti: 0x2f6fd0 } as Record<string, number>)[S.id] ?? 0xe4572e;
-  void suit; // only consumed by the (stubbed) crew's bikini colour in legacy
-  const crew = makeHumanStub();
-  if (st.sunpad) { const bz = -L * 0.26, bs = soleAt(bz); crew.group.position.set(0, bs + 0.27 - crew.hipY, bz - 0.55); }
-  else { crew.group.position.set(0, cs + 0.52 - crew.hipY, cz - cl / 2 - 0.3); crew.group.rotation.y = Math.PI; }
+  let crew: Human;
+  if (st.sunpad) {
+    const bz = -L * 0.26, bs = soleAt(bz);
+    crew = makeHuman({ pose: 'lounge', bikini: true, shorts: suit, skin: 0xe9b48f, hair: 0xead27f, longHair: true, glasses: true });
+    crew.group.position.set(0, bs + 0.27 - crew.hipY, bz - 0.55);
+  } else {
+    crew = makeHuman({ pose: 'seated', bikini: true, shorts: suit, skin: 0xe9b48f, hair: 0xead27f, longHair: true, glasses: true });
+    crew.group.position.set(0, cs + 0.52 - crew.hipY, cz - cl / 2 - 0.3);
+    crew.group.rotation.y = Math.PI;
+  }
   g.add(crew.group);
 
   const S0 = hullStation(H, L, B, 0.02), rp = rodPivot.position;
@@ -374,6 +409,7 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
 
   // underwater + navigation lights
   let lights: THREE.Group | null = null;
+  const uwLights: THREE.PointLight[] = [];
   const UWC = 0x25e8d2;
   lights = new THREE.Group();
   g.add(lights);
@@ -398,8 +434,9 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
       const pl = new THREE.PointLight(UWC, 6, 7, 1.4);
       pl.position.set(sx * B * 0.3, -0.45, S0b.z + 0.7);
       lights.add(pl);
+      uwLights.push(pl);
     }
-    { const pl = new THREE.PointLight(UWC, 4.2, 6, 1.6); pl.position.set(0, -0.9, S0b.z - L * 0.18); lights.add(pl); }
+    { const pl = new THREE.PointLight(UWC, 4.2, 6, 1.6); pl.position.set(0, -0.9, S0b.z - L * 0.18); lights.add(pl); uwLights.push(pl); }
     spots.forEach(([x, z]) => {
       const pk = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), pm);
       pk.position.set(x, -0.25, z);
@@ -488,7 +525,9 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) add(new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.04, 0.08), blk), sx * (CW / 2 - 0.08), cs2 + 0.02, coolerZ + sz * (CD / 2 - 0.08));
   }
 
-  // marine speaker pods with LED rings
+  // marine speaker pods with LED rings — `leds` collects a handle per ring so
+  // audio/music/radio.ts's SpeakerSink can pulse them on the beat level.
+  const leds: LedHandle[] = [];
   {
     const podM = M(0x15171a, { roughness: 0.35, flatShading: false }), grill = M(0x2a2d31, { roughness: 0.8 });
     const pod = (x: number, y: number, z: number, ry: number, rx: number) => {
@@ -499,6 +538,8 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
       const gr = new THREE.Mesh(new THREE.CircleGeometry(0.12, 16), grill);
       gr.position.z = 0.131; p.add(gr);
       const lm = new THREE.MeshBasicMaterial({ color: new THREE.Color(st.engAcc === 0xf4f4f4 ? 0x2f7bff : 0x2bd4c4) });
+      const base = lm.color.clone();
+      leds.push({ base: { r: base.r, g: base.g, b: base.b }, setColor(r, gg, b) { lm.color.setRGB(r, gg, b); } });
       const ring = new THREE.Mesh(new THREE.TorusGeometry(0.125, 0.012, 6, 24), lm);
       ring.position.z = 0.132; p.add(ring);
       g.add(p);
@@ -600,7 +641,8 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
     }
   }
 
-  // Freeman shower / Midnight Express dance pole: hardware kept, the person stubbed (out of scope).
+  // Freeman shower / Midnight Express dance pole.
+  let shower: ShowerRig | null = null;
   if (S.id === 'freeman') {
     const sx = tw * 0.42, sz2 = tz + tl / 2 - 0.14, sy = topY - 0.08;
     const chrome = M(0xe8ebef, { metalness: 0.95, roughness: 0.12, flatShading: false });
@@ -611,11 +653,13 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
     const coil = add(new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.012, 6, 16), M(0xd9dde2, { flatShading: false })), sx + 0.16, sy - 0.12, sz2);
     coil.rotation.y = Math.PI / 2;
     add(new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.06, 10), M(0x2a2d31)), sx + 0.16, sy - 0.04, sz2);
-    const sh2 = makeHumanStub();
+    const sh2 = makeHuman({ walker: true, bikini: true, shorts: 0x9fd8ff, glasses: false });
     sh2.group.position.set(sx, soleAt(sz2), sz2);
     sh2.group.visible = false;
     g.add(sh2.group);
+    shower = { x: sx, y: sy - 0.25, z: sz2, h: sh2, on: false, t: rand(8, 18), forced: null };
   }
+  let pole: PoleRig | null = null;
   if (S.id === 'midnight') {
     const pzp = (cz + cl / 2 + 0.72 + (L / 2 - cap - 0.38 - 0.95)) / 2, psp = soleAt(pzp);
     const pm2 = M(0xe8ebef, { metalness: 0.95, roughness: 0.12, flatShading: false });
@@ -623,16 +667,36 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
     pl.position.set(0, (topY + psp) / 2, pzp);
     g.add(pl);
     add(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 0.04, 18), pm2), 0, psp + 0.02, pzp);
-    const dn = makeHumanStub();
+    const dn = makeHuman({ walker: true, bikini: true, shorts: 0xc8a24a, glasses: false });
     dn.group.position.set(0.35, psp, pzp);
     g.add(dn.group);
+    pole = { h: dn, z: pzp, y: psp, top: topY, ang: 0 };
+  }
+
+  // the deck party: a few bikini-clad crew walking a loop around the cockpit (lane width derived
+  // from the hull's own beam-at-z, same as legacy's inline `lane`) or dancing in place together.
+  // `coolerZ` is recomputed here (same formula the cooler block above used) rather than hoisted
+  // out of that block's scope, to keep this addition a pure insertion at the bottom of the
+  // function rather than a change to code above it.
+  const coolerZForParty = st.seat === 'helm' ? L / 2 - cap - 0.38 - 0.95 : L / 2 - cap - 0.62;
+  const lane = (z: number): number => Math.max(0.35, stAt(z).bs - cap - 0.42);
+  const zc = Math.min(L * 0.33, coolerZForParty - 0.85);
+  const partyPath = createPath([[lane(zc), zc], [lane(-L * 0.1), -L * 0.1], [0, -L * 0.19], [-lane(-L * 0.1), -L * 0.1], [-lane(zc), zc], [0, coolerZForParty - 0.7]]);
+  const PARTY_SUITS = [0xe86a92, 0x2bb3a8, 0xf2c14e, 0x15171a, 0xe4572e, 0xffffff];
+  const party: PartyMember[] = [];
+  const nP = L > 12 ? 5 : L > 8.5 ? 4 : 3;
+  for (let k = 0; k < nP; k++) {
+    const h = makeHuman({ walker: true, bikini: true, shorts: PARTY_SUITS[k % PARTY_SUITS.length], glasses: k % 2 === 0 });
+    g.add(h.group);
+    party.push({ h, path: partyPath, s: k / nP * partyPath.total, ph: Math.random() * 6, mode: k % 3 === 0 ? 'walk' : 'dance', modeT: rand(5, 10) });
   }
 
   return {
-    group: g, deckY: cs, props, helmPos, fishSpot, soleAt,
+    group: g, deckY: cs, props, helmPos, helmPose, fishSpot, soleAt,
     wheel: helmWheel, tower, outboards, lights, flags,
     cabin, cabinLight, cabinLight2,
-    rodPivot, rodTip: tip, stations, station: 0, captain,
+    rodPivot, rodTip: tip, stations, station: 0, captain, crew,
+    party, pole, shower, leds, uwLights, speakerPos: V3(0, topY - 0.3, tz),
   };
 }
 
