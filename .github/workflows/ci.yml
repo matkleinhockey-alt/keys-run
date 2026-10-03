@@ -1,0 +1,89 @@
+name: CI
+
+# Runs on every PR and on every push to integration/main. See docs/DEPLOYMENT.md.
+#
+# One job, one Postgres service container shared by apps/api's and apps/sim's
+# integration test suites (see apps/api/src/test/globalSetup.ts and
+# apps/sim/test/globalSetup.ts — both create+migrate TEST_DATABASE_URL on
+# demand against this server, so it only needs to exist and accept
+# connections; the actual `keysrun_test` database is created by the test
+# runner itself).
+on:
+  pull_request:
+  push:
+    branches: [integration, main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Mirrors .env.example / docker-compose.yml's local dev convention, but on
+  # the Postgres service's default port 5432 — there is no second local
+  # Postgres instance on a GitHub-hosted runner to collide with (that's the
+  # only reason docker-compose.yml remaps to 5433 for local dev).
+  DATABASE_URL: postgres://keysrun:keysrun_ci_password@localhost:5432/keysrun
+  TEST_DATABASE_URL: postgres://keysrun:keysrun_ci_password@localhost:5432/keysrun_test
+  CORS_ORIGIN: http://localhost:5173
+  NODE_ENV: test
+
+jobs:
+  ci:
+    name: typecheck, lint, build, test, check:no-three
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: keysrun
+          POSTGRES_PASSWORD: keysrun_ci_password
+          POSTGRES_DB: keysrun
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U keysrun -d keysrun"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12.4.1
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # packages/shared ships its dist/*.d.ts as what every other workspace
+      # member's package.json#exports points at — typecheck/build/test all
+      # need it built once up front on a fresh checkout. (Each app's own
+      # predev/prebuild/pretest hook does this too, but typecheck has no such
+      # hook — see the root package.json's "pretypecheck" script.)
+      - name: Build packages/shared
+        run: pnpm --filter @keysrun/shared run build
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Build
+        run: pnpm run build
+
+      - name: check:no-three (packages/shared and apps/sim must never bundle three.js)
+        run: pnpm run check:no-three
+
+      - name: Test
+        run: pnpm run test
