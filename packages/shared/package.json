@@ -42,9 +42,17 @@
       "types": "./dist/sim/boat.d.ts",
       "default": "./dist/sim/boat.js"
     },
+    "./sim/boat-shadow": {
+      "types": "./dist/sim/boat-shadow.d.ts",
+      "default": "./dist/sim/boat-shadow.js"
+    },
     "./sim/depth-grid": {
       "types": "./dist/sim/depth-grid.d.ts",
       "default": "./dist/sim/depth-grid.js"
+    },
+    "./proto": {
+      "types": "./dist/proto/index.d.ts",
+      "default": "./dist/proto/index.js"
     }
   },
   "scripts": {
@@ -55,6 +63,7 @@
     "lint": "eslint src test"
   },
   "devDependencies": {
+    "fast-check": "^3.23.2",
     "typescript": "^5.6.3",
     "vitest": "^2.1.8"
   }
