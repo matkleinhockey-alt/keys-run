@@ -74,10 +74,50 @@ export function polypNormalTex(bumpFreq: number, strength: number): THREE.DataTe
 }
 
 /**
- * Alpha-cutout mask for the sea-fan / sea-plume / far-LOD-card flat geometry (see geometry.ts) —
- * a lacy, porous silhouette so a 2-triangle quad reads as a filigreed gorgonian instead of a
- * solid plastic card. Read through `alphaTest`, so triangle count never changes with how lacy it
- * looks.
+ * Tangent-space normal map simulating brain/star coral's defining feature: deep, meandering
+ * ridge-and-valley grooves (the "maze" pattern of Colpophyllia/Diploria/Orbicella), not small
+ * round polyp bumps — `polypNormalTex` reads as fine grain at this distance, which is why the
+ * boulders previously read as bare rock rather than brain coral. Built by domain-warping a pair
+ * of sine fields and taking `|sin(...)|`, the standard "maze"/ridged-FBM trick: the zero-crossings
+ * of the warped sine form long, continuous, meandering lines instead of the radially-symmetric
+ * blobs plain value noise would give.
+ */
+const _grooveCache = new Map<string, THREE.DataTexture>();
+export function grooveNormalTex(freq: number, strength: number): THREE.DataTexture {
+  const key = `${freq}@${strength}`;
+  const cached = _grooveCache.get(key);
+  if (cached) return cached;
+  const warp = SIZE / (freq * 1.6);
+  const ridgeField = (x: number, z: number): number => {
+    const wx = x + (valueNoise(x, z, warp) - 0.5) * warp * 1.4;
+    const wz = z + (valueNoise(x + 91, z + 37, warp) - 0.5) * warp * 1.4;
+    const ridge = Math.sin(wx * (freq / SIZE) * Math.PI * 2) + Math.sin(wz * (freq / SIZE) * Math.PI * 2 * 0.9);
+    // |sin| turns smooth waves into sharp meandering valleys (where |sin|≈0) between rounded ridge
+    // crests (where |sin|≈1) — the maze pattern.
+    return 1 - Math.abs(Math.sin(ridge * 0.9));
+  };
+  const d = new Uint8Array(SIZE * SIZE * 4);
+  for (let y = 0; y < SIZE; y++) {
+    for (let x = 0; x < SIZE; x++) {
+      const i = (y * SIZE + x) * 4;
+      const hx = ridgeField(x + 1, y) - ridgeField(x - 1, y);
+      const hz = ridgeField(x, y + 1) - ridgeField(x, y - 1);
+      d[i] = clampByte(128 + hx * 300 * strength);
+      d[i + 1] = clampByte(128 + hz * 300 * strength);
+      d[i + 2] = 255;
+      d[i + 3] = 255;
+    }
+  }
+  const t = makeDataTex(d);
+  t.repeat.set(freq / 8, freq / 8);
+  _grooveCache.set(key, t);
+  return t;
+}
+
+/**
+ * Alpha-cutout mask for the sea-plume / far-LOD-card flat geometry (see geometry.ts) — a lacy,
+ * porous silhouette so a 2-triangle quad reads as a filigreed gorgonian instead of a solid
+ * plastic card. Read through `alphaTest`, so triangle count never changes with how lacy it looks.
  */
 let _lacy: THREE.DataTexture | null = null;
 export function lacyAlphaTex(): THREE.DataTexture {
@@ -97,6 +137,44 @@ export function lacyAlphaTex(): THREE.DataTexture {
   _lacy = makeDataTex(d);
   _lacy.wrapS = _lacy.wrapT = THREE.ClampToEdgeWrapping;
   return _lacy;
+}
+
+/**
+ * Alpha-cutout mask shaped like an actual sea fan: a wedge flaring from a narrow base (bottom
+ * centre, where the card pivots — see geometry.ts's cardGeo) out to a broad, rounded, lacy top —
+ * Gorgonia ventalina's real silhouette. The previous mask (`lacyAlphaTex`, still used for sea
+ * plumes) was a centred oval/disc, which at an instance's base-pivoted origin reads as a round
+ * blob sitting half-buried in the sand rather than a fan rising from a holdfast — see this
+ * module's report ("the navy blobs are not reading as fans at all").
+ */
+let _fan: THREE.DataTexture | null = null;
+export function fanAlphaTex(): THREE.DataTexture {
+  if (_fan) return _fan;
+  const d = new Uint8Array(SIZE * SIZE * 4);
+  for (let y = 0; y < SIZE; y++) {
+    for (let x = 0; x < SIZE; x++) {
+      const i = (y * SIZE + x) * 4;
+      const u = x / SIZE - 0.5; // -0.5 (left) .. 0.5 (right)
+      const v = y / SIZE; // 0 (base) .. 1 (top)
+      // Wedge: half-width grows with height (0 at the base, widest near the top), then rounds off.
+      const halfWidth = 0.08 + Math.pow(v, 0.65) * 0.46;
+      const edge = smooth01(halfWidth - Math.abs(u), -0.015, 0.02);
+      const topRound = smooth01(1.08 - v, -0.05, 0.16); // rounds the crown instead of a hard top edge
+      const baseTaper = smooth01(v, 0.0, 0.05); // pinches to a point at the holdfast
+      const silhouette = edge * topRound * baseTaper;
+      // Radiating "rib" lines (the fan's real vein structure) plus small lacy perforations between
+      // them, both masked to the wedge silhouette so the ribs never show outside it.
+      const angle = Math.atan2(u, v + 0.15);
+      const ribs = Math.abs(Math.sin(angle * 11)) > 0.78 ? 1 : 0;
+      const holes = valueNoise(x, y, SIZE / 9) * 0.6 + valueNoise(x, y, SIZE / 3.2) * 0.4;
+      const perforated = ribs === 1 || holes > 0.33;
+      const a = silhouette > 0.35 && perforated ? clampByte(silhouette * 255) : 0;
+      d[i] = 240; d[i + 1] = 235; d[i + 2] = 245; d[i + 3] = a;
+    }
+  }
+  _fan = makeDataTex(d);
+  _fan.wrapS = _fan.wrapT = THREE.ClampToEdgeWrapping;
+  return _fan;
 }
 
 /** A narrower, taller mask for seagrass blade cards (less round, more blade-like). */
