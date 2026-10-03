@@ -1,0 +1,126 @@
+/* Live leaderboard panel, replacing the legacy `#lbPanel`/`MP`/`LB` stub (src/stubs.ts). Keeps the
+ * legacy two-tab shape (see legacy/index.html's `renderLB`) but reads from apps/api instead of a
+ * client-writable store. Reuses style.css's CSS variables for visual consistency. */
+
+.krLbOpenBtn {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  padding: 8px 14px;
+  border-radius: 20px;
+  background: var(--panel, rgba(9, 40, 70, .74));
+  border: 1px solid var(--panel-edge, rgba(127, 227, 212, .28));
+  color: var(--ink, #f6f2e7);
+  font-family: var(--body, system-ui);
+  font-size: 13px;
+  font-weight: 700;
+  z-index: 6;
+}
+
+.krLbPanel {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(3, 14, 26, .55);
+  font-family: var(--body, system-ui);
+}
+
+.krLbCard {
+  width: min(480px, 100%);
+  max-height: min(640px, 86vh);
+  display: flex;
+  flex-direction: column;
+  background: var(--panel, rgba(9, 40, 70, .9));
+  border: 1px solid var(--panel-edge, rgba(127, 227, 212, .28));
+  border-radius: 16px;
+  padding: 20px 20px 16px;
+  backdrop-filter: blur(10px);
+  color: var(--ink, #f6f2e7);
+}
+
+.krLbHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.krLbHead h2 {
+  font-family: var(--display, sans-serif);
+  font-size: 22px;
+  margin: 0;
+}
+.krLbClose {
+  background: transparent;
+  border: none;
+  color: var(--muted, #a9c4d6);
+  font-size: 20px;
+  line-height: 1;
+  padding: 2px 6px;
+}
+
+.krLbTabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  background: rgba(0, 0, 0, .2);
+  border-radius: 10px;
+  padding: 4px;
+}
+.krLbTabs button {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--muted, #a9c4d6);
+  padding: 7px 0;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 12px;
+}
+.krLbTabs button[aria-pressed="true"] {
+  background: var(--flats, #7fe3d4);
+  color: #06213b;
+}
+
+.krLbList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+}
+.krLbList li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, .06);
+  font-size: 13px;
+}
+.krLbList li.me { color: var(--flats, #7fe3d4); }
+.krLbList li.empty { color: var(--muted, #a9c4d6); font-style: italic; }
+.krLbList li b { flex: 1; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.krLbList li span { color: var(--muted, #a9c4d6); font-size: 12px; flex: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.krLbList li em { font-style: normal; font-weight: 800; white-space: nowrap; }
+
+.krLbSub {
+  margin: 10px 0 0;
+  font-size: 11px;
+  color: var(--muted, #a9c4d6);
+  text-align: center;
+}
+
+.krLbLogout {
+  margin-top: 10px;
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--panel-edge, rgba(127, 227, 212, .28));
+  color: var(--muted, #a9c4d6);
+  border-radius: 8px;
+  padding: 7px 0;
+  font-size: 12px;
+}

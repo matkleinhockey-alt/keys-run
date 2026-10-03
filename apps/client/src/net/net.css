@@ -1,0 +1,66 @@
+/* Remote-boat nametags + presence counter + connection banner. Reuses style.css's CSS variables
+ * (--panel/--panel-edge/--ink/--muted/--flats/--marker/--sun/--display/--body) for visual
+ * consistency with the rest of the HUD without needing to edit style.css itself. */
+
+.krNetTags {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.krNetTag {
+  position: absolute;
+  transform: translate(-50%, -140%);
+  font-family: var(--body, system-ui);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink, #f6f2e7);
+  background: var(--panel, rgba(9, 40, 70, .74));
+  border: 1px solid var(--panel-edge, rgba(127, 227, 212, .28));
+  border-radius: 8px;
+  padding: 2px 8px;
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .4);
+}
+
+.krNetPresence {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  background: var(--panel, rgba(9, 40, 70, .74));
+  border: 1px solid var(--panel-edge, rgba(127, 227, 212, .28));
+  color: var(--muted, #a9c4d6);
+  font-family: var(--body, system-ui);
+  font-size: 12px;
+  z-index: 6;
+}
+
+.krNetBanner {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 7px 18px;
+  border-radius: 20px;
+  background: var(--panel, rgba(9, 40, 70, .74));
+  border: 1px solid var(--panel-edge, rgba(127, 227, 212, .28));
+  color: var(--ink, #f6f2e7);
+  font-family: var(--body, system-ui);
+  font-size: 13px;
+  font-weight: 600;
+  z-index: 50;
+  transition: opacity .25s ease;
+  pointer-events: none;
+}
+
+.krNetBanner[data-kind="reconnecting"] { color: var(--sun, #f2c14e); }
+.krNetBanner[data-kind="offline"] { color: var(--marker, #e4572e); }
+.krNetBanner[data-kind="connected"] { color: var(--flats, #7fe3d4); }
+
+/* Deliberately not the global `.hidden` utility (display:none!important) — that would cut the
+ * opacity transition off instantly instead of fading. */
+.krNetBanner[data-visible="false"] { opacity: 0; }

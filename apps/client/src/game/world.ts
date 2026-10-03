@@ -55,10 +55,39 @@ const lerpAngle = (a: number, b: number, t: number): number => {
   return a + d * t;
 };
 
+/**
+ * feat/net-client integration surface (flagged exception — game/** is otherwise off-limits for
+ * that effort; see its project report). There is no other seam onto the live scene/camera/boat-
+ * state closure this function builds, and rendering another player's boat or reconciling the
+ * local one is impossible without one — the same category of "genuinely blocks you, so say so in
+ * the report" carve-out the task brief grants apps/sim explicitly. Kept to the minimum: two data
+ * handles (`scene`/`camera`, for the remote-boat renderer and nametag projection) and three
+ * methods that only ever read/write x/z/h/speed, never y/pitch/roll — see `applyNetCorrection`'s
+ * own comment, which is the wire-level form of docs/ARCHITECTURE.md's "corrections only ever
+ * write x, z, heading, speed, or the boat will shudder".
+ */
+export interface LocalBoatSnapshot {
+  x: number; z: number; h: number; speed: number;
+  fwd: boolean; back: boolean; left: boolean; right: boolean; trimUp: boolean; trimDn: boolean;
+}
+export interface NetCorrection { x: number; z: number; h: number; speed: number }
+
 export interface World {
   resize(): void;
   frame(dt: number): void;
   renderer: THREE.WebGLRenderer;
+  scene: THREE.Scene;
+  camera: THREE.PerspectiveCamera;
+  /** This tick's self-simulated pose + raw controls, for net/client.ts's INPUT report. */
+  getLocalBoat(): LocalBoatSnapshot;
+  /** Overwrites only x/z/h/speed on the live boat state (never y/pitch/roll/gear/wake/…) — see
+   * net/reconcile.ts, which is what actually computes `c` frame to frame. */
+  applyNetCorrection(c: NetCorrection): void;
+  /** Phase 2's sim has no boat-selection protocol (every player's server-side envelope assumes
+   * whatever hull WELCOME/resume says, robalo by default) — pins the visual boat to match so the
+   * envelope's speed/accel/turn-rate caps agree with what's actually being driven. See the
+   * project report's "what's shaky" section. */
+  setHullIndexForNet(hullIndex: number): void;
 }
 
 function hullOf(spec: Boat) {
@@ -399,7 +428,22 @@ export function initWorld(wrap: HTMLElement): World {
     shadows.updateFrustums();
   }
 
-  return { resize, frame, renderer };
+  return {
+    resize, frame, renderer, scene, camera,
+    getLocalBoat() {
+      return {
+        x: curState.x, z: curState.z, h: curState.h, speed: curState.speed,
+        fwd: input.fwd, back: input.back, left: input.left, right: input.right, trimUp: input.trimUp, trimDn: input.trimDn,
+      };
+    },
+    applyNetCorrection(c) {
+      stateBox.state = { ...stateBox.state, x: c.x, z: c.z, h: c.h, speed: c.speed };
+      curState = stateBox.state;
+    },
+    setHullIndexForNet(hullIndex) {
+      placeBoat(BOATS[hullIndex] ?? BOATS[0]);
+    },
+  };
 
   function hudBoatLabel(spec: Boat): string {
     return (spec.nickname ? '"' + spec.nickname + '" · ' : '') + spec.brand + ' ' + spec.name + ' · ' + spec.power;

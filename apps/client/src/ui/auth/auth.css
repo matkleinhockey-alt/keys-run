@@ -1,0 +1,134 @@
+/* Auth gate overlay. Reuses style.css's CSS variables for visual consistency without touching
+ * style.css itself. Sits above everything (#start included) until resolved. */
+
+.krAuthGate {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: radial-gradient(ellipse at 50% 20%, rgba(127, 227, 212, .12), transparent 60%), var(--bg, #0d3b66);
+  font-family: var(--body, system-ui);
+  color: var(--ink, #f6f2e7);
+}
+
+.krAuthCard {
+  width: min(420px, 100%);
+  background: var(--panel, rgba(9, 40, 70, .86));
+  border: 1px solid var(--panel-edge, rgba(127, 227, 212, .28));
+  border-radius: 16px;
+  padding: 28px 26px;
+  backdrop-filter: blur(10px);
+}
+
+.krAuthTitle {
+  font-family: var(--display, sans-serif);
+  font-weight: 900;
+  font-size: 32px;
+  margin: 0 0 4px;
+}
+.krAuthTitle span { color: var(--flats, #7fe3d4); }
+
+.krAuthSub {
+  color: var(--muted, #a9c4d6);
+  font-size: 13px;
+  margin: 0 0 20px;
+}
+
+.krAuthTabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+  background: rgba(0, 0, 0, .2);
+  border-radius: 10px;
+  padding: 4px;
+}
+.krAuthTabs button {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--muted, #a9c4d6);
+  padding: 8px 0;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 13px;
+}
+.krAuthTabs button[aria-pressed="true"] {
+  background: var(--flats, #7fe3d4);
+  color: #06213b;
+}
+
+.krAuthForm { display: flex; flex-direction: column; gap: 10px; }
+.krAuthForm label { font-size: 12px; color: var(--muted, #a9c4d6); display: flex; flex-direction: column; gap: 4px; }
+.krAuthForm input {
+  font-family: var(--body, system-ui);
+  font-size: 14px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-edge, rgba(127, 227, 212, .28));
+  background: rgba(255, 255, 255, .06);
+  color: var(--ink, #f6f2e7);
+}
+.krAuthForm input:focus-visible { outline: 2px solid var(--sun, #f2c14e); }
+
+.krAuthSubmit {
+  margin-top: 6px;
+  background: var(--sun, #f2c14e);
+  color: #1b1304;
+  border: none;
+  border-radius: 10px;
+  padding: 11px 0;
+  font-weight: 800;
+  font-size: 14px;
+}
+.krAuthSubmit:disabled { opacity: .6; }
+
+.krAuthError {
+  color: var(--marker, #e4572e);
+  font-size: 12px;
+  min-height: 16px;
+}
+
+.krAuthDivider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted, #a9c4d6);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin: 18px 0;
+}
+.krAuthDivider::before, .krAuthDivider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--panel-edge, rgba(127, 227, 212, .28));
+}
+
+.krAuthOffline {
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--panel-edge, rgba(127, 227, 212, .28));
+  color: var(--ink, #f6f2e7);
+  border-radius: 10px;
+  padding: 11px 0;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.krAuthOfflineNote {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--muted, #a9c4d6);
+  text-align: center;
+}
+
+.krAuthStatus {
+  text-align: center;
+  color: var(--muted, #a9c4d6);
+  font-size: 13px;
+  padding: 20px 0;
+}

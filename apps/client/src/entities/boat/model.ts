@@ -10,6 +10,21 @@
  * `makeHuman`, giving every call site the handful of fields (`group`, `hipY`, `pose()`) the
  * in-scope boat code touches, with zero geometry. See this project's report for the full stub
  * list.
+ *
+ * Multiplayer scaling fix (docs/ARCHITECTURE.md's Art-direction hazards list: "`makeBoat`
+ * creating fresh materials per call — every joining player instantiates one — this will not
+ * scale past a handful of peers"; task brief: "Cache and share materials/geometry across boat
+ * instances."). Every colour/option combination `M()` is called with, plus the big shared
+ * `hullMat` and the hull loft geometry itself (`buildHullGeo` — the most expensive geometry in
+ * the model, ~36 lofted stations), now goes through the module-level `sharedMaterial`/
+ * `sharedGeometry` caches below, keyed by the actual parameters (materials) or by boat id
+ * (geometry, since hull shape genuinely differs per boat). Calling `makeBoat()` N times for the
+ * same boat type — the net-client's remote-boat renderer does exactly this, once per peer —
+ * now allocates N groups of *meshes* (cheap) referencing a handful of *shared* materials/
+ * geometries (the actual GPU/shader-compile cost), instead of N independent copies of both.
+ * Small per-part prop geometries (seats, rails, rod holders, …) are left uncached — the doc's
+ * own wording is about materials, and those are comparatively cheap CPU-side buffers, not a
+ * shader recompile; see this project's report for the exact scope of this fix.
  */
 import * as THREE from 'three';
 import type { Boat, HullSpec, HullStyle } from '@keysrun/shared/content/boats';
@@ -28,6 +43,39 @@ interface HumanStub { group: THREE.Group; hipY: number; pose(a: THREE.Vector3, b
 function makeHumanStub(hipY = 0.9): HumanStub {
   return { group: new THREE.Group(), hipY, pose() {} };
 }
+
+// --- shared material/geometry caches (see the multiplayer-scaling-fix doc comment above) ------
+const sharedMaterials = new Map<string, THREE.Material>();
+function sharedMaterial<T extends THREE.Material>(key: string, factory: () => T): T {
+  const existing = sharedMaterials.get(key);
+  if (existing) return existing as T;
+  const made = factory();
+  sharedMaterials.set(key, made);
+  return made;
+}
+
+const sharedGeometries = new Map<string, THREE.BufferGeometry>();
+function sharedGeometry<T extends THREE.BufferGeometry>(key: string, factory: () => T): T {
+  const existing = sharedGeometries.get(key);
+  if (existing) return existing as T;
+  const made = factory();
+  sharedGeometries.set(key, made);
+  return made;
+}
+
+/** `deps.lightMats` is appended to by every `makeBoat()` call (for day/night opacity crossfade —
+ * see time-of-day.ts). Once a material is shared across many boat instances, pushing it again on
+ * every call would grow that list once per *instance* instead of once per *distinct material*;
+ * this guard keeps it one entry per material regardless of how many boats reference it. */
+function pushLightMatOnce(deps: BoatBuildDeps, entry: LightMatEntry): void {
+  if (!deps.lightMats.some((e) => e.m === entry.m)) deps.lightMats.push(entry);
+}
+
+/** Hoisted out of `makeBoat` (it closed over nothing boat-specific) so every call — including
+ * one for a different boat instance of the *same* type — resolves to the same cached material
+ * instead of allocating a fresh `MeshStandardMaterial` per call. */
+const M = (c: number, o?: Partial<THREE.MeshStandardMaterialParameters>): THREE.MeshStandardMaterial =>
+  sharedMaterial(`M:${c}:${o ? JSON.stringify(o) : ''}`, () => new THREE.MeshStandardMaterial({ color: c, roughness: 0.45, flatShading: true, ...o }));
 
 export interface BoatBuildDeps {
   lightMats: LightMatEntry[];
@@ -62,7 +110,6 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
   const H = S.hp, st = H.style, L = S.len, B = S.beam;
   const g = new THREE.Group();
   const props: THREE.Group[] = [];
-  const M = (c: number, o?: Partial<THREE.MeshStandardMaterialParameters>) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.45, flatShading: true, ...o });
   const add = <T extends THREE.Object3D>(m: T, x?: number, y?: number, z?: number): T => {
     if (x !== undefined) m.position.set(x, y ?? 0, z ?? 0);
     if (m instanceof THREE.Mesh) { m.castShadow = true; m.receiveShadow = true; }
@@ -75,19 +122,31 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
   // Part 2 item 6 ("Materials"): the hull was flat vertex-colour with no texture at all — a
   // procedural gelcoat micro-bump + roughness grain (same noise field world/water.ts's ripples use)
   // reads as a real painted/moulded surface under the CSM-lit sun instead of a uniform plastic flat.
-  const hullMat = new THREE.MeshStandardMaterial({
+  // This material's parameters (roughness/normalMap/roughnessMap) don't vary by boat id at all —
+  // the actual per-boat colour comes from the geometry's baked vertex colours — so it's one true
+  // singleton shared by every boat on the client, built (and its procedural textures generated)
+  // only once ever, not once per instance.
+  const hullMat = sharedMaterial('hullMat', () => new THREE.MeshStandardMaterial({
     vertexColors: true, flatShading: true, roughness: 0.28, metalness: 0.08, side: THREE.DoubleSide,
     normalMap: normalTex([6, 18], 0.7), normalScale: new THREE.Vector2(0.12, 0.12),
     roughnessMap: grainTex([6, 18], 0.75, 1.05),
-  });
+  }));
+  // Hull loft geometry (buildHullGeo) depends only on the boat's HullSpec/L/B, so it's cached per
+  // boat id (+ sub-part, for the catamaran's two sponsons + upper deck) — every instance of the
+  // same boat type shares one geometry instead of re-lofting ~36 stations per joining player.
   if (H.cat) {
     const Bs = B * 0.33;
     const Hs: HullSpec = { ...H, F: H.tunnel! + 0.2, spring: 0, entry: 0.55, dr0: H.dr0 + 4, dr1: H.dr1 };
     const Hu: HullSpec = { ...H, yk: -H.tunnel!, dr0: 0, dr1: 0, steps: [], entry: 0.5 };
-    for (const sx of [-1, 1]) add(new THREE.Mesh(buildHullGeo(Hs, L * 0.99, Bs, { xo: sx * (B / 2 - Bs / 2) }), hullMat));
-    add(new THREE.Mesh(buildHullGeo(Hu, L, B, { deck: true }), hullMat));
+    for (const sx of [-1, 1]) {
+      const geo = sharedGeometry(`hull:${S.id}:sponson:${sx}`, () => buildHullGeo(Hs, L * 0.99, Bs, { xo: sx * (B / 2 - Bs / 2) }));
+      add(new THREE.Mesh(geo, hullMat));
+    }
+    const upperGeo = sharedGeometry(`hull:${S.id}:upper`, () => buildHullGeo(Hu, L, B, { deck: true }));
+    add(new THREE.Mesh(upperGeo, hullMat));
   } else {
-    add(new THREE.Mesh(buildHullGeo(H, L, B, { deck: true }), hullMat));
+    const geo = sharedGeometry(`hull:${S.id}:main`, () => buildHullGeo(H, L, B, { deck: true }));
+    add(new THREE.Mesh(geo, hullMat));
   }
 
   const D = 0.55 + L * 0.012, cap = 0.14 + B * 0.02;
@@ -133,7 +192,7 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
   const legs: Array<[number, number, number, number]> = [[cw / 2 + 0.05, cz - cl * 0.25, tw * 0.4, tz - tl * 0.38], [cw / 2 + 0.3, cz + cl / 2 + 0.95, tw * 0.4, tz + tl * 0.4]];
   for (const sx of [-1, 1]) for (const [bx, bz, ux, uz] of legs) g.add(beamBetween(V3(sx * bx, cs, bz), V3(sx * ux, topY, uz), 0.042, frame));
   for (const sx of [-1, 1]) g.add(beamBetween(V3(sx * tw * 0.4, topY - 0.02, tz - tl * 0.38), V3(sx * tw * 0.4, topY - 0.02, tz + tl * 0.4), 0.035, frame));
-  const glass = new THREE.MeshStandardMaterial({ color: 0x6f97a8, transparent: true, opacity: 0.38, roughness: 0.05, metalness: 0.3 });
+  const glass = sharedMaterial('glass', () => new THREE.MeshStandardMaterial({ color: 0x6f97a8, transparent: true, opacity: 0.38, roughness: 0.05, metalness: 0.3 }));
   if (st.top === 'hardtop') {
     const ws = panelBetween(V3(0, cs + ch + 0.02, cz - cl / 2 + 0.04), V3(0, topY - 0.04, tz - tl / 2 + 0.18), st.enclosed ? tw * 0.82 : cw * 1.25, 0.025, glass);
     ws.castShadow = false; g.add(ws);
@@ -370,9 +429,9 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
     // color-management pipeline did for the same opacity (8 overlapping glow planes, summed in
     // correct linear light instead of naive gamma space) — opacity trimmed down to match the old,
     // subtler glow instead of a flood-lit patch of water.
-    const gm = new THREE.MeshBasicMaterial({ map: glowTex(), color: UWC, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.22 });
-    const pm = new THREE.MeshBasicMaterial({ color: new THREE.Color(UWC).lerp(new THREE.Color(0xffffff), 0.65) });
-    deps.lightMats.push({ m: gm, day: 0.22, night: 0.5 });
+    const gm = sharedMaterial(`uwGlow:${UWC}`, () => new THREE.MeshBasicMaterial({ map: glowTex(), color: UWC, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.22 }));
+    const pm = sharedMaterial(`uwPuck:${UWC}`, () => new THREE.MeshBasicMaterial({ color: new THREE.Color(UWC).lerp(new THREE.Color(0xffffff), 0.65) }));
+    pushLightMatOnce(deps, { m: gm, day: 0.22, night: 0.5 });
     gm.opacity = lerp(0.22, 0.5, deps.todK);
     const spots: Array<[number, number]> = [];
     for (const t of [0.08, 0.32, 0.58]) for (const sx of [-1, 1]) { const st3 = hullStation(H, L, B, t); spots.push([sx * (st3.b + 0.05), st3.z]); }
@@ -399,11 +458,12 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
   }
   {
     const nav = (color: number, x: number, y: number, z: number, size: number) => {
-      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), new THREE.MeshBasicMaterial({ color }));
+      const bulbMat = sharedMaterial(`navBulb:${color}`, () => new THREE.MeshBasicMaterial({ color }));
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), bulbMat);
       bulb.position.set(x, y, z);
       g.add(bulb);
-      const sm = new THREE.SpriteMaterial({ map: glowTex(), color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.2 });
-      deps.lightMats.push({ m: sm, day: 0.18, night: 1 });
+      const sm = sharedMaterial(`navSprite:${color}`, () => new THREE.SpriteMaterial({ map: glowTex(), color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.2 }));
+      pushLightMatOnce(deps, { m: sm, day: 0.18, night: 1 });
       sm.opacity = lerp(0.18, 1, deps.todK);
       const sp = new THREE.Sprite(sm);
       sp.scale.setScalar(size);
@@ -486,7 +546,8 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
       can.rotation.x = Math.PI / 2; p.add(can);
       const gr = new THREE.Mesh(new THREE.CircleGeometry(0.12, 16), grill);
       gr.position.z = 0.131; p.add(gr);
-      const lm = new THREE.MeshBasicMaterial({ color: new THREE.Color(st.engAcc === 0xf4f4f4 ? 0x2f7bff : 0x2bd4c4) });
+      const ledColor = st.engAcc === 0xf4f4f4 ? 0x2f7bff : 0x2bd4c4;
+      const lm = sharedMaterial(`speakerLed:${ledColor}`, () => new THREE.MeshBasicMaterial({ color: new THREE.Color(ledColor) }));
       const ring = new THREE.Mesh(new THREE.TorusGeometry(0.125, 0.012, 6, 24), lm);
       ring.position.z = 0.132; p.add(ring);
       g.add(p);
@@ -503,7 +564,7 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
   let cabinLight!: THREE.PointLight;
   let cabinLight2!: THREE.PointLight;
   {
-    const lm = new THREE.MeshBasicMaterial({ color: 0x1d48c8 });
+    const lm = sharedMaterial('cabinLine1', () => new THREE.MeshBasicMaterial({ color: 0x1d48c8 }));
     for (const sx of [-1, 1]) {
       let prev: THREE.Vector3 | null = null;
       for (let k = 0; k <= 8; k++) {
@@ -523,7 +584,7 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
     cabin.add(cabinLight);
   }
   {
-    const dm = new THREE.MeshBasicMaterial({ color: 0x1530b8 });
+    const dm = sharedMaterial('cabinLine2', () => new THREE.MeshBasicMaterial({ color: 0x1530b8 }));
     for (const sx of [-1, 1]) for (let k = 0; k < 7; k++) {
       const st6 = hullStation(H, L, B, 0.06 + k * 0.085), z6 = st6.z;
       const d = new THREE.Mesh(new THREE.CircleGeometry(0.03, 12), dm);
@@ -564,17 +625,21 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
     flags.push(fl);
   }
 
-  // boat name lettered on the transom and both sides of the stern
+  // boat name lettered on the transom and both sides of the stern. The canvas draw + texture
+  // only depends on S.nickname (constant per boat id), so it's cached per boat id rather than
+  // re-rasterized (a real 2D canvas font-render) for every instance of the same boat.
   if (S.nickname) {
-    const c = document.createElement('canvas');
-    c.width = 1024; c.height = 160;
-    const x = c.getContext('2d') as CanvasRenderingContext2D;
-    x.font = 'italic 900 104px Georgia, "Times New Roman", serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
-    x.lineWidth = 10; x.strokeStyle = '#c8a24a'; x.strokeText(S.nickname, 512, 84);
-    x.fillStyle = '#14233d'; x.fillText(S.nickname, 512, 84);
-    x.font = '600 30px Georgia, serif'; x.fillStyle = '#14233d'; x.fillText('MARATHON, FL', 512, 148);
-    const tex = new THREE.CanvasTexture(c);
-    const nm = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+    const nm = sharedMaterial(`nameplate:${S.id}`, () => {
+      const c = document.createElement('canvas');
+      c.width = 1024; c.height = 160;
+      const x = c.getContext('2d') as CanvasRenderingContext2D;
+      x.font = 'italic 900 104px Georgia, "Times New Roman", serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.lineWidth = 10; x.strokeStyle = '#c8a24a'; x.strokeText(S.nickname!, 512, 84);
+      x.fillStyle = '#14233d'; x.fillText(S.nickname!, 512, 84);
+      x.font = '600 30px Georgia, serif'; x.fillStyle = '#14233d'; x.fillText('MARATHON, FL', 512, 148);
+      const tex = new THREE.CanvasTexture(c);
+      return new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+    });
     const S0c = hullStation(H, L, B, 0), ty = lerp(S0c.yc, S0c.ys, 0.45), tnw = Math.min(S0c.bs * 1.6, 3);
     const tr = new THREE.Mesh(new THREE.PlaneGeometry(tnw, tnw * 0.156), nm);
     tr.position.set(0, ty - 0.05, S0c.z + 0.012);
