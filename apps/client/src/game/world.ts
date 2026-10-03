@@ -386,6 +386,20 @@ export function initWorld(wrap: HTMLElement): World {
     }
 
     updateCamera(clamped, { camera, sky: sceneCtx.sky, sunDisc: sceneCtx.sunDisc, sunDir }, camState, fpState, model, renderState, game.running, boatSpec.len);
+    // DEV/VERIFICATION HOOK ONLY — the chase/helm rig above has no underwater mode yet
+    // (entities/diver/** doesn't exist in this branch), so there is no normal way to get a camera
+    // next to a submerged fish school. `window.__fishDebugCamera` lets a Playwright screenshot
+    // script place the camera directly for entities/fish visual verification; unset in every
+    // normal run, so this is a no-op outside of test scripts. Applied after updateCamera so it
+    // wins for this frame instead of being immediately overwritten.
+    const camOverride = (window as unknown as {
+      __fishDebugCamera?: { x: number; y: number; z: number; lookX: number; lookY: number; lookZ: number };
+    }).__fishDebugCamera;
+    if (camOverride) {
+      camera.position.set(camOverride.x, camOverride.y, camOverride.z);
+      camera.lookAt(camOverride.lookX, camOverride.lookY, camOverride.lookZ);
+      camera.updateMatrixWorld(true);
+    }
     electronics.update(clamped, simTime, fpState.driveOn);
     if (game.running) {
       updateHUD(clamped, curState, { boatLabel: hudBoatLabel(boatSpec), draft: boatSpec.draft, running: game.running });
@@ -422,6 +436,9 @@ export function initWorld(wrap: HTMLElement): World {
   // code path reads `window.__fishDebug`.
   (window as unknown as { __fishDebug?: unknown }).__fishDebug = {
     findResidentNear: fishWorld.findResidentNear,
+    waterColumnAt: fishWorld.waterColumnAt,
+    activeSchools: fishWorld.debugActiveSchools,
+    poolStats: fishWorld.debugPoolStats,
     stats: () => fishWorld.stats,
     teleport(x: number, z: number, h?: number): void {
       stateBox.state = { ...stateBox.state, x, z, h: h ?? stateBox.state.h, speed: 0 };

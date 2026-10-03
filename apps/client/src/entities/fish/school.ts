@@ -39,6 +39,17 @@ import type { SchoolCtx, SchoolState, FishMember } from './types.js';
  * hazard/call-site count; this is call site #7, now documented here too. */
 const floorY = (d: number): number => -(0.25 + Math.min(d, 14) * 0.55);
 
+/** The seafloor/surface world-Y pair at a point — the same two numbers `stepMember` uses to place
+ * every member's `y` (`level==='bottom'|'surface'|'mid'`, see below). Exported so a caller that
+ * isn't stepping a school (verification tooling, a future camera/diver buoyancy query) can place
+ * something in the water column without re-deriving the formula — see index.ts's `waterColumnAt`
+ * and test/capture-fish-screenshots.mjs, which uses it to put a camera at fish-eye height instead
+ * of guessing a world Y blind. */
+export function waterColumnAt(x: number, z: number, t: number): { floor: number; surf: number } {
+  const d = depthAt(x, z);
+  return { floor: floorY(d), surf: waveHBase(x, z, t, ampFor(d)) };
+}
+
 export interface SchoolEvent {
   type: 'splash';
   x: number;

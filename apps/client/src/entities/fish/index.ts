@@ -13,7 +13,7 @@
 import * as THREE from 'three';
 import { VIS } from '@keysrun/shared/content/creatures';
 import { createSpeciesPool, allocSlot, freeSlot, type SpeciesPool } from './pool.js';
-import { stepSchool } from './school.js';
+import { stepSchool, waterColumnAt } from './school.js';
 import { renderSchool, finalizePoolRender } from './render.js';
 import {
   chunkOf, chunkKey, residentsForChunk, instantiateResident,
@@ -37,6 +37,15 @@ export interface FishWorld {
    * test/capture-fish-screenshots.mjs): deterministic spawning means "where is the nearest X"
    * is itself a pure query, so this needs no debug-only game-state backdoor to answer it. */
   findResidentNear(wantType: string, originX: number, originZ: number, maxRadius: number): { x: number; z: number } | null;
+  /** Floor/surface world-Y at a point — verification-only passthrough to school.ts's
+   * `waterColumnAt`, used by test/capture-fish-screenshots.mjs to place a camera at a sensible
+   * height in the water column instead of guessing a world Y blind. */
+  waterColumnAt(x: number, z: number, t: number): { floor: number; surf: number };
+  /** Verification-only: every currently active school's centroid/type/member-count. */
+  debugActiveSchools(): Array<{ id: string; type: string; cx: number; cz: number; count: number; resident: boolean }>;
+  /** Verification-only: per-species-pool draw-call/triangle accounting, isolated from the rest of
+   * the scene. */
+  debugPoolStats(): Array<{ type: string; triPerInstance: number; meshCount: number; inUse: number; capacity: number }>;
 }
 
 interface DormantEntry {
@@ -174,6 +183,29 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
     stats.draws = touched.size;
   }
 
+  /** Verification-only: the fish system's own draw-call/triangle contribution in isolation from
+   * the rest of the (still fully topside-rendered, in this branch) scene — see pool.ts's
+   * `mesh.count` high-water-mark doc comment for why `meshCount` (not `capacity`) is what actually
+   * gets submitted to the GPU. */
+  function debugPoolStats(): Array<{ type: string; triPerInstance: number; meshCount: number; inUse: number; capacity: number }> {
+    const out: Array<{ type: string; triPerInstance: number; meshCount: number; inUse: number; capacity: number }> = [];
+    for (const pool of pools.values()) {
+      if (pool.inUse === 0) continue;
+      const pos = pool.mesh.geometry.attributes.position;
+      const idx = pool.mesh.geometry.index;
+      const triPerInstance = idx ? idx.count / 3 : pos.count / 3;
+      out.push({ type: pool.key, triPerInstance, meshCount: pool.mesh.count, inUse: pool.inUse, capacity: pool.capacity });
+    }
+    return out;
+  }
+
+  function debugActiveSchools(): Array<{ id: string; type: string; cx: number; cz: number; count: number; resident: boolean }> {
+    const out: Array<{ id: string; type: string; cx: number; cz: number; count: number; resident: boolean }> = [];
+    for (const s of residents.values()) out.push({ id: s.id, type: s.type, cx: s.cx, cz: s.cz, count: s.members.length, resident: true });
+    for (const s of roamers.values()) out.push({ id: s.id, type: s.type, cx: s.cx, cz: s.cz, count: s.members.length, resident: false });
+    return out;
+  }
+
   function findResidentNear(wantType: string, originX: number, originZ: number, maxRadius: number): { x: number; z: number } | null {
     const [ocx, ocz] = chunkOf(originX, originZ);
     const reach = Math.ceil(maxRadius / 64);
@@ -189,5 +221,5 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
     return best;
   }
 
-  return { group, update, stats, findResidentNear };
+  return { group, update, stats, findResidentNear, waterColumnAt, debugActiveSchools, debugPoolStats };
 }
