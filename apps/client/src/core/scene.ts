@@ -119,6 +119,13 @@ export function createScene(wrap: HTMLElement): SceneCtx {
   const FOG = new THREE.Color(0xc9e4ee);
   scene.fog = new THREE.Fog(FOG, 260, 1750);
   const camera = new THREE.PerspectiveCamera(58, 1, 0.5, 9000);
+  // A camera that is itself outside the scene graph still gets its own matrixWorld updated by
+  // WebGLRenderer.render() (the `camera.parent === null` special case), but objects parented to
+  // it via `camera.add(viewModel)` — game/fishing/rod-viewmodel.ts's rod, entities/speargun's gun
+  // — are never visited by render()'s scene traversal and so never draw, silently, with no error.
+  // Adding the (invisible, non-drawing) camera itself to the scene is the standard fix and has no
+  // other effect: a camera is never rendered as geometry.
+  scene.add(camera);
   const sunDir = new THREE.Vector3(0.55, 0.32, -0.62).normalize();
 
   const { mesh: sky, paintSky } = makeSky(sunDir);

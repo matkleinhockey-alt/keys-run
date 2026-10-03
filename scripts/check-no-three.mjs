@@ -49,6 +49,8 @@ const sharedEntryPoints = [
   'sim/boat.ts',
   'sim/boat-shadow.ts',
   'sim/depth-grid.ts',
+  'sim/fight.ts',
+  'sim/spear.ts',
   'proto/index.ts',
 ].map((p) => path.join(SHARED_SRC, p));
 

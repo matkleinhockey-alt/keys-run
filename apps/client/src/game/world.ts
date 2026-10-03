@@ -15,7 +15,7 @@ import { WB } from '@keysrun/shared/world/depth';
 import { BOATS, SPEED_SCALE, type Boat } from '@keysrun/shared/content/boats';
 import { SEA_STATES } from '@keysrun/shared/waves';
 import { ampAt } from '@keysrun/shared/sim/depth-grid';
-import { createBoatState, stepBoat, type BoatState, type BoatEnv, type DockRect, type Piling, type SimEvent } from '@keysrun/shared/sim/boat';
+import { createBoatState, stepBoat, type BoatState, type BoatEnv, type DockRect, type Piling, type SimEvent, type FightTarget } from '@keysrun/shared/sim/boat';
 
 import { createScene, isTouch } from '../core/scene.js';
 import { createTimeOfDay } from '../core/time-of-day.js';
@@ -39,6 +39,11 @@ import { createElectronics, type BoatReadout } from '../entities/boat/electronic
 import { applyBoatVisuals, sampleWaterHeight } from '../entities/boat/visuals.js';
 import { createBoatInput, bindBoatInput, type BoatStateBox } from '../entities/boat/input.js';
 import { createCamState, createFpState, updateCamera, cycleView, bindCameraPointerControls } from '../entities/camera.js';
+
+import { createFishing } from './fishing/index.js';
+import { F as FishF, lineOut as fishingLineOut } from './fishing/state.js';
+import { createCatchFlow } from './catch/catch-flow.js';
+import { bindCatchInput } from './catch/input.js';
 
 import { updateHUD } from '../ui/hud.js';
 import { createMinimap } from '../ui/minimap.js';
@@ -224,12 +229,44 @@ export function initWorld(wrap: HTMLElement): World {
   const input = createBoatInput();
   const stateBox: BoatStateBox = { state: curState };
 
+  // Boat input (entities/boat/input.ts) owns the raw KeyT listener and doesn't know about
+  // Shift — fishing's drag (legacy "T tightens · Shift+T loosens", see fishing/input.ts's
+  // header) needs that distinction, so toggleTrim below tracks it itself rather than reaching
+  // into a module outside this task's scope.
+  let shiftHeld = false;
+  window.addEventListener('keydown', (e) => { if (e.key === 'Shift') shiftHeld = true; });
+  window.addEventListener('keyup', (e) => { if (e.key === 'Shift') shiftHeld = false; });
+
   let seaIdx = 1; // legacy's initial `seaIdx=1` ("Choppy")
   let sw = 0.9, ch = 1; // legacy's initial SW/CH (index.html:435)
   let game = { running: false };
 
+  // 13b. rod fishing + catch flow (docs/ARCHITECTURE.md "Rod fishing, server-authoritative").
+  // `fishing` owns cast/wait/bite/fight and the first-person rod view; `catchFlow` is the one
+  // shared landing path both it and entities/speargun (once the diver lands) feed into for the
+  // catch card / cooler / weigh-in.
+  const catchFlow = createCatchFlow({
+    scene,
+    getModel: () => model,
+    getBoatSpec: () => ({ id: boatSpec.id, brand: boatSpec.brand, name: boatSpec.name }),
+  });
+  const fishing = createFishing({
+    scene,
+    camera,
+    getModel: () => model,
+    fp: fpState,
+    camState,
+    particles,
+    boatInput: input,
+    getBoat: () => stateBox.state,
+    onLanded(fish) { catchFlow.landFish({ key: fish.key, weight: fish.weight, x: fish.fx, z: fish.fz, zone: fish.zone }); },
+    onActionWhileCaught() { catchFlow.releaseFish(); },
+  });
+  bindCatchInput(catchFlow, () => stateBox.state);
+
   bindBoatInput(input, stateBox, {
     toggleTrim() {
+      if (FishF.state === 'fight') { fishing.setDrag(FishF.drag + (shiftHeld ? -1 : 1)); return; }
       stateBox.state = { ...stateBox.state, trimMode: !stateBox.state.trimMode };
       input.fwd = false; input.back = false;
       toast(stateBox.state.trimMode ? 'Trim mode on — ▲ trims up, ▼ trims down. W/S still change throttle. T to exit.' : 'Trim mode off.');
@@ -291,6 +328,10 @@ export function initWorld(wrap: HTMLElement): World {
   populateBoatCards(BOATS, boatSpec, {
     onSelectBoat(spec) { if (!game.running) placeBoat(spec); else boatSpec = spec; },
     onGo() {
+      // legacy `if(F.state!=='idle'&&F.state!=='caught') reelIn();` — switching boats mid-cast
+      // would otherwise leave the fishing state machine holding a rod-tip/station reference into
+      // the boat model placeBoat() is about to replace.
+      if (FishF.state !== 'idle' && FishF.state !== 'caught') fishing.reelIn();
       placeBoat(boatSpec);
       unstick();
       showHud();
@@ -324,12 +365,19 @@ export function initWorld(wrap: HTMLElement): World {
     sw += (st.sw - sw) * k; ch += (st.ch - ch) * k;
 
     simTime += dt;
+    // legacy `game.running && F.state!=='caught'` / `F.state==='fight'` / `lineOut()` — read
+    // from *this* fixed step's starting fishing state, same one-frame-stale ordering as
+    // legacy's `updateBoat(dt,t); updateFishing(dt,t);` (fishing.update runs below, after
+    // stepBoat, using the boat position this step just produced).
+    const fightActive = FishF.state === 'fight';
+    const fightTarget: FightTarget | null = fightActive && FishF.fight ? { x: FishF.fx, z: FishF.fz, running: FishF.fight.running } : null;
     const env: BoatEnv = {
       t: simTime, hull: hullOf(boatSpec), sw, ch, worldBounds: WB, pilings, dockRects,
-      canDrive: game.running, fightActive: false, fightTarget: null, lineOut: false, luigiOn: false,
+      canDrive: game.running && FishF.state !== 'caught', fightActive, fightTarget, lineOut: fishingLineOut(), luigiOn: false,
     };
     const next = stepBoat(stateBox.state, input, env, dt);
     stateBox.state = next;
+    fishing.update(dt, simTime, next, sw, ch);
     return next.events;
   }
 
@@ -381,6 +429,7 @@ export function initWorld(wrap: HTMLElement): World {
     applyBoatVisuals(renderState, model, { t: simTime, dt: clamped, todK: tod.getK(), sw, ch, amp, hull: { len: boatSpec.len, beam: boatSpec.beam, topMs: boatSpec.top * 0.5144 * SPEED_SCALE }, particles, water }, events);
 
     particles.update(clamped, simTime, (x, z, t, a) => sampleWaterHeight(curState, x, z, t, a, sw, ch));
+    catchFlow.updateReleased(clamped, simTime, (x, z, t) => sampleWaterHeight(curState, x, z, t, ampAt(x, z), sw, ch));
 
     for (const b of marinas.dockBoats) {
       b.position.y = sampleWaterHeight(curState, b.position.x, b.position.z, simTime, ampAt(b.position.x, b.position.z), sw, ch) - 0.05;
@@ -402,10 +451,15 @@ export function initWorld(wrap: HTMLElement): World {
     // After the override, so terrain chunks stream around wherever the camera actually ended up —
     // otherwise a debug-placed camera would sit over unbuilt seabed.
     seafloor.update(camera.position);
+    // Last of the three: needs the model's and camera's matrixWorld both up to date
+    // (applyBoatVisuals / updateCamera above, plus any override), same as legacy's `drawLine(time)`
+    // running after both `updateBoat`/`updateCamera`.
+    fishing.render(simTime, curState, sw, ch);
     electronics.update(clamped, simTime, fpState.driveOn);
     if (game.running) {
       updateHUD(clamped, curState, { boatLabel: hudBoatLabel(boatSpec), draft: boatSpec.draft, running: game.running });
       minimap.draw(simTime, curState);
+      catchFlow.updateTouchDock(curState);
     }
 
     // Cascades reposition from the camera's up-to-date matrix (updateCamera just finalized it)
@@ -421,6 +475,10 @@ export function initWorld(wrap: HTMLElement): World {
     // at 50 ms for the physics accumulator and would make the HUD misreport every real frame
     // slower than 20 fps as exactly 20 fps.
     profiler.sample(dt, renderer, quality.tier);
+    // legacy `if(F.state==='caught') renderPortrait(time);` — an isolated off-screen render (see
+    // game/catch/portrait.ts's header), run after the real frame so it never perturbs the
+    // profiler's per-frame draw-call count sampled just above.
+    if (FishF.state === 'caught') catchFlow.renderPortrait(simTime, renderer);
   }
 
   function resize(): void {
