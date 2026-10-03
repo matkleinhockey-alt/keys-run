@@ -29,13 +29,26 @@
       <div class="maplabel">Tap to enlarge the chart</div>
     </div>
     <div id="scorebox" class="panel">
+      <div class="sc"><span>Score</span><b id="scScore">0</b></div>
+      <div class="sc"><span>Fish</span><b id="scCount">0</b></div>
       <button id="btnMarina">Switch boat</button>
       <button id="btnSea">Sea: choppy</button>
       <button id="btnSun" aria-label="Sunset mode">🌅</button>
       <button id="btnCam" aria-label="Switch camera view">🎥 3rd</button>
       <button id="btnQuality" aria-label="Cycle graphics quality">⚙ —</button>
+      <button id="btnCooler">🧊 <span id="coolerTxt">0 fish · 0 lb</span></button>
     </div>
+    <div id="fight" class="panel hidden">
+      <div id="fLabel">Fish on</div>
+      <div id="fSub">Pulse the reel. Back off when the bar runs red.</div>
+      <div class="tbar"><i id="fT"></i></div>
+      <div class="frow"><span>Line out <b id="fLine">0 m</b></span><span>Fish energy</span></div>
+      <div class="stam"><i id="fStam"></i></div>
+      <div class="frow"><span>Drag <span class="dragpips" id="fDrag"></span></span><span id="fDragHint">T tightens · Shift+T loosens</span></div>
+    </div>
+    <div id="castbar" class="panel hidden"><div class="cb-row"><span>Cast power</span><b id="castDist">12 m</b></div><div class="tbar2"><i id="castFill"></i></div></div>
     <div id="hint"></div>
+    <div id="strike" class="hidden">Strike!</div>
     <div id="toast"></div>
   </div>
 
@@ -44,8 +57,27 @@
     <button class="tbtn" id="tR" aria-label="Steer right">▶</button>
     <button class="tbtn" id="tUp" aria-label="Throttle forward">▲</button>
     <button class="tbtn" id="tDn" aria-label="Reverse">▼</button>
+    <button class="tbtn" id="tAct" aria-label="Cast and strike">🎣</button>
     <button class="tbtn" id="tView" aria-label="Switch view">👁</button>
+    <button class="tbtn hidden" id="tDock" aria-label="Weigh in your cooler">⚖</button>
   </div>
+
+  <div id="card" class="overlay photo hidden">
+    <div class="catch panel">
+      <canvas id="fishCanvas" width="640" height="300" aria-label="Your catch"></canvas>
+      <div class="where" id="cZone"></div>
+      <h2 id="cName"></h2>
+      <div class="cstats"><div><span>Weight</span><b id="cWeight"></b><span>lb</span></div><div><span>Length</span><b id="cLen"></b><span>in</span></div><div><span>Sex</span><b id="cSex"></b><span>&nbsp;</span></div></div>
+      <div class="cprice" id="cPrice"></div>
+      <div class="cpts">+<span id="cPts"></span> points</div>
+      <p id="cFact"></p>
+      <div id="cBonus"></div>
+      <div class="cbtns"><button class="go" id="btnKeep">Keep in cooler</button><button class="go alt" id="btnRelease">Release</button></div>
+      <div class="cnote" id="cNote"></div>
+    </div>
+  </div>
+
+  <div id="coolerPanel" class="overlay hidden"><div class="panel cooler"><h2>Cooler</h2><div class="where" id="coolerCap"></div><ul id="coolerList"></ul><p class="cnote">Run to a marina dock (⚓ on your chart), slow down, and press E to weigh in.</p><button class="go" id="btnCoolerClose">Close</button></div></div>
 
   <div id="start" class="overlay">
     <div class="startcard">
@@ -55,7 +87,7 @@
       <div class="gorow">
         <button class="go" id="btnGo">Leave the dock</button>
         <button class="secondary" id="btnQualityStart" aria-label="Cycle graphics quality">Quality: —</button>
-        <div class="controls"><kbd>W</kbd> <kbd>S</kbd> throttle · <kbd>A</kbd> <kbd>D</kbd> steer · <kbd>T</kbd> trim (then ▲▼) · <kbd>I</kbd> motors on/off · <kbd>U</kbd> gear D/N/R · <kbd>O</kbd> sunset · <kbd>1</kbd> camera view · <kbd>H</kbd> sea state · <kbd>C</kbd> zoom camera · <kbd>G</kbd> graphics quality · <kbd>P</kbd> perf stats</div>
+        <div class="controls"><kbd>W</kbd> <kbd>S</kbd> throttle · <kbd>A</kbd> <kbd>D</kbd> steer · hold <kbd>Space</kbd> to power a cast · <kbd>Space</kbd> to strike · hold <kbd>↓</kbd> to reel · <kbd>T</kbd> trim, or drag while fighting · <kbd>K</kbd> keeps a catch · <kbd>Q</kbd> cooler · <kbd>E</kbd> weigh in at a marina · <kbd>I</kbd> motors on/off · <kbd>U</kbd> gear D/N/R · <kbd>O</kbd> sunset · <kbd>1</kbd> camera view · <kbd>V</kbd> first-person fishing view · <kbd>H</kbd> sea state · <kbd>C</kbd> zoom camera · <kbd>G</kbd> graphics quality · <kbd>P</kbd> perf stats</div>
       </div>
     </div>
   </div>

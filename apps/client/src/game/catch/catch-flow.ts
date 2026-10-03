@@ -13,6 +13,7 @@ import * as THREE from 'three';
 import type { BoatModel } from '../../entities/boat/model.js';
 import type { BoatState } from '@keysrun/shared/sim/boat';
 import { SPECIES } from '@keysrun/shared/content/species';
+import { SPEED_SCALE } from '@keysrun/shared/content/boats';
 import { VIS } from '@keysrun/shared/content/creatures';
 import { scaledLenM } from '@keysrun/shared/sim/fight';
 import { ZONE_DESC } from '@keysrun/shared/world/depth';
@@ -21,7 +22,7 @@ import { clamp } from '../../core/math.js';
 import { toast } from '../../ui/toast.js';
 import { beamBetween } from '../../entities/boat/hull.js';
 import { makeFishMesh } from '../fishing/fish-mesh.js';
-import { createCooler, meatLine, type CoolerFish } from './cooler.js';
+import { createCooler, meatLine, nearMarina, type CoolerFish } from './cooler.js';
 import { createPortrait } from './portrait.js';
 
 function $(id: string): HTMLElement | null { return document.getElementById(id); }
@@ -121,9 +122,20 @@ function setupPhoto(model: BoatModel, key: string, weight: number): PhotoHandle 
   return { fish, parent: model.group, hangGroup: null, rig: null };
 }
 
+/** Legacy `boatSpec.id`/`.brand`/`.name` — just enough of the active boat's identity for the
+ * cooler (its capacity is per-boat, legacy `COOLER_CAP[boatSpec.id]`) and the cooler panel's
+ * header. Neither rod fishing nor spearfishing needs the boat's live position/speed for any of
+ * this — only `weighIn` below does, and it takes a `BoatState` directly for that. */
+export interface BoatSpecRef {
+  id: string;
+  brand: string;
+  name: string;
+}
+
 export interface CatchFlowDeps {
   scene: THREE.Scene;
   getModel(): BoatModel;
+  getBoatSpec(): BoatSpecRef;
 }
 
 export function createCatchFlow(deps: CatchFlowDeps) {
@@ -144,9 +156,12 @@ export function createCatchFlow(deps: CatchFlowDeps) {
   }
 
   /** Called by game/fishing (rod) and entities/speargun with whatever fish they just landed —
-   * the one shared path onto the catch card / cooler, per the task brief. */
-  function landFish(fish: CaughtFishInfo, boat: BoatState): void {
+   * the one shared path onto the catch card / cooler, per the task brief. Deliberately takes no
+   * `BoatState`: a speared fish is landed by a swimming diver, who may be nowhere near the boat,
+   * so this only ever needs the boat's *identity* (`getBoatSpec`), never its position. */
+  function landFish(fish: CaughtFishInfo): void {
     const model = deps.getModel();
+    const boatSpec = deps.getBoatSpec();
     const S = SPECIES[fish.key];
     const pts = Math.round(fish.weight * S.mult);
     session.count++; session.score += pts; session.caught.add(fish.key);
@@ -175,10 +190,7 @@ export function createCatchFlow(deps: CatchFlowDeps) {
     model.fishSpot.copy(model.stations[0].spot);
     try { photo = setupPhoto(model, fish.key, fish.weight); portrait.show(S.color, scaledLenM(fish.key, fish.weight)); } catch (e) { console.error('photo setup', e); photo = null; }
 
-    // legacy's `COOLER_CAP[boatSpec.id]||300` — boatId isn't threaded down to landFish's callers
-    // (game/fishing, entities/speargun) today, so this always takes the `||300` fallback branch.
-    // See cooler.ts's `prepareKeepChoice` / BoatModel's header for the integration seam.
-    const choice = cooler.prepareKeepChoice('', fish.key, fish.weight);
+    const choice = cooler.prepareKeepChoice(boatSpec.id, fish.key, fish.weight);
     const keepBtn = $('btnKeep') as HTMLButtonElement | null;
     if (keepBtn) keepBtn.disabled = choice.disabled;
     setText('cNote', choice.note);
@@ -188,12 +200,6 @@ export function createCatchFlow(deps: CatchFlowDeps) {
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     updateScore();
   }
-
-  // boatId isn't passed down to landFish's caller today (game/fishing and entities/speargun
-  // don't track which boat spec is active) — COOLER_CAP falls back to 300 when unknown, same as
-  // legacy's `COOLER_CAP[boatSpec.id]||300`. See BoatModel's header for the integration seam if
-  // a later phase wants the exact per-boat cap honored here too.
-  function boatIdOf(_model: BoatModel): string { return ''; }
 
   function finishCatch(): void {
     if (photo?.rig?.parent) photo.rig.parent.remove(photo.rig);
@@ -265,8 +271,40 @@ export function createCatchFlow(deps: CatchFlowDeps) {
     portrait.render(renderer, t);
   }
 
+  /** legacy `openCooler()` (index.html:2996-3002), supplying the active boat's identity. */
+  function openCoolerPanel(): void {
+    const spec = deps.getBoatSpec();
+    cooler.openCooler(spec.brand, spec.name, spec.id);
+  }
+
+  /** legacy's `KeyE` handler (index.html:4088) plus `weighIn(M)` (2963-3009): find a dockside
+   * marina within range, gate on speed same as legacy, and apply the cooler's bonus to the
+   * session score. */
+  function weighIn(boat: BoatState): void {
+    const marina = nearMarina(boat.x, boat.z);
+    if (!marina) return;
+    if (Math.abs(boat.speed) > 2.5) { toast('Slow down to tie up at the dock.'); return; }
+    const result = cooler.weighIn(marina.name);
+    if (!result) { toast('Your cooler is empty — go catch something to weigh in.'); return; }
+    session.score += result.bonus;
+    updateScore();
+    toast(result.summary);
+  }
+
+  /** legacy's `tDock` visibility toggle (index.html:3761): only worth showing the touch "weigh
+   * in" button when there's something to weigh in, in range, and the boat is slow enough to tie
+   * up. */
+  function updateTouchDock(boat: BoatState): void {
+    const el = $('tDock');
+    if (!el) return;
+    const kn = Math.abs(boat.speed) / SPEED_SCALE / 0.5144;
+    const canDock = !!nearMarina(boat.x, boat.z) && cooler.cooler.length > 0 && kn < 5;
+    el.classList.toggle('hidden', !canDock);
+  }
+
   return {
     session, cooler, landFish, finishCatch, keepFish, releaseFish, updateReleased, renderPortrait, updateScore,
+    openCoolerPanel, weighIn, updateTouchDock,
     get current() { return current; },
   };
 }

@@ -88,14 +88,17 @@ export function createCooler() {
     $('btnCoolerClose')?.focus();
   }
 
-  /** legacy `weighIn` (index.html:3003-3009). Returns the points bonus (the caller adds it to
-   * the session score) and a summary string, or `null` if the cooler was empty. */
-  function weighIn(): { bonus: number; summary: string } | null {
+  /** legacy `weighIn(M)` (index.html:3003-3009). Returns the points bonus (the caller adds it to
+   * the session score) and a summary string, or `null` if the cooler was empty. `locationName`
+   * is legacy's `M.name` — optional here only because a caller with no marina reference on hand
+   * (there shouldn't be one; see catch-flow.ts's `weighIn`) still gets a sensible message. */
+  function weighIn(locationName?: string): { bonus: number; summary: string } | null {
     if (!cooler.length) return null;
     const lb = coolerLb();
     const bonus = Math.round(lb * 6);
     const big = cooler.reduce((a, f) => (f.weight > a.weight ? f : a));
-    const summary = `Weighed in ${cooler.length} fish (${Math.round(lb)} lb). Top fish: ${big.name}, ${big.weight.toFixed(1)} lb. +${bonus.toLocaleString()} points!`;
+    const where = locationName ? ` at ${locationName}` : '';
+    const summary = `Weighed in ${cooler.length} fish (${Math.round(lb)} lb)${where}. Top fish: ${big.name}, ${big.weight.toFixed(1)} lb. +${bonus.toLocaleString()} points!`;
     cooler.length = 0;
     updateCoolerUI();
     return { bonus, summary };

@@ -2,18 +2,19 @@
  * Camera rig: third-person chase, first-person helm/tower drive views.
  *
  * Ported faithfully from legacy/index.html:3986-4059. Legacy's two "catch photo" camera
- * branches (`F.state==='caught'`) are dropped — fishing (and so a catch) never happens in
- * Phase 0 (see src/stubs.ts), so that branch was always dead code here; porting it would mean
- * inventing a `photo` object with no real producer. The fishing-view branch (`fp.on`, legacy's
+ * branches (`F.state==='caught'`) are still dropped — the catch-card view takes over the whole
+ * screen (game/catch's `#card.photo` overlay) rather than repositioning this camera, so that
+ * branch stays dead code here, same as Phase 0. The fishing-view branch (`fp.on`, legacy's
  * first-person-at-the-rod-tip camera) and the `F.state==='fight'`/`lineOut()` look-at targets in
- * the chase camera ARE kept, wired to the same always-false stubs, so a later phase that adds
- * fishing only has to make those stubs real.
+ * the chase camera now read the real rod-fishing state machine (game/fishing/state.ts) instead
+ * of Phase 0's always-false src/stubs.ts — this is the "later phase" those stubs' comments
+ * anticipated.
  */
 import * as THREE from 'three';
 import type { BoatModel } from './boat/model.js';
 import type { BoatState } from '@keysrun/shared/sim/boat';
 import { clamp } from '../core/math.js';
-import { F, lineOut, fishingActive } from '../stubs.js';
+import { F, lineOut, fishingActive } from '../game/fishing/state.js';
 
 export interface CamState {
   yaw: number; zoom: number; dragging: boolean; lx: number; ly: number; pitchOff: number; shake: number;

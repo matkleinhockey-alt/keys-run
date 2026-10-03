@@ -231,7 +231,7 @@ export function createFishingLogic(deps: FishingDeps) {
       if (F.state === 'waiting') {
         F.biteT -= dt * (reel ? 0.6 : 1);
         if (!F.key && F.biteT < 3.2) chooseFishLocal();
-        if (F.biteT <= 0) { F.state = 'nibble'; F.nibs = 1 + Math.floor(Math.random() * 3); F.nibT = 0.05; }
+        if (F.biteT <= 0) { F.state = 'nibble'; F.nibs = 1 + Math.floor(clientRng() * 3); F.nibT = 0.05; }
       } else if (F.state === 'nibble') {
         F.nibT -= dt;
         if (F.nibT <= 0) {
