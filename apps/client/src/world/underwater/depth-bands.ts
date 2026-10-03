@@ -8,8 +8,30 @@
  * (JS math vs. interpolated into a GLSL template string).
  */
 
-/** ARCHITECTURE.md's per-channel extinction coefficients, 1/m. Water eats red first. */
-export const EXTINCTION = { r: 0.45, g: 0.09, b: 0.03 } as const;
+/**
+ * Per-channel extinction coefficients, 1/m. Water eats red first — that asymmetry is what sells
+ * depth, and the *ratio* here is kept faithful to ARCHITECTURE.md's physical values
+ * (0.45 / 0.09 / 0.03).
+ *
+ * The magnitudes, however, are deliberately scaled down from those physical numbers. The shader
+ * applies them over `uwDist + uwCameraDepth` (object-to-eye plus the downwelling path), so at a
+ * mere 3 m depth looking at coral 5 m away the physical red coefficient gives
+ * `exp(-0.45 * 8) ≈ 0.03` — 97% of red annihilated before the diver has left the shallows. That
+ * is roughly right for turbid open ocean and badly wrong for the clear Keys water this game is
+ * set in, where real reef photography at 3-5 m still shows vivid mustard elkhorn and orange
+ * sponges. Rendering those as grey-green ghosts made the whole reef read as "murky", which was
+ * the single biggest visual problem in the first integrated dive.
+ *
+ * EXTINCTION_SCALE tempers the curve so colour survives bands 1-2 and still collapses by band 5.
+ * Treat it as an art-direction dial, not a physics constant: raise it toward 1.0 for a murkier,
+ * more northern-water look, lower it for gin-clear tropical water.
+ */
+export const EXTINCTION_SCALE = 0.38;
+export const EXTINCTION = {
+  r: 0.45 * EXTINCTION_SCALE,
+  g: 0.09 * EXTINCTION_SCALE,
+  b: 0.03 * EXTINCTION_SCALE,
+} as const;
 
 /** Linear-light tint water scatters toward at depth (the "inscatter" term in
  * `transmittance*surface + inscatter*(1-transmittance)`) — a deep blue-green veil, picked to land
