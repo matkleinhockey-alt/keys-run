@@ -353,6 +353,10 @@ export function initWorld(wrap: HTMLElement): World {
   let simTime = 0;
   let acc = 0;
   let prevState: BoatState = curState;
+  // Tracks diver.mode so the *involuntary* post-blackout "wake on the boat" recovery (flipped
+  // internally by diver.step, not through toggleDive/btnMarina) still flips the DOM/model back —
+  // see the mode-change check at the top of frame() below.
+  let prevDiverMode: 'boat' | 'diver' = 'boat';
 
   function fixedStep(dt: number): SimEvent[] {
     const st = SEA_STATES[seaIdx], k = Math.min(1, dt * 0.5);
@@ -386,6 +390,8 @@ export function initWorld(wrap: HTMLElement): World {
       steps++;
     }
     curState = stateBox.state;
+
+    if (diver.mode !== prevDiverMode) { setDiveUI(diver.mode === 'diver'); prevDiverMode = diver.mode; }
 
     // Render interpolates the leftover fraction of a step (docs/ARCHITECTURE.md requirement 2):
     // only the smoothly-varying transform fields are blended between the last two completed
