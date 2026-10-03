@@ -4,3 +4,6 @@ node_modules
 dist
 *.tsbuildinfo
 .no-three-out
+.env
+.env.*
+!.env.example
