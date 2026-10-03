@@ -38,14 +38,23 @@ const chainZ = (x) => 0.000012 * x * x;
 const X = 60;
 
 // [label, dz, column depth at this dz (from depthAt, queried offline), diver depth, yaw, pitch, note]
+// Diver depth = column depth - 2 m of clearance above the local seabed; pitch -0.6 rad (-34 deg)
+// reliably keeps the seabed in frame regardless of what's growing on it (the coordinator's own
+// capture confirmed the wall past the crest is *deliberately* sparser — sponges/scattered heads
+// on open rock — so a steep down-angle proves the renderer at every band without depending on
+// coral density that isn't supposed to be there past band 1).
 const BAND_SPOTS = [
-  ['02-band1-crest', 1460, 3.4, 2.5, 0, -0.3, 'on the crest — richest coral'],
-  ['03-band2-upper-wall', 1485, 8.9, 7.5, 0, 0.35, 'angled up-slope, crest visible behind/above'],
-  ['04-band3-wall-face', 1500, 12.2, 11.0, 0, 0.7, 'looking back and up at the wall face'],
-  ['05-band4-wall-side', 1530, 18.9, 17.5, 1.4, -0.4, 'wall to one side, seabed below'],
-  ['06-band5-deep', 1580, 29.9, 22.0, 0, -0.15, 'dark, wall face ahead'],
+  ['02-band1-crest', 1460, 3.4, 1.4, 0, -0.6, 'on the crest — richest coral, steep down'],
+  ['03-band2-upper-wall', 1485, 8.9, 6.9, 0, -0.6, 'upper wall, seabed below'],
+  ['04-band3-wall-face', 1500, 12.2, 10.2, 0, -0.6, 'mid wall, seabed below'],
+  ['05-band4-wall-side', 1530, 18.9, 16.9, 0, -0.6, 'lower wall, seabed below'],
+  ['06-band5-deep', 1580, 29.9, 27.9, 0, -0.6, 'deep wall, seabed below'],
 ];
-const CAUSTICS_SPOT = { dz: 1485, depth: 6, yaw: 0, pitch: -1.1 }; // shallow, looking steeply down
+// Extra establishing shot at the crest: the coordinator's own verified-working framing (camera a
+// little above the seabed, angled down-and-along it) — eye/lookAt converted to this diver rig's
+// yaw/pitch (yaw=atan2 of the horizontal offset, pitch=asin of the vertical-over-distance ratio).
+const CREST_ESTABLISHING_SPOT = { dz: 1460, depth: 1.2, yaw: -2.554, pitch: -0.151 };
+const CAUSTICS_SPOT = { dz: 1460, depth: 2.2, yaw: -2.554, pitch: -0.5 }; // crest, close to bottom, full-strength band
 const SNELL_SPOT = { dz: 1485, depth: 8, yaw: 0, pitch: 1.0 };
 
 async function setTier(page, tierLabel) {
@@ -139,6 +148,12 @@ const browser = await chromium.launch();
   await page.screenshot({ path: path.join(OUT, '01b-real-descent-5m.png') });
   snapshotErrState('01b-real-descent-5m');
   report.drawCallsByCapture['01b-real-descent-5m'] = await profilerStats(page);
+
+  // --- Establishing shot at the crest: verified-working framing (see CREST_ESTABLISHING_SPOT). ---
+  await placeDiver(page, CREST_ESTABLISHING_SPOT);
+  await page.screenshot({ path: path.join(OUT, '01c-crest-establishing.png') });
+  snapshotErrState('01c-crest-establishing');
+  report.drawCallsByCapture['01c-crest-establishing'] = await profilerStats(page);
 
   // --- Teleport through every band at the coordinates/aim verified against depthAt — see header.
   for (const [label, dz, colDepth, diveDepth, yaw, pitch, note] of BAND_SPOTS) {
