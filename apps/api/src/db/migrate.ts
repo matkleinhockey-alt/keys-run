@@ -8,6 +8,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { createDb } from './client.js';
+// Side-effect import only: ../env.js loads the repo-root .env file (if
+// present) into process.env at module scope, so `pnpm db:migrate` picks up
+// DATABASE_URL without a manual `export`. runMigrations() itself takes an
+// explicit connection string and has no other dependency on env.ts.
+import '../env.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_FOLDER = path.resolve(HERE, '../../../../infra/migrations');
