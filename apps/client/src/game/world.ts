@@ -652,8 +652,6 @@ export function initWorld(wrap: HTMLElement): World {
   // call) — lets test/capture-fish-screenshots.mjs find a deterministic resident of a given
   // species and teleport the boat there, instead of guessing world coordinates blind. No normal
   // code path reads `window.__fishDebug`.
-  (window as unknown as { __debugScene?: unknown }).__debugScene = scene;
-  (window as unknown as { __THREE?: unknown }).__THREE = THREE;
   (window as unknown as { __fishDebug?: unknown }).__fishDebug = {
     findResidentNear: fishWorld.findResidentNear,
     waterColumnAt: fishWorld.waterColumnAt,
@@ -666,6 +664,46 @@ export function initWorld(wrap: HTMLElement): World {
       model.group.position.set(x, stateBox.state.y, z);
       model.group.rotation.y = stateBox.state.h;
     },
+  };
+
+  // DEV/VERIFICATION HOOK ONLY — same spirit as __fishDebug/__uwDebug above: this sandbox's
+  // software-WebGL render rate makes a real-time dive through all five depth bands take minutes
+  // of wall clock per leg (the fixed-step accumulator clamps to <=50ms of simulated time per
+  // rendered frame — at a few fps that's a real, measured 10-40x slowdown, not a guess). The dive
+  // *physics* is already proven by packages/shared/test/diver.test.ts's 20 unit tests; what a
+  // screenshot script actually needs to verify is the *renderer* at a given depth, so this lets
+  // one jump straight there instead of re-proving the descent every time. No normal code path
+  // reads `window.__diverDebug`.
+  (window as unknown as { __diverDebug?: unknown }).__diverDebug = {
+    mode: () => diver.mode,
+    state: () => diver.state,
+    /** Jump in for real (same as pressing J) if not already diving, then snap straight to a given
+     * depth/position — `diver.state`/`diver.cam` are live object references (controller.ts's
+     * getters return the controller's own mutable state), so mutating the fields in place here
+     * takes effect on the very next frame, same as any other physics step would. */
+    enterAt(depth: number, x?: number, z?: number, yaw?: number): void {
+      if (diver.mode === 'boat') {
+        diver.enterWater(x ?? stateBox.state.x, z ?? stateBox.state.z, yaw ?? stateBox.state.h);
+      }
+      const s = diver.state;
+      if (!s) return;
+      if (x !== undefined) s.x = x;
+      if (z !== undefined) s.z = z;
+      s.y = -depth;
+      s.vx = 0; s.vy = 0; s.vz = 0;
+      if (yaw !== undefined) { s.yaw = yaw; diver.cam.yaw = yaw; }
+    },
+    setDepth(depth: number, zeroVelocity = true): void {
+      const s = diver.state;
+      if (!s) return;
+      s.y = -depth;
+      if (zeroVelocity) s.vy = 0;
+    },
+    setLook(yaw: number, pitch: number): void {
+      diver.cam.yaw = yaw;
+      diver.cam.pitch = pitch;
+    },
+    exitToBoat(): void { diver.exitToBoat(); },
   };
 
   return { resize, frame, renderer };

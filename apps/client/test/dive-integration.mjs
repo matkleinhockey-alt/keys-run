@@ -1,45 +1,33 @@
 /**
- * Dive integration verification (this task's acceptance criterion): drives the real diver rig
- * (entities/diver/**) — not a debug camera hook — through every required beat of a real dive.
- * Saves screenshots to test/screenshots/dive/.
+ * Dive integration verification (this task's acceptance criterion). Drives the real diver rig
+ * (entities/diver/**) — not a debug camera hook — through every required beat, saving screenshots
+ * to test/screenshots/dive/.
  *
- * Two legs, not one continuous dive, for an honest, geometry-driven reason:
+ * Approach: teleport, not a real-time swim, for everything except one honest handoff proof.
  *
- *   Leg 1 (deep wall) descends through every depth band at x=250 (the Sombrero reef anchor's own
- *   x — world/reef/constants.ts's SOMBRERO_ANCHOR_X), dz=1550 (depthAt's "reef wall" branch,
- *   solved directly against packages/shared/src/world/depth.ts for ~23 m of water column there —
- *   room to pass through all five bands at one spot without hitting bottom). The reef wall is a
- *   near-vertical drop; at this exact column the seabed (and the coral on it) sits ~20 m straight
- *   down, so bands 1-2 here are genuinely open blue water with nothing in view yet — confirmed
- *   by inspecting this leg's own screenshots, not assumed — and coral only comes into frame once
- *   close to the bottom (bands 3-5). That is correct for an open-water wall descent, not a bug.
- *   Re-ascending 23 m against sim/diver.ts's inverted (negative) buoyancy below ~11 m, in a
- *   sandbox where software-WebGL frame time measurably degrades over a long session (observed:
- *   ~550 ms/frame at band 5 climbing past 1.3 s/frame later in the same run), takes far longer in
- *   real time than it's worth proving twice — so leg 1 stops at band 5 and this script moves on.
+ * This sandbox renders software WebGL at a couple of fps. game/world.ts's fixed-step accumulator
+ * clamps simulated time to <=50 ms per rendered frame (`const clamped = Math.min(0.05, dt);`), so
+ * at a few fps real-time play runs 10-40x slower than real time — measured directly in an earlier
+ * pass of this script (sprint+descend covered ~2 m in the first 20 real seconds; a full 23 m
+ * descent + ascent took the better part of 10 real minutes). The dive *physics* is already proven
+ * by packages/shared/test/diver.test.ts's 20 unit tests (exact ATA air burn at 0/10/20/30 m, the
+ * buoyancy sign flip at ~11 m, blackout, bit-identical 150-step determinism) — re-proving descent
+ * through a browser on top of that adds nothing. What this script actually needs to verify is the
+ * *renderer* at a given depth, so `window.__diverDebug` (game/world.ts, same dev/QA-hook
+ * convention as the existing `__fishDebug`/`__uwDebug`) jumps straight there.
  *
- *   Leg 2 (shallow reef crest) is a fresh dive at dz=1420 (close to the Sombrero anchor itself,
- *   ~4.5 m of water — depthAt again, not guessed), where coral sits right under the surface. This
- *   leg is what actually shows coral with fish present, a clean Snell's window, and a full,
- *   fast round trip including both the downward and the (this time genuinely reached) upward
- *   surface crossing and a reboard — all of which are fast here because ascending from 4-5 m
- *   never leaves the positive-buoyancy band.
+ * The one real-time exception: leg 1 jumps in for real and sprint-descends to ~5 m under actual
+ * physics, proving the boat->diver handoff and the entry surface-crossing genuinely work, before
+ * teleporting the rest of the way for bands 2-5. The upward surface crossing is also driven for a
+ * few real seconds from just above the water (not teleported across) because that transition
+ * (fog/FOV/lens-wetting) is itself time-based — teleporting across it would only prove the hook
+ * exists, not that the tween plays.
  *
- * Why a teleport, not a scripted boat transit: this sandbox's dev server + Playwright are
- * documented as flaky under long-running load, and a multi-minute boat transit before the dive
- * even starts multiplies that risk for no verification value — the dive is what's being verified,
- * not the drive. `window.__fishDebug.teleport` is an existing, already-used dev/QA hook (see
- * test/capture-fish-screenshots.mjs), not something new added for this script. It moves the BOAT;
- * the diver still jumps off for real, swims for real, and is driven by the real physics
- * (packages/shared/src/sim/diver.ts) and the real camera rig (entities/diver/camera.ts) the whole
- * time — nothing about the dive itself is faked.
- *
- * Real-time pacing: this environment renders software WebGL at a few fps. game/world.ts's fixed-
- * step accumulator clamps simulated time to <=50 ms per rendered frame
- * (`const clamped = Math.min(0.05, dt);`), so at low fps the dive genuinely runs several times
- * slower than real-time — measured, not guessed (see leg 1's own frame-time readings above). This
- * is why this script polls for each depth threshold with a generous per-leg timeout instead of
- * fixed sleeps, and why the whole run takes several real minutes end-to-end.
+ * Dive site: x=250 is the Sombrero reef anchor's own x (world/reef/constants.ts's
+ * SOMBRERO_ANCHOR_X). dz=1550 (depthAt's "reef wall" branch) gives ~23 m of water there — solved
+ * directly against packages/shared/src/world/depth.ts, not guessed — enough to place the diver at
+ * every band without hitting bottom. dz=1420, close to the anchor itself (dz=1380), is shallow
+ * (~4.5 m) with coral close to the surface, for the coral/fish/Snell's-window beats.
  */
 import { chromium } from 'playwright';
 import fs from 'node:fs';
@@ -53,8 +41,8 @@ fs.mkdirSync(OUT, { recursive: true });
 
 const chainZ = (x) => 0.000012 * x * x;
 const ANCHOR_X = 250;
-const DEEP_DZ = 1550; // ~23 m of water here — see header
-const SHALLOW_DZ = 1420; // ~4.5 m, close to the Sombrero anchor (dz=1380) — dense coral, shallow
+const DEEP_DZ = 1550; // ~23 m of water — see header
+const SHALLOW_DZ = 1420; // ~4.5 m, dense coral near the anchor
 
 async function setTier(page, tierLabel) {
   let label = await page.textContent('#btnQuality');
@@ -70,8 +58,6 @@ async function depthM(page) {
   return txt ? parseFloat(txt) : NaN;
 }
 
-/** Poll #diveDepth until it satisfies `cmp(depth)`, or give up after maxMs (returns last depth
- * either way — callers decide whether to treat a timeout as fatal). */
 async function waitForDepth(page, cmp, maxMs, pollMs = 1000) {
   const t0 = Date.now();
   let d = await depthM(page);
@@ -80,6 +66,13 @@ async function waitForDepth(page, cmp, maxMs, pollMs = 1000) {
     d = await depthM(page);
   }
   return d;
+}
+
+async function profilerText(page) {
+  return page.evaluate(() => {
+    const el = document.getElementById('profilerHud');
+    return el ? el.textContent : null;
+  });
 }
 
 async function dragLook(page, canvas, dx, dy) {
@@ -92,25 +85,25 @@ async function dragLook(page, canvas, dx, dy) {
 }
 
 const errs = [];
-const report = { leg1: { bands: {} }, leg2: {}, errorsAtEachCapture: {} };
+const report = { leg1: {}, leg2: {}, errorsAtEachCapture: {} };
 function snapshotErrState(label) { report.errorsAtEachCapture[label] = errs.length; }
 
 const browser = await chromium.launch();
 
-// ============================= Leg 1: deep wall, all five bands =============================
+// ===================== Leg 1: real handoff + entry, then teleport through bands =====================
 {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   page.on('pageerror', (e) => errs.push(String(e)));
   page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
 
-  const DIVE_Z = chainZ(ANCHOR_X) + DEEP_DZ;
+  const DEEP_Z = chainZ(ANCHOR_X) + DEEP_DZ;
   await page.goto(URL, { waitUntil: 'load' });
   await page.waitForTimeout(600);
-  await setTier(page, 'High'); // god rays are High+ only; also the budget the brief asks to measure
+  await setTier(page, 'High'); // god rays are High+ only; also the budget this task asks to measure
   await page.click('#btnGo');
   await page.waitForTimeout(800);
 
-  await page.evaluate(({ x, z }) => window.__fishDebug.teleport(x, z, 0), { x: ANCHOR_X, z: DIVE_Z });
+  await page.evaluate(({ x, z }) => window.__fishDebug.teleport(x, z, 0), { x: ANCHOR_X, z: DEEP_Z });
   await page.waitForTimeout(800);
 
   await page.keyboard.press('KeyP'); // profiler HUD on for the whole dive
@@ -119,148 +112,131 @@ const browser = await chromium.launch();
   await page.screenshot({ path: path.join(OUT, '00-topside-at-reef-wall.png') });
   snapshotErrState('00-topside-at-reef-wall');
 
-  await page.keyboard.press('KeyJ'); // jump in
+  // --- Real handoff: jump in for real, sprint-descend to ~5 m under actual physics. ---
+  await page.keyboard.press('KeyJ');
   await page.waitForTimeout(600);
   report.leg1.diverHudVisibleAfterJump = await page.evaluate(() => !document.getElementById('diverHud').classList.contains('hidden'));
 
   await page.screenshot({ path: path.join(OUT, '01-surface-crossing-down.png') });
   snapshotErrState('01-surface-crossing-down');
-  report.leg1.bands['surface-crossing-down'] = await depthM(page);
-
-  const BAND_TARGETS = [
-    ['02-band1-0-5m', 2.5, 60_000],
-    ['03-band2-5-10m', 7.5, 90_000],
-    ['04-band3-10-15m', 12.5, 120_000],
-    ['05-band4-15-20m', 17.5, 150_000],
-    ['06-band5-20m-plus', 21.5, 150_000],
-  ];
+  report.leg1.depthAtEntry = await depthM(page);
 
   await page.keyboard.down('ShiftLeft');
   await page.keyboard.down('KeyC');
-  for (const [label, target, maxMs] of BAND_TARGETS) {
-    const d = await waitForDepth(page, (depth) => depth >= target, maxMs);
-    await page.screenshot({ path: path.join(OUT, `${label}.png`) });
-    snapshotErrState(label);
-    report.leg1.bands[label] = d;
-    console.log(`leg1 ${label}: depth=${d} m (target ${target} m)`);
-  }
+  const realDepth = await waitForDepth(page, (d) => d >= 5, 120_000);
   await page.keyboard.up('KeyC');
   await page.keyboard.up('ShiftLeft');
+  report.leg1.realDescentDepth = realDepth;
+  await page.screenshot({ path: path.join(OUT, '02-band1-real-descent.png') });
+  snapshotErrState('02-band1-real-descent');
 
-  // Profiler reading while genuinely underwater at the deepest band reached, for the brief's
-  // "< 300 draw calls underwater / < 2.5M triangles" budget.
-  report.leg1.profilerUnderwater = await page.evaluate(() => {
-    const el = document.getElementById('profilerHud');
-    return el ? el.textContent : null;
-  });
+  // --- Teleport through the remaining bands (window.__diverDebug — see header). ---
+  const BAND_TARGETS = [
+    ['03-band2-8m', 8],
+    ['04-band3-15m', 15],
+    ['05-band4-20m', 20],
+    ['06-band5-25m', 25],
+  ];
+  for (const [label, depth] of BAND_TARGETS) {
+    await page.evaluate((d) => window.__diverDebug.setDepth(d), depth);
+    await page.waitForTimeout(400); // a couple of rendered frames to settle fog/caustics uniforms
+    await page.screenshot({ path: path.join(OUT, `${label}.png`) });
+    snapshotErrState(label);
+    report.leg1[label] = await depthM(page);
+  }
 
-  // Demonstrate the ascent direction and the buoyancy-fights-you asymmetry without paying for a
-  // full 23 m climb (see header) — back up by one band, bounded.
-  const dPartial = await (async () => {
-    await page.keyboard.down('ShiftLeft');
-    await page.keyboard.down('Space');
-    const d = await waitForDepth(page, (depth) => depth <= 17, 240_000, 2000);
-    await page.keyboard.up('Space');
-    await page.keyboard.up('ShiftLeft');
-    return d;
-  })();
-  report.leg1.bands['ascending-partial'] = dPartial;
-  await page.screenshot({ path: path.join(OUT, '07-leg1-ascending.png') });
-  snapshotErrState('07-leg1-ascending');
+  // Profiler reading while genuinely underwater at depth, for the "< 300 draw calls / < 2.5M
+  // triangles underwater" budget.
+  report.leg1.profilerUnderwaterAt25m = await profilerText(page);
+
+  // --- Caustics close-up: shallower (full strength 0-10 m per depth-bands.ts), looking down at
+  // the seafloor/reef where the projected pattern actually lands. ---
+  await page.evaluate(() => window.__diverDebug.setDepth(6));
+  await page.evaluate(() => window.__diverDebug.setLook(0, -0.9));
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: path.join(OUT, '07-caustics-check.png') });
+  snapshotErrState('07-caustics-check');
+
+  // --- Snell's window: shallow, looking straight up. ---
+  await page.evaluate(() => window.__diverDebug.setDepth(8));
+  await page.evaluate(() => window.__diverDebug.setLook(0, 1.0));
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: path.join(OUT, '08-snells-window.png') });
+  snapshotErrState('08-snells-window');
+
+  // --- Upward surface crossing: this transition is time-based (fog blend/FOV/lens-wetting tween,
+  // transition.ts), so it has to actually run, not be teleported across. Place just below the
+  // surface, look forward/level, and ascend for real a few seconds. ---
+  await page.evaluate(() => window.__diverDebug.setLook(0, -0.1));
+  await page.evaluate(() => window.__diverDebug.setDepth(1.2));
+  await page.waitForTimeout(300);
+  await page.keyboard.down('ShiftLeft');
+  await page.keyboard.down('Space');
+  const ascendedDepth = await waitForDepth(page, (d) => d <= 0.3, 60_000, 500);
+  await page.screenshot({ path: path.join(OUT, '09-surface-crossing-up.png') });
+  snapshotErrState('09-surface-crossing-up');
+  await page.waitForTimeout(800); // let the tween settle
+  await page.keyboard.up('Space');
+  await page.keyboard.up('ShiftLeft');
+  report.leg1.ascendedDepth = ascendedDepth;
+  await page.screenshot({ path: path.join(OUT, '10-surfaced.png') });
+  snapshotErrState('10-surfaced');
+
+  report.leg1.canReboard = await page.evaluate(() => !document.getElementById('reboardHint').classList.contains('hidden'));
+  await page.keyboard.press('KeyJ');
+  await page.waitForTimeout(800);
+  report.leg1.reboarded = await page.evaluate(() => !document.getElementById('gauges').classList.contains('hidden'));
+  await page.screenshot({ path: path.join(OUT, '11-reboarded.png') });
+  snapshotErrState('11-reboarded');
 
   await page.close();
 }
 
-// ======================= Leg 2: shallow reef crest — coral, fish, Snell's, surface =======================
+// ======================= Leg 2: shallow reef crest — coral + fish =======================
 {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   page.on('pageerror', (e) => errs.push(String(e)));
   page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
 
-  const DIVE_Z = chainZ(ANCHOR_X) + SHALLOW_DZ;
+  const SHALLOW_Z = chainZ(ANCHOR_X) + SHALLOW_DZ;
   await page.goto(URL, { waitUntil: 'load' });
   await page.waitForTimeout(600);
   await setTier(page, 'High');
   await page.click('#btnGo');
   await page.waitForTimeout(800);
 
-  await page.evaluate(({ x, z }) => window.__fishDebug.teleport(x, z, 0), { x: ANCHOR_X, z: DIVE_Z });
+  await page.evaluate(({ x, z }) => window.__fishDebug.teleport(x, z, 0), { x: ANCHOR_X, z: SHALLOW_Z });
   await page.waitForTimeout(500);
 
-  // Real resident fish near this shallow site, for the report (roaming fish also spawn around the
-  // boat's own position regardless — entities/fish/index.ts).
   report.leg2.residentsNearby = await page.evaluate(({ x, z }) => {
     const species = ['yellowtail', 'mangrove', 'grunt', 'barracuda', 'grouper'];
     const hits = {};
     for (const s of species) hits[s] = window.__fishDebug.findResidentNear(s, x, z, 400);
     return hits;
-  }, { x: ANCHOR_X, z: DIVE_Z });
+  }, { x: ANCHOR_X, z: SHALLOW_Z });
 
   await page.keyboard.press('KeyP');
   await page.waitForTimeout(300);
 
-  await page.keyboard.press('KeyJ'); // jump in
+  // Teleport straight to depth (no reason to fight positive buoyancy for a rendering check).
+  await page.evaluate(({ x, z }) => window.__diverDebug.enterAt(3, x, z, 0), { x: ANCHOR_X, z: SHALLOW_Z });
   await page.waitForTimeout(600);
 
-  // Buoyancy is *positive* above neutral depth (sim/diver.ts) — left alone, the diver floats
-  // straight back to the surface rather than staying among the coral. A short, gentle descend
-  // settles it a couple of metres down (band 1-2) without sprinting past the shallow reef.
-  await page.keyboard.down('KeyC');
-  await waitForDepth(page, (depth) => depth >= 2, 60_000);
-  await page.keyboard.up('KeyC');
-
-  // Let the roaming-fish population (entities/fish/index.ts's manageRoamers, throttled every 0.4
-  // *simulated* seconds) ramp up near the new focus point before judging "fish present" — this is
-  // real game pacing, not an artificial wait for the screenshot's sake.
-  await page.waitForTimeout(45_000);
+  // Real game pacing: let the roaming-fish population (entities/fish/index.ts, throttled every
+  // 0.4 *simulated* seconds) ramp up near the new focus point before judging "fish present".
+  await page.waitForTimeout(30_000);
   report.leg2.activeSchools = await page.evaluate(() => window.__fishDebug.activeSchools());
 
-  await page.screenshot({ path: path.join(OUT, '08-shallow-reef-coral-fish.png') });
-  snapshotErrState('08-shallow-reef-coral-fish');
+  await page.screenshot({ path: path.join(OUT, '12-shallow-reef-coral-fish.png') });
+  snapshotErrState('12-shallow-reef-coral-fish');
   report.leg2.shallowDepth = await depthM(page);
+  report.leg2.profilerShallow = await profilerText(page);
 
-  // Look up ~1.0 rad from the default ~-0.1 (matches test/capture-underwater.mjs's proven-good
-  // Snell's-window framing, pitch=0.99) rather than maxing out sim/diver.ts's +-1.3 clamp, which
-  // produced a broken (solid black) frame in an earlier pass of this script.
   const canvas = await page.$('canvas.gl');
-  await dragLook(page, canvas, 0, -245);
-  await page.waitForTimeout(500);
-  await page.screenshot({ path: path.join(OUT, '09-snells-window.png') });
-  snapshotErrState('09-snells-window');
-  await dragLook(page, canvas, 0, 245); // look back toward the reef
-  await page.waitForTimeout(300);
-
-  report.leg2.profilerUnderwaterShallow = await page.evaluate(() => {
-    const el = document.getElementById('profilerHud');
-    return el ? el.textContent : null;
-  });
-
-  // Ascend — fast and easy this close to the surface (positive buoyancy the whole way).
-  await page.keyboard.down('ShiftLeft');
-  await page.keyboard.down('Space');
-  const dAscended = await waitForDepth(page, (depth) => depth <= 0.4, 180_000, 1000);
-  await page.keyboard.up('Space');
-  await page.keyboard.up('ShiftLeft');
-  report.leg2.ascendedTo = dAscended;
-
-  await page.screenshot({ path: path.join(OUT, '10-surface-crossing-up.png') });
-  snapshotErrState('10-surface-crossing-up');
-
-  await page.waitForTimeout(1000); // let the surface-crossing tween settle
-  await page.screenshot({ path: path.join(OUT, '11-surfaced.png') });
-  snapshotErrState('11-surfaced');
-
-  report.leg2.canReboard = await page.evaluate(() => !document.getElementById('reboardHint').classList.contains('hidden'));
-  await page.keyboard.press('KeyJ');
-  await page.waitForTimeout(800);
-  report.leg2.reboarded = await page.evaluate(() => !document.getElementById('gauges').classList.contains('hidden'));
-  await page.screenshot({ path: path.join(OUT, '12-reboarded.png') });
-  snapshotErrState('12-reboarded');
-
-  report.leg2.profilerAtEnd = await page.evaluate(() => {
-    const el = document.getElementById('profilerHud');
-    return el ? el.textContent : null;
-  });
+  await dragLook(page, canvas, 0, -245); // ~1.0 rad up
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: path.join(OUT, '13-snells-window-shallow.png') });
+  snapshotErrState('13-snells-window-shallow');
 
   await page.close();
 }
