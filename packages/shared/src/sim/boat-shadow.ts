@@ -55,7 +55,8 @@ export interface ShadowEnv {
 /** stepBoat's rest trim value (index.html's initial `trimV:.2`) — see the module doc above. */
 const SHADOW_TRIM_V = 0.2;
 
-function wrapAngle(a: number): number {
+/** Wrap an angle (radians) to (-pi, pi]. Exported for apps/sim's envelope validation. */
+export function wrapAngle(a: number): number {
   return (((a + Math.PI) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
 }
 

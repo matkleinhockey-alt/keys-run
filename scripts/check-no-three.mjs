@@ -4,12 +4,13 @@
  * bundle every packages/shared entry point with esbuild, request a `--metafile`, and fail if
  * `three` appears anywhere in the resulting module graph.
  *
- * docs/ARCHITECTURE.md describes this layer as building `apps/sim` (the Node game server) with
- * esbuild. `apps/sim` doesn't exist yet in Phase 0 — only `packages/shared` and the `apps/client`
- * skeleton do — so this script bundles packages/shared's own entry points directly. When
- * `apps/sim` lands (Phase 2+) this check should additionally (or instead) bundle *that*, since
- * it's the more direct proof that no server build can pull three.js in transitively; the
- * assertion logic below (scan metafile.inputs for a three.js path) is unchanged either way.
+ * Phase 2 adds the second half docs/ARCHITECTURE.md actually describes this layer as: building
+ * `apps/sim` (the Node game server) itself with esbuild — the more direct proof that no server
+ * *build*, not just packages/shared in isolation, can pull three.js in transitively. That check
+ * bundles apps/sim/src/index.ts with `packages: 'external'` (so `ws`/`pg`/`zod` aren't pulled in
+ * and bundled — they're not what we're checking for — but a bare `import 'three'` anywhere in
+ * apps/sim's own source or packages/shared would still show up as an external import reference,
+ * which the scan below also checks).
  */
 
 import { build } from 'esbuild';
@@ -18,8 +19,25 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SHARED_SRC = path.resolve(HERE, '../packages/shared/src');
+const SIM_SRC = path.resolve(HERE, '../apps/sim/src');
 
-const entryPoints = [
+const threeLike = /(^|[\\/])node_modules[\\/]three([\\/]|$)|(^|[\\/])three\.js([\\/]|$)/;
+
+function isThreeLike(f) {
+  return threeLike.test(f) || f === 'three' || f.startsWith('three/');
+}
+
+function findOffenders(metafile) {
+  const offenders = Object.keys(metafile.inputs).filter(isThreeLike);
+  for (const output of Object.values(metafile.outputs)) {
+    for (const imp of output.imports ?? []) {
+      if (imp.external && isThreeLike(imp.path)) offenders.push(`${imp.path} (external import)`);
+    }
+  }
+  return offenders;
+}
+
+const sharedEntryPoints = [
   'world/chain.ts',
   'world/depth.ts',
   'waves/index.ts',
@@ -29,29 +47,46 @@ const entryPoints = [
   'content/boats.ts',
   'content/economy.ts',
   'sim/boat.ts',
+  'sim/boat-shadow.ts',
   'sim/depth-grid.ts',
+  'proto/index.ts',
 ].map((p) => path.join(SHARED_SRC, p));
 
-const result = await build({
-  entryPoints,
+const sharedResult = await build({
+  entryPoints: sharedEntryPoints,
   bundle: true,
   write: false,
-  outdir: path.join(HERE, '../.no-three-out'),
+  outdir: path.join(HERE, '../.no-three-out/shared'),
   platform: 'neutral',
   format: 'esm',
   metafile: true,
   logLevel: 'silent',
 });
 
-const threeLike = /(^|[\\/])node_modules[\\/]three([\\/]|$)|(^|[\\/])three\.js([\\/]|$)/;
-const offenders = Object.keys(result.metafile.inputs).filter((f) => threeLike.test(f) || f === 'three' || f.startsWith('three/'));
+const simResult = await build({
+  entryPoints: [path.join(SIM_SRC, 'index.ts')],
+  bundle: true,
+  write: false,
+  outdir: path.join(HERE, '../.no-three-out/sim'),
+  platform: 'node',
+  format: 'esm',
+  packages: 'external',
+  metafile: true,
+  logLevel: 'silent',
+});
+
+const offenders = [...findOffenders(sharedResult.metafile), ...findOffenders(simResult.metafile)];
 
 if (offenders.length > 0) {
-  console.error('check:no-three FAILED — three.js found in the packages/shared module graph:');
+  console.error('check:no-three FAILED — three.js found in the module graph:');
   for (const f of offenders) console.error(`  ${f}`);
-  console.error('\npackages/shared must never import three.js — see docs/ARCHITECTURE.md.');
+  console.error('\npackages/shared and apps/sim must never import three.js — see docs/ARCHITECTURE.md.');
   process.exit(1);
 }
 
-const moduleCount = Object.keys(result.metafile.inputs).length;
-console.log(`check:no-three OK — scanned ${moduleCount} modules across ${entryPoints.length} entry points, no three.js found.`);
+const sharedModuleCount = Object.keys(sharedResult.metafile.inputs).length;
+const simModuleCount = Object.keys(simResult.metafile.inputs).length;
+console.log(
+  `check:no-three OK — scanned ${sharedModuleCount} modules across ${sharedEntryPoints.length} packages/shared entry points ` +
+    `and ${simModuleCount} modules from apps/sim/src/index.ts, no three.js found.`,
+);
