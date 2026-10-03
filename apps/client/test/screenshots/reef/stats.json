@@ -1,0 +1,134 @@
+{
+  "perWaypoint": {
+    "reef-crest": {
+      "total": {
+        "calls": 25,
+        "triangles": 464534
+      },
+      "reefOnly": {
+        "calls": 24,
+        "triangles": 184534
+      },
+      "counts": {
+        "residentChunks": 25,
+        "instancesBySpecies": {
+          "elkhorn": 1533,
+          "staghorn": 3582,
+          "brain": 714,
+          "star": 452,
+          "seaFan": 1765,
+          "seaPlume": 1520,
+          "barrelSponge": 6,
+          "tubeSponge": 33,
+          "encrusting": 1901,
+          "seagrass": 0
+        }
+      }
+    },
+    "mid-slope": {
+      "total": {
+        "calls": 27,
+        "triangles": 452444
+      },
+      "reefOnly": {
+        "calls": 26,
+        "triangles": 172444
+      },
+      "counts": {
+        "residentChunks": 25,
+        "instancesBySpecies": {
+          "elkhorn": 1467,
+          "staghorn": 2141,
+          "brain": 496,
+          "star": 483,
+          "seaFan": 1354,
+          "seaPlume": 1117,
+          "barrelSponge": 240,
+          "tubeSponge": 242,
+          "encrusting": 1614,
+          "seagrass": 0
+        }
+      }
+    },
+    "the-wall": {
+      "total": {
+        "calls": 14,
+        "triangles": 341402
+      },
+      "reefOnly": {
+        "calls": 13,
+        "triangles": 61402
+      },
+      "counts": {
+        "residentChunks": 25,
+        "instancesBySpecies": {
+          "elkhorn": 0,
+          "staghorn": 25,
+          "brain": 245,
+          "star": 362,
+          "seaFan": 286,
+          "seaPlume": 188,
+          "barrelSponge": 558,
+          "tubeSponge": 406,
+          "encrusting": 470,
+          "seagrass": 0
+        }
+      }
+    },
+    "sand-channel": {
+      "total": {
+        "calls": 25,
+        "triangles": 442598
+      },
+      "reefOnly": {
+        "calls": 24,
+        "triangles": 162598
+      },
+      "counts": {
+        "residentChunks": 25,
+        "instancesBySpecies": {
+          "elkhorn": 1464,
+          "staghorn": 3417,
+          "brain": 668,
+          "star": 418,
+          "seaFan": 1713,
+          "seaPlume": 1476,
+          "barrelSponge": 6,
+          "tubeSponge": 25,
+          "encrusting": 1821,
+          "seagrass": 0
+        }
+      }
+    },
+    "seagrass-flat": {
+      "total": {
+        "calls": 11,
+        "triangles": 402826
+      },
+      "reefOnly": {
+        "calls": 9,
+        "triangles": 10326
+      },
+      "counts": {
+        "residentChunks": 25,
+        "instancesBySpecies": {
+          "elkhorn": 353,
+          "staghorn": 394,
+          "brain": 0,
+          "star": 0,
+          "seaFan": 208,
+          "seaPlume": 167,
+          "barrelSponge": 0,
+          "tubeSponge": 0,
+          "encrusting": 213,
+          "seagrass": 967
+        }
+      }
+    }
+  },
+  "densest": {
+    "name": "reef-crest",
+    "calls": 24,
+    "triangles": 184534
+  }
+}
