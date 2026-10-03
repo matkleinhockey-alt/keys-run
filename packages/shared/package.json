@@ -1,0 +1,53 @@
+{
+  "name": "@keysrun/shared",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Pure, engine-independent world math and content data for Keys Run. No three.js, no DOM. See docs/ARCHITECTURE.md.",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./world/chain": {
+      "types": "./dist/world/chain.d.ts",
+      "default": "./dist/world/chain.js"
+    },
+    "./world/depth": {
+      "types": "./dist/world/depth.d.ts",
+      "default": "./dist/world/depth.js"
+    },
+    "./waves": {
+      "types": "./dist/waves/index.d.ts",
+      "default": "./dist/waves/index.js"
+    },
+    "./rng": {
+      "types": "./dist/rng/index.d.ts",
+      "default": "./dist/rng/index.js"
+    },
+    "./content/species": {
+      "types": "./dist/content/species.d.ts",
+      "default": "./dist/content/species.js"
+    },
+    "./content/creatures": {
+      "types": "./dist/content/creatures.d.ts",
+      "default": "./dist/content/creatures.js"
+    },
+    "./content/boats": {
+      "types": "./dist/content/boats.d.ts",
+      "default": "./dist/content/boats.js"
+    },
+    "./content/economy": {
+      "types": "./dist/content/economy.d.ts",
+      "default": "./dist/content/economy.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "golden:generate": "node test/generate-golden.mjs",
+    "lint": "eslint src test"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}
