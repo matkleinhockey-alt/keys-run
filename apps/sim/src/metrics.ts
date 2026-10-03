@@ -107,6 +107,7 @@ export class SimMetrics {
       authRejectionsPerMin: this.authRejections.ratePerSec() * 60,
       gridCells: this.world.grid.cellCount,
       gc: this.gc.summary(),
+      memory: process.memoryUsage(),
     };
   }
 

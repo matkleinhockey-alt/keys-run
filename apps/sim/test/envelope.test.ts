@@ -6,6 +6,7 @@ import { DEFAULT_CH, DEFAULT_SW } from '@keysrun/shared/waves';
 import { WB } from '@keysrun/shared/world/depth';
 import { BOATS } from '@keysrun/shared/content/boats';
 import { reconcileBoat } from '../src/world/envelope.js';
+import { LEASH_HARD_M } from '../src/constants.js';
 
 const DT = 1 / 30;
 
@@ -223,6 +224,46 @@ describe('reconcileBoat: cheating is rejected and flagged', () => {
     expect(result.violated).toBe(true);
     expect(result.reason).toBe('leash');
     expect(result.x).toBe(shadow.x);
+  });
+
+  it('beyond the hard leash, the shadow is still pulled toward a client that keeps self-consistently reporting (self-healing, not frozen)', () => {
+    // Regression test for a real failure mode found by test/load.ts: the shadow has no
+    // collision handling, so a legitimate client that bounces off land can end up genuinely far
+    // from the shadow's prediction. If the shadow never moved toward the report once beyond the
+    // hard leash, that gap would only grow — every subsequent tick would violate, forever. See
+    // envelope.ts's doc comment on the hard-leash branch.
+    let shadow = baseline();
+    const farX = shadow.x + 50; // start even further than the hard leash example above
+    let prevReport = { x: farX, z: shadow.z, h: shadow.h, speed: shadow.speed };
+    let lastDist = Math.hypot(farX - shadow.x, 0);
+    let everShrank = false;
+
+    for (let i = 0; i < 300; i++) {
+      // The client keeps reporting the SAME self-consistent position every tick (no new motion,
+      // always passes every absolute check) — exactly like a real client sitting still after a
+      // bad bounce, waiting for the server to catch up.
+      const result = reconcileBoat({
+        prevX: prevReport.x,
+        prevZ: prevReport.z,
+        prevH: prevReport.h,
+        prevSpeed: prevReport.speed,
+        reportX: farX,
+        reportZ: shadow.z,
+        reportH: shadow.h,
+        reportSpeed: shadow.speed,
+        shadow,
+        hull,
+        dt: DT,
+      });
+      shadow = result.newShadow;
+      prevReport = { x: farX, z: shadow.z, h: shadow.h, speed: shadow.speed };
+      const dist = Math.hypot(farX - shadow.x, 0);
+      if (dist < lastDist) everShrank = true;
+      lastDist = dist;
+    }
+
+    expect(everShrank).toBe(true);
+    expect(lastDist).toBeLessThan(LEASH_HARD_M); // recovers back inside the leash within 10s
   });
 
   it('within the soft leash (<3m) is accepted verbatim and resyncs the shadow', () => {

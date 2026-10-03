@@ -120,11 +120,15 @@ export class World {
       const shadowState = this.entities.readShadow(slot);
       const nextShadow = stepBoatShadow(shadowState, input, { t: this.simTimeSec, hull, sw: DEFAULT_SW, ch: DEFAULT_CH }, DT);
 
+      const prevX = this.entities.lastReportX[slot];
+      const prevZ = this.entities.lastReportZ[slot];
+      const prevH = this.entities.lastReportH[slot];
+      const prevSpeed = this.entities.lastReportSpeed[slot];
       const result = reconcileBoat({
-        prevX: this.entities.lastReportX[slot],
-        prevZ: this.entities.lastReportZ[slot],
-        prevH: this.entities.lastReportH[slot],
-        prevSpeed: this.entities.lastReportSpeed[slot],
+        prevX,
+        prevZ,
+        prevH,
+        prevSpeed,
         reportX: input.x,
         reportZ: input.z,
         reportH: input.h,
@@ -147,6 +151,22 @@ export class World {
       if (result.violated) {
         this.entities.violationScore[slot] += 1;
         this.totalViolations++;
+        // Operational debug aid (SIM_DEBUG_VIOLATIONS=1), not part of the steady-state tick cost
+        // when unset — this one-line env check only runs on an already-rare violated branch.
+        // This is what found the two real envelope bugs test/load.ts surfaced (see envelope.ts's
+        // doc comments on the asymmetric accel check and the hard-leash self-healing pull) —
+        // kept because a production false-positive report is otherwise very hard to diagnose
+        // after the fact.
+        if (process.env.SIM_DEBUG_VIOLATIONS) {
+          const dist = Math.hypot(input.x - nextShadow.x, input.z - nextShadow.z);
+          const posDelta = Math.hypot(input.x - prevX, input.z - prevZ);
+          console.error(
+            `[violation] slot=${slot} reason=${result.reason} dist=${dist.toFixed(2)} posDelta=${posDelta.toFixed(3)} ` +
+              `prev=(${prevX.toFixed(2)},${prevZ.toFixed(2)},h=${prevH.toFixed(3)},s=${prevSpeed.toFixed(2)}) ` +
+              `report=(${input.x.toFixed(2)},${input.z.toFixed(2)},h=${input.h.toFixed(3)},s=${input.speed.toFixed(2)}) ` +
+              `ackTick=${conn.ackTick} hasNewInput=${conn.hasNewInput}`,
+          );
+        }
       }
       if (result.corrected) {
         this.entities.correctedSinceSnapshot[slot] = 1;

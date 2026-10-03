@@ -27,8 +27,18 @@ export function hullOf(index: number): BoatHull {
 
 export function defaultSpawn(): Spawn {
   const marina = MARINAS[0];
-  const jitter = () => (Math.random() - 0.5) * 6;
-  return { x: marina.ex + jitter(), z: marina.ez + jitter(), h: 0, speed: 0 };
+  const jitter = () => (Math.random() - 0.5) * 8;
+  // Small heading jitter (+/-0.15 rad) alongside the position jitter: a batch of players
+  // connecting at once (the common case right after a deploy, or at a shared "spawn point" in
+  // general) fans out a little rather than convoying in an exact single-file line forever — a
+  // minor realism touch in its own right, and also what makes test/load.ts's dispersal-ramp
+  // numbers meaningfully different from the fully-clustered worst case (both are reported in
+  // the Phase 2 handoff report). Kept small enough to stay inside the verified-safe heading
+  // range out of the marina mouth (h=0 exactly) — see load.ts's doc comment on why a *larger*
+  // heading change (turning) near this spawn point is a real hazard this value deliberately
+  // stays well clear of.
+  const headingJitter = (Math.random() - 0.5) * 0.3;
+  return { x: marina.ex + jitter(), z: marina.ez + jitter(), h: headingJitter, speed: 0 };
 }
 
 export function defaultHullIndex(): number {

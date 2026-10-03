@@ -23,13 +23,24 @@ export const MAX_SLOT_ID = 511;
 export const ENVELOPE_SPEED_HEADROOM = 1.12;
 /**
  * Flat wave-surge margin added on top of the headroom-scaled hull top speed. ARCHITECTURE.md
- * says "speed <= hull top * 1.12 + wave surge" without pinning a number; 3 m/s is this
- * implementation's chosen constant (a big roller can accelerate a boat several m/s for well
- * under a second) — flagged as a tunable, not a value derived from the doc.
+ * says "speed <= hull top * 1.12 + wave surge" without pinning a number. Originally set to 3
+ * m/s as a guess; test/load.ts's sustained-maneuver runs measured a *real*, legitimate
+ * stepBoat client holding a sustained favorable wave-surf condition for several seconds,
+ * climbing visibly past hull.top*1.12+3 (observed into the high 40s m/s on hulls topping out
+ * in the mid-30s) before this was raised — i.e. "a big roller can push you several m/s for well
+ * under a second" undersold how long a genuine surf can run. 12 m/s is still a guess, just a
+ * measured-against one rather than an armchair one — flagged as a tunable for real-world
+ * telemetry to replace, not a value derived from the doc.
  */
-export const ENVELOPE_WAVE_SURGE_MARGIN_MS = 3;
-/** Slack multiplier applied to the physically-possible per-tick position delta. */
-export const ENVELOPE_POS_DELTA_SLACK = 1.5;
+export const ENVELOPE_WAVE_SURGE_MARGIN_MS = 12;
+/**
+ * Slack multiplier applied to the physically-possible per-tick position delta. 1.5 (the
+ * original guess) false-positived under test/load.ts's sustained runs — wave drift (`dvx`/`dvz`
+ * in stepBoat, a second, slower-decaying displacement term separate from speed*dt) adds enough
+ * extra per-tick displacement during a sustained surf that legitimate position deltas exceeded
+ * it. Raised after measuring real false positives, same caveat as the wave-surge margin above.
+ */
+export const ENVELOPE_POS_DELTA_SLACK = 2.5;
 /** Slack multiplier applied to the physically-possible per-tick speed delta (accel check). */
 export const ENVELOPE_ACCEL_SLACK = 2;
 /** Slack multiplier applied to the physically-possible per-tick turn-rate delta. */

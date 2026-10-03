@@ -71,7 +71,16 @@ function checkAbsoluteEnvelope(input: EnvelopeInput): string | null {
   const posDelta = Math.hypot(reportX - prevX, reportZ - prevZ);
   if (posDelta > speedCap * dt * ENVELOPE_POS_DELTA_SLACK) return 'position-delta';
 
-  const accel = Math.abs(reportSpeed - prevSpeed) / dt;
+  // Asymmetric on purpose: stepBoat's collision response (beaching/piling/dock — see
+  // packages/shared/src/sim/boat.ts) *multiplies* speed down by up to 90% in a single tick
+  // (e.g. `speed *= 0.1` on a hard beaching), which is a real, frequent, entirely legitimate
+  // event — a player running aground near a dock is normal play, not a cheat signal, and no
+  // collision response in stepBoat ever *increases* speed discontinuously. So only a sudden
+  // speed *increase* is checked against a physically-possible accel bound; a sudden decrease is
+  // always accepted. This was found empirically by test/load.ts — see the Phase 2 handoff
+  // report — not predicted by envelope.test.ts's property tests, which sampled only deep,
+  // collision-free water.
+  const accel = (reportSpeed - prevSpeed) / dt;
   // Physically-possible accel is bounded by how fast speed can approach a target that is itself
   // capped at speedCap; hull.accel is a rate constant (~0.4-0.6 /s), so a generous bound is the
   // speed cap crossed in a fraction of a second, with slack for a single noisy tick.
@@ -140,8 +149,30 @@ export function reconcileBoat(input: EnvelopeInput): EnvelopeOutput {
     };
   }
 
-  // Hard leash exceeded: reject the report, correct from the shadow, do not pull the shadow
-  // toward a position we just decided not to trust.
+  // Hard leash exceeded: reject *this tick's* report for replication (other players still see
+  // the shadow's conservative position, not the unverified one), and flag it as a violation —
+  // but still pull the shadow toward the report at the same rate as the soft/hard band above,
+  // rather than freezing it in place forever.
+  //
+  // This was NOT the original design — see the Phase 2 handoff report. A freeze-in-place shadow
+  // that never moves toward an out-of-leash report sounds like the conservative choice, but
+  // test/load.ts found a real failure mode it causes: the shadow model has no land-collision
+  // handling (by design — "no buoyancy, no substeps", see boat-shadow.ts), so a legitimate
+  // client that bounces off a beach/piling/dock can end up on a genuinely different path than
+  // the shadow predicts. Once that gap exceeds 12 m, a frozen shadow never recovers — the gap
+  // only grows, and the player is corrected (and flagged as a violation) on literally every
+  // subsequent tick, forever. A client that keeps self-consistently reporting a plausible
+  // trajectory (every absolute check above still passes) is exactly what a real, if unlucky,
+  // player looks like after a bad bounce, so the system self-heals by continuing to close the
+  // gap instead of latching it open. The violation score still accumulates every tick this is
+  // happening, which is what actually distinguishes "bad bounce, recovers in ~10s" from "sustained
+  // exploit" for anti-cheat review — not an unrecoverable freeze.
+  const pull = Math.min(1, LEASH_PULL_RATE_PER_S * input.dt);
+  const pulled: ShadowBoatState = {
+    ...shadow,
+    x: shadow.x + (input.reportX - shadow.x) * pull,
+    z: shadow.z + (input.reportZ - shadow.z) * pull,
+  };
   return {
     x: shadow.x,
     z: shadow.z,
@@ -150,6 +181,6 @@ export function reconcileBoat(input: EnvelopeInput): EnvelopeOutput {
     corrected: true,
     violated: true,
     reason: 'leash',
-    newShadow: shadow,
+    newShadow: pulled,
   };
 }
