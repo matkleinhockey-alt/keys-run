@@ -3,24 +3,24 @@
     "reef-crest": {
       "total": {
         "calls": 25,
-        "triangles": 194400
+        "triangles": 310728
       },
       "reefOnly": {
-        "calls": 23,
-        "triangles": 14398
+        "calls": 24,
+        "triangles": 30728
       },
       "counts": {
         "residentChunks": 25,
         "instancesBySpecies": {
-          "elkhorn": 133,
-          "staghorn": 369,
-          "brain": 106,
-          "star": 70,
-          "seaFan": 268,
-          "seaPlume": 234,
-          "barrelSponge": 1,
-          "tubeSponge": 4,
-          "encrusting": 259,
+          "elkhorn": 332,
+          "staghorn": 809,
+          "brain": 235,
+          "star": 161,
+          "seaFan": 324,
+          "seaPlume": 298,
+          "barrelSponge": 3,
+          "tubeSponge": 14,
+          "encrusting": 552,
           "seagrass": 0
         }
       }
@@ -28,74 +28,74 @@
     "mid-slope": {
       "total": {
         "calls": 27,
-        "triangles": 195546
+        "triangles": 311782
       },
       "reefOnly": {
-        "calls": 25,
-        "triangles": 15544
+        "calls": 26,
+        "triangles": 31782
       },
       "counts": {
         "residentChunks": 25,
         "instancesBySpecies": {
-          "elkhorn": 132,
-          "staghorn": 219,
-          "brain": 78,
-          "star": 74,
-          "seaFan": 196,
-          "seaPlume": 170,
-          "barrelSponge": 51,
-          "tubeSponge": 36,
-          "encrusting": 220,
+          "elkhorn": 322,
+          "staghorn": 472,
+          "brain": 186,
+          "star": 169,
+          "seaFan": 243,
+          "seaPlume": 217,
+          "barrelSponge": 100,
+          "tubeSponge": 94,
+          "encrusting": 453,
           "seagrass": 0
         }
       }
     },
     "the-wall": {
       "total": {
-        "calls": 17,
-        "triangles": 192496
+        "calls": 14,
+        "triangles": 303394
       },
       "reefOnly": {
-        "calls": 15,
-        "triangles": 12494
+        "calls": 13,
+        "triangles": 23394
       },
       "counts": {
         "residentChunks": 25,
         "instancesBySpecies": {
-          "elkhorn": 32,
-          "staghorn": 69,
-          "brain": 62,
-          "star": 66,
-          "seaFan": 88,
-          "seaPlume": 72,
-          "barrelSponge": 95,
-          "tubeSponge": 56,
-          "encrusting": 113,
+          "elkhorn": 0,
+          "staghorn": 2,
+          "brain": 95,
+          "star": 124,
+          "seaFan": 41,
+          "seaPlume": 34,
+          "barrelSponge": 237,
+          "tubeSponge": 151,
+          "encrusting": 120,
           "seagrass": 0
         }
       }
     },
     "sand-channel": {
       "total": {
-        "calls": 24,
-        "triangles": 194372
+        "calls": 25,
+        "triangles": 309218
       },
       "reefOnly": {
-        "calls": 22,
-        "triangles": 14370
+        "calls": 24,
+        "triangles": 29218
       },
       "counts": {
         "residentChunks": 25,
         "instancesBySpecies": {
-          "elkhorn": 137,
-          "staghorn": 365,
-          "brain": 100,
-          "star": 63,
-          "seaFan": 266,
-          "seaPlume": 224,
-          "barrelSponge": 2,
-          "tubeSponge": 4,
-          "encrusting": 245,
+          "elkhorn": 329,
+          "staghorn": 788,
+          "brain": 222,
+          "star": 151,
+          "seaFan": 319,
+          "seaPlume": 266,
+          "barrelSponge": 3,
+          "tubeSponge": 9,
+          "encrusting": 520,
           "seagrass": 0
         }
       }
@@ -103,24 +103,24 @@
     "seagrass-flat": {
       "total": {
         "calls": 11,
-        "triangles": 183676
+        "triangles": 397090
       },
       "reefOnly": {
         "calls": 9,
-        "triangles": 3674
+        "triangles": 4590
       },
       "counts": {
         "residentChunks": 25,
         "instancesBySpecies": {
-          "elkhorn": 34,
-          "staghorn": 41,
+          "elkhorn": 81,
+          "staghorn": 96,
           "brain": 0,
           "star": 0,
-          "seaFan": 29,
-          "seaPlume": 24,
+          "seaFan": 44,
+          "seaPlume": 35,
           "barrelSponge": 0,
           "tubeSponge": 0,
-          "encrusting": 25,
+          "encrusting": 58,
           "seagrass": 667
         }
       }
@@ -128,7 +128,7 @@
   },
   "densest": {
     "name": "mid-slope",
-    "calls": 25,
-    "triangles": 15544
+    "calls": 26,
+    "triangles": 31782
   }
 }
