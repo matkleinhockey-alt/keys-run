@@ -77,3 +77,32 @@ export function grainTex(rep: [number, number], lo: number, hi: number): THREE.D
   t.repeat.set(rep[0], rep[1]);
   return t;
 }
+
+/**
+ * Procedural tangent-space normal map (Part 2 item 6, "Materials"): derives bump detail from the
+ * same value-noise field `waterNoiseTex` already uses, so flat-shaded vertex-colour surfaces
+ * (hulls, terrain, docks, bridge) pick up real micro-surface variation under the directional/CSM
+ * lighting without downloading or authoring a single texture asset.
+ */
+const _normalTexCache = new Map<string, THREE.DataTexture>();
+export function normalTex(rep: [number, number], strength = 1): THREE.DataTexture {
+  const key = `${rep[0]}x${rep[1]}@${strength}`;
+  const cached = _normalTexCache.get(key);
+  if (cached) return cached;
+  const N = NOISE_N, d = new Uint8Array(N * N * 4);
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const i = y * N + x;
+      const hx = (NF1[y * N + (x + 1) % N] - NF1[y * N + (x + N - 1) % N]) * strength;
+      const hz = (NF1[((y + 1) % N) * N + x] - NF1[((y + N - 1) % N) * N + x]) * strength;
+      // Standard tangent-space normal-from-height encoding: (nx,ny) in RG, nz (mostly up) in B.
+      const nx = clamp(128 + hx * 500, 0, 255);
+      const ny = clamp(128 + hz * 500, 0, 255);
+      d[i * 4] = nx; d[i * 4 + 1] = ny; d[i * 4 + 2] = 255; d[i * 4 + 3] = 255;
+    }
+  }
+  const t = dataTex(d, N);
+  t.repeat.set(rep[0], rep[1]);
+  _normalTexCache.set(key, t);
+  return t;
+}

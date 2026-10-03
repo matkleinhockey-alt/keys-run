@@ -12,7 +12,7 @@ import * as THREE from 'three';
 import { chainZ } from '@keysrun/shared/world/chain';
 import { depthAt } from '@keysrun/shared/world/depth';
 import { isTouch } from '../core/scene.js';
-import { grainTex } from '../core/textures.js';
+import { grainTex, normalTex } from '../core/textures.js';
 import { clamp, lerp } from '../core/math.js';
 
 /** legacy `floorY` (index.html:708). */
@@ -53,7 +53,10 @@ export function createSeafloor(worldX0: number, worldZ0: number, worldSize: numb
     fc[i * 3] = c[0] * j; fc[i * 3 + 1] = c[1] * j; fc[i * 3 + 2] = c[2] * j;
   }
   fg.setAttribute('color', new THREE.BufferAttribute(fc, 3));
-  const floor = new THREE.Mesh(fg, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1, map: grainTex([700, 700], 0.8, 1.1) }));
+  const floor = new THREE.Mesh(fg, new THREE.MeshStandardMaterial({
+    vertexColors: true, flatShading: true, roughness: 1, map: grainTex([700, 700], 0.8, 1.1),
+    normalMap: normalTex([300, 300], 0.45), normalScale: new THREE.Vector2(0.3, 0.3),
+  }));
   group.add(floor);
 
   const under = new THREE.Mesh(new THREE.PlaneGeometry(40000, 40000).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x0b2b4a }));

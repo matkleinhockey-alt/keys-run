@@ -23,7 +23,7 @@ import { hashCell } from '@keysrun/shared/rng';
 import { islands, islandWorld, type Island } from '@keysrun/shared/world/chain';
 import { landH, onCourse, creekDist, CREEKS, RUNWAY } from '@keysrun/shared/world/depth';
 import { lerp, rand } from '../core/math.js';
-import { grainTex } from '../core/textures.js';
+import { grainTex, normalTex } from '../core/textures.js';
 import { WORLD_SEED, SALT } from '../state/constants.js';
 
 const CITY = { x0: 250, x1: 3900, zMin: -3600 };
@@ -39,7 +39,12 @@ interface House { I: Island; x: number; z: number; y: number; r: number }
 interface Mangrove { x: number; z: number; y: number; s: number }
 
 function buildTerrain(group: THREE.Group): void {
-  const landMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, map: grainTex([1, 1], 0.8, 1.08) });
+  // Part 2 item 6: procedural normal map for real-reading sand/grass micro-relief under the sun
+  // instead of a perfectly flat vertex-coloured plane.
+  const landMat = new THREE.MeshStandardMaterial({
+    vertexColors: true, roughness: 1, map: grainTex([1, 1], 0.8, 1.08),
+    normalMap: normalTex([24, 24], 0.5), normalScale: new THREE.Vector2(0.4, 0.4),
+  });
   islands.forEach((I) => {
     const big = I.a > 3000, step = big ? 16 : I.a > 900 ? 8 : I.a > 200 ? 6 : 4;
     const lx0 = big ? -5600 : -I.a * 1.09, lx1 = big ? 5600 : I.a * 1.09, lz0 = -I.b * 1.09, lz1 = I.b * 1.09;
@@ -76,7 +81,13 @@ function buildTerrain(group: THREE.Group): void {
   });
 }
 
-function buildVegetation(group: THREE.Group): void {
+interface VegetationResult {
+  uTime: { value: number };
+  frondMaterial: THREE.MeshStandardMaterial;
+  frondBaseCompile: THREE.MeshStandardMaterial['onBeforeCompile'];
+}
+
+function buildVegetation(group: THREE.Group): VegetationResult {
   const dummy = new THREE.Object3D();
   const palms: Palm[] = [], houses: House[] = [], mg: Mangrove[] = [];
 
@@ -140,7 +151,33 @@ function buildVegetation(group: THREE.Group): void {
   const trunkG = new THREE.CylinderGeometry(0.16, 0.3, 7, 6).translate(0, 3.5, 0);
   const frondG = new THREE.BoxGeometry(1, 0.06, 4).translate(0, 0, 2);
   const trunks = new THREE.InstancedMesh(trunkG, new THREE.MeshStandardMaterial({ color: 0x8a6d4b, flatShading: true }), palms.length);
-  const fronds = new THREE.InstancedMesh(frondG, new THREE.MeshStandardMaterial({ color: 0x3f8a35, flatShading: true, side: THREE.DoubleSide }), palms.length * 7);
+  const frondMat = new THREE.MeshStandardMaterial({ color: 0x3f8a35, flatShading: true, side: THREE.DoubleSide });
+  // Part 2 item 7 ("Vegetation + clouds"): palms didn't move at all. A per-instance-phased wind
+  // bend in the vertex shader animates the whole InstancedMesh for free (no CPU per-instance work,
+  // no extra draw calls) — `instanceMatrix[3].xyz` (the per-instance world position three bakes
+  // into the instance attribute) seeds a hash so fronds don't all sway in lockstep, and the bend
+  // scales with distance from the frond's base (position.z, 0 at the trunk) for a believable
+  // cantilever whip rather than a rigid rock.
+  const windUniforms = { uTime: { value: 0 } };
+  // Named (not an inline arrow assigned straight to onBeforeCompile) for the same reason
+  // world/water.ts's baseOnBeforeCompile is — core/shadows.ts's CSM integration needs a stable,
+  // CSM-agnostic function to re-wrap from on every quality-tier switch.
+  const frondBaseCompile: THREE.MeshStandardMaterial['onBeforeCompile'] = (sh) => {
+    Object.assign(sh.uniforms, windUniforms);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', `#include <common>
+uniform float uTime;`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+#ifdef USE_INSTANCING
+  float windPhase=fract(sin(dot(instanceMatrix[3].xyz,vec3(12.9898,78.233,37.719)))*43758.5453)*6.2832;
+  float windLever=(position.z*.25)*(position.z*.25);
+  float sway=sin(uTime*1.7+windPhase)*.16+sin(uTime*3.1+windPhase*1.7)*.07;
+  transformed.x+=sway*windLever;
+  transformed.y-=abs(sway)*windLever*.25;
+#endif`);
+  };
+  frondMat.onBeforeCompile = frondBaseCompile;
+  const fronds = new THREE.InstancedMesh(frondG, frondMat, palms.length * 7);
   const up = new THREE.Vector3();
   let fi = 0;
   palms.forEach((p, i) => {
@@ -181,6 +218,7 @@ function buildVegetation(group: THREE.Group): void {
     mm.setMatrixAt(i, dummy.matrix);
   });
   group.add(mm);
+  return { uTime: windUniforms.uTime, frondMaterial: frondMat, frondBaseCompile };
 }
 
 function buildRunway(group: THREE.Group): void {
@@ -212,12 +250,28 @@ function buildRunway(group: THREE.Group): void {
   plane.position.set(cx - 100, 4.2, R.lz + 50); plane.rotation.y = 0.4; g.add(plane);
 }
 
-export function createIslands(): THREE.Group {
+export interface IslandsResult {
+  group: THREE.Group;
+  /** Drives the palm-frond wind sway shader (see buildVegetation) — call once per frame. */
+  update(t: number): void;
+  /** The frond material + its CSM-agnostic onBeforeCompile — core/shadows.ts needs both to give
+   * the wind-animated fronds cascaded shadows without clobbering the wind shader (same reasoning
+   * as world/water.ts's baseOnBeforeCompile). */
+  frondMaterial: THREE.MeshStandardMaterial;
+  frondBaseCompile: THREE.MeshStandardMaterial['onBeforeCompile'];
+}
+
+export function createIslands(): IslandsResult {
   const group = new THREE.Group();
   buildTerrain(group);
-  buildVegetation(group);
+  const veg = buildVegetation(group);
   buildRunway(group);
-  return group;
+  return {
+    group,
+    update(t) { veg.uTime.value = t; },
+    frondMaterial: veg.frondMaterial,
+    frondBaseCompile: veg.frondBaseCompile,
+  };
 }
 
 /** Exposed for world/bridge.ts and world/marinas.ts, which also need to skip Miami's city area. */

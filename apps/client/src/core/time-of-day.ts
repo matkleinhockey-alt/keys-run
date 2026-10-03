@@ -17,7 +17,6 @@ const C3 = (h: number): THREE.Color => new THREE.Color(h);
 interface TodPalette extends SkyPalette {
   name: string;
   sun: THREE.Vector3;
-  fog: THREE.Color;
   sunC: THREE.Color; sunI: number;
   hS: THREE.Color; hG: THREE.Color; hI: number;
   sky: THREE.Color; disc: THREE.Color; discS: number;
@@ -26,11 +25,11 @@ interface TodPalette extends SkyPalette {
 
 const TOD_P: [TodPalette, TodPalette] = [
   {
-    name: 'Day', sun: new THREE.Vector3(0.55, 0.32, -0.62).normalize(), top: C3(0x2a76c2), mid: C3(0x7fb0d8), hor: C3(0xc9e4ee), warm: C3(0xffd7a0), glowPow: 6, glowK: 0.55, fog: C3(0xc9e4ee),
+    name: 'Day', sun: new THREE.Vector3(0.55, 0.32, -0.62).normalize(), top: C3(0x2a76c2), mid: C3(0x7fb0d8), hor: C3(0xc9e4ee), warm: C3(0xffd7a0), glowPow: 6, glowK: 0.55,
     sunC: C3(0xfff0d6), sunI: 1.05, hS: C3(0xd6efff), hG: C3(0x2b7088), hI: 0.7, sky: C3(0xb9d9e8), disc: C3(0xfff3cf), discS: 1, cloud: C3(0xffffff), cloudE: C3(0x8a99a6),
   },
   {
-    name: 'Sunset', sun: new THREE.Vector3(-0.9, 0.06, -0.42).normalize(), top: C3(0x23305e), mid: C3(0x9a5f8e), hor: C3(0xf7a463), warm: C3(0xff6a2a), glowPow: 3, glowK: 0.85, fog: C3(0xd99a86),
+    name: 'Sunset', sun: new THREE.Vector3(-0.9, 0.06, -0.42).normalize(), top: C3(0x23305e), mid: C3(0x9a5f8e), hor: C3(0xf7a463), warm: C3(0xff6a2a), glowPow: 3, glowK: 0.85,
     sunC: C3(0xff9a5a), sunI: 0.95, hS: C3(0xffb98a), hG: C3(0x2c3a62), hI: 0.55, sky: C3(0xe9a07e), disc: C3(0xffb36a), discS: 1.8, cloud: C3(0xffc4a4), cloudE: C3(0xa0507a),
   },
 ];
@@ -59,7 +58,10 @@ export function createTimeOfDay(ctx: SceneCtx, waterSky: { value: THREE.Color })
     const L = (a: THREE.Color, b: THREE.Color) => a.clone().lerp(b, k);
     sunDir.copy(A.sun).lerp(B.sun, k).normalize();
     paintSky({ top: L(A.top, B.top), mid: L(A.mid, B.mid), hor: L(A.hor, B.hor), warm: L(A.warm, B.warm), glowPow: lerp(A.glowPow, B.glowPow, k), glowK: lerp(A.glowK, B.glowK, k) });
-    fog.color.copy(L(A.fog, B.fog));
+    // Fog colour matched exactly to the sky's horizon colour (rather than its own separate,
+    // slightly-different tuned value) — Part 2 item 4 "a horizon that holds up": anything fogged
+    // out at the far clip now blends into the sky with zero seam instead of a visible ring.
+    fog.color.copy(L(A.hor, B.hor));
     renderer.setClearColor(fog.color);
     sun.color.copy(L(A.sunC, B.sunC));
     sun.intensity = lerp(A.sunI, B.sunI, k);

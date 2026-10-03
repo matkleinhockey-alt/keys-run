@@ -45,7 +45,6 @@ export interface CameraDeps {
   camera: THREE.PerspectiveCamera;
   sky: THREE.Mesh;
   sunDisc: THREE.Mesh;
-  sun: THREE.DirectionalLight;
   sunDir: THREE.Vector3;
 }
 
@@ -68,7 +67,7 @@ export function updateCamera(
   gameRunning: boolean,
   hullLen: number,
 ): void {
-  const { camera, sky, sunDisc, sun, sunDir } = deps;
+  const { camera, sky, sunDisc, sunDir } = deps;
   const m = model;
 
   const want = gameRunning && fp.pref && fishingActive();
@@ -147,9 +146,6 @@ export function updateCamera(
   sky.position.copy(camera.position);
   sunDisc.position.copy(camera.position).addScaledVector(sunDir, 5000);
   sunDisc.lookAt(camera.position);
-  sun.position.set(boat.x + sunDir.x * 120, boat.y + sunDir.y * 120, boat.z + sunDir.z * 120);
-  sun.target.position.set(boat.x, boat.y, boat.z);
-  sun.target.updateMatrixWorld();
 }
 
 export function bindCameraPointerControls(canvas: HTMLCanvasElement, cam: CamState, fp: FpState): void {

@@ -19,6 +19,10 @@ import { createBoatState, stepBoat, type BoatState, type BoatEnv, type DockRect,
 
 import { createScene, isTouch } from '../core/scene.js';
 import { createTimeOfDay } from '../core/time-of-day.js';
+import { probeGpu, detectDefaultTier, loadSavedTier, saveTier, getQualitySettings, QUALITY_TIERS, type QualityTier, type QualitySettings } from '../core/quality.js';
+import { createCascadedShadows } from '../core/shadows.js';
+import { createPostFX } from '../core/postfx.js';
+import { createProfiler } from '../ui/profiler.js';
 import { createWater } from '../world/water.js';
 import { createSeafloor } from '../world/seafloor.js';
 import { createIslands } from '../world/islands.js';
@@ -66,8 +70,15 @@ export function initWorld(wrap: HTMLElement): World {
   const sceneCtx = createScene(wrap);
   const { renderer, scene, camera, sunDir } = sceneCtx;
 
+  // 1b. quality tier: a saved choice wins, otherwise auto-detect from a quick GPU probe
+  // (docs/ARCHITECTURE.md Part 2 "Quality tiers" — Low must run on an integrated GPU).
+  const gpuProbe = probeGpu(renderer.getContext());
+  let quality = getQualitySettings(loadSavedTier() ?? detectDefaultTier(gpuProbe));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality.pixelRatioCap));
+  (scene.fog as THREE.Fog).far = quality.fogFar;
+
   // 2. water (+ the shared depth-grid cache it reads)
-  const water = createWater(sunDir);
+  const water = createWater(sunDir, quality.waterSegments);
   scene.add(water.water);
 
   // 3. time of day (depends on scene + water's sky-colour uniform)
@@ -77,7 +88,8 @@ export function initWorld(wrap: HTMLElement): World {
   scene.add(createSeafloor(WORLD.x0, WORLD.z0, WORLD.size));
 
   // 5. islands + vegetation + runway
-  scene.add(createIslands());
+  const islands = createIslands();
+  scene.add(islands.group);
 
   // 6. US-1 / Seven Mile Bridge
   const bridge = createBridge();
@@ -89,8 +101,10 @@ export function initWorld(wrap: HTMLElement): World {
   // 8. coral
   scene.add(createCoral());
 
-  // 9. clouds
-  const clouds = createClouds();
+  // 9. clouds (one InstancedMesh — see world/clouds.ts header; count fixed at boot per the
+  // initial quality tier since, being a single draw call either way, it isn't worth a rebuild
+  // on every quality change the way water tessellation or shadows are).
+  const clouds = createClouds(quality.cloudInstances);
   scene.add(clouds.group);
   tod.setCloudMat(clouds.material);
 
@@ -117,6 +131,80 @@ export function initWorld(wrap: HTMLElement): World {
   const spot = findClearSpot(SPAWN_X, spawnZ, { draft: boatSpec.draft, len: boatSpec.len, dockRects, pilings }, { x: SPAWN_X, z: spawnZ });
   let curState: BoatState = createBoatState(spot.x, spot.z, SPAWN_H);
   model.group.position.set(curState.x, curState.y, curState.z);
+
+  // 12b. cascaded shadows + post-processing (docs/ARCHITECTURE.md Part 2 items 2 and 5). Built
+  // after every other scene.add() above so applyToSubtree's one traversal catches everything —
+  // see core/shadows.ts's header for why the water material needs the separate registration call.
+  const shadowKey = (s: QualitySettings['shadows']): string => `${s.enabled}:${s.cascades}:${s.mapSize}:${s.maxFar}`;
+  let shadows = createCascadedShadows(camera, scene, sunDir, quality.shadows);
+  let curShadowKey = shadowKey(quality.shadows);
+  shadows.registerCustomMaterial(water.material, water.baseOnBeforeCompile);
+  shadows.registerCustomMaterial(islands.frondMaterial, islands.frondBaseCompile);
+  shadows.applyToSubtree(scene);
+  let postfx = createPostFX(renderer, scene, camera, quality.post);
+  const profiler = createProfiler();
+  // The postprocessing composer issues several internal renderer.render() calls per frame
+  // (RenderPass, an optional NormalPass for SSAO, the final EffectPass blit); with autoReset left
+  // on, renderer.info resets on each of those and profiler.sample would only ever see the last
+  // (tiny, full-screen-quad) one. Reset it ourselves once per frame instead, right before
+  // postfx.render(), so the counts profiler.sample reads after are the frame's real total.
+  renderer.info.autoReset = false;
+
+  function setQualityLabels(tier: QualityTier, announce: boolean): void {
+    const Tier = tier[0].toUpperCase() + tier.slice(1);
+    const b1 = document.getElementById('btnQuality'); if (b1) b1.textContent = '⚙ ' + Tier;
+    const b2 = document.getElementById('btnQualityStart'); if (b2) b2.textContent = 'Quality: ' + Tier;
+    if (announce) toast('Quality: ' + Tier);
+  }
+  function applyQuality(tier: QualityTier, announce = true): void {
+    quality = getQualitySettings(tier);
+    saveTier(tier);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality.pixelRatioCap));
+    (scene.fog as THREE.Fog).far = quality.fogFar;
+    water.setTessellation(quality.waterSegments);
+    // Only tear down and recreate the CSM lights if their shape actually changed. Disposing and
+    // recreating DirectionalLights bumps three's internal light-state version even when the
+    // resulting light *count* is unchanged (e.g. Medium -> High are both 1 cascade), which can
+    // desync a material's cached WebGLProgram from its uniforms for one frame — rebuilding only
+    // when something shadow-relevant truly changed avoids that churn entirely in the common case.
+    const nextShadowKey = shadowKey(quality.shadows);
+    if (nextShadowKey !== curShadowKey) {
+      curShadowKey = nextShadowKey;
+      shadows.dispose();
+      shadows = createCascadedShadows(camera, scene, sunDir, quality.shadows);
+      shadows.registerCustomMaterial(water.material, water.baseOnBeforeCompile);
+      shadows.registerCustomMaterial(islands.frondMaterial, islands.frondBaseCompile);
+      shadows.applyToSubtree(scene);
+      // Disposing+recreating the CSM's DirectionalLights bumps three's internal light-state
+      // version even for materials whose own cache key doesn't change, which can (rarely) leave a
+      // material's cached WebGLProgram attached with a stale uniforms object for one frame — see
+      // this project's report. Forcing every material to forget its cached program (so the next
+      // getProgram() call treats it as brand new and re-runs onBeforeCompile unconditionally)
+      // closes that window entirely. `renderer.properties` is undocumented-but-public three
+      // internals (WebGLProperties), hence the cast.
+      const rendererProps = (renderer as unknown as { properties: { remove(o: THREE.Material): void } }).properties;
+      scene.traverse((obj) => {
+        if (!(obj instanceof THREE.Mesh) && !(obj instanceof THREE.InstancedMesh)) return;
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+        for (const m of mats) rendererProps.remove(m);
+      });
+    }
+    postfx.dispose();
+    postfx = createPostFX(renderer, scene, camera, quality.post);
+    resize();
+    setQualityLabels(tier, announce);
+  }
+  setQualityLabels(quality.tier, false);
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'KeyP') profiler.toggle();
+    if (e.code === 'KeyG') applyQuality(QUALITY_TIERS[(QUALITY_TIERS.indexOf(quality.tier) + 1) % QUALITY_TIERS.length]);
+  });
+  document.getElementById('btnQuality')?.addEventListener('click', () => {
+    applyQuality(QUALITY_TIERS[(QUALITY_TIERS.indexOf(quality.tier) + 1) % QUALITY_TIERS.length]);
+  });
+  document.getElementById('btnQualityStart')?.addEventListener('click', () => {
+    applyQuality(QUALITY_TIERS[(QUALITY_TIERS.indexOf(quality.tier) + 1) % QUALITY_TIERS.length]);
+  });
 
   // 13. camera + input
   const camState = createCamState();
@@ -177,6 +265,7 @@ export function initWorld(wrap: HTMLElement): World {
     scene.remove(model.group);
     model = makeBoat(spec, { lightMats: tod.lightMats, todK: tod.getK(), mfdTex: electronics.mfdTex, gpsTex: electronics.gpsTex, sonTex: electronics.sonTex });
     scene.add(model.group);
+    shadows.applyToSubtree(model.group);
     const label = document.getElementById('gBoat');
     if (label) label.textContent = (spec.nickname ? '"' + spec.nickname + '" · ' : '') + spec.brand + ' ' + spec.name + ' · ' + spec.power;
   }
@@ -267,6 +356,7 @@ export function initWorld(wrap: HTMLElement): World {
 
     water.recenter(renderState.x, renderState.z);
     water.update(simTime, Math.max(sw * 1.1, ch), sw, ch);
+    islands.update(simTime);
     tod.update(clamped);
 
     const amp = ampAt(renderState.x, renderState.z);
@@ -278,14 +368,26 @@ export function initWorld(wrap: HTMLElement): World {
       b.position.y = sampleWaterHeight(curState, b.position.x, b.position.z, simTime, ampAt(b.position.x, b.position.z), sw, ch) - 0.05;
     }
 
-    updateCamera(clamped, { camera, sky: sceneCtx.sky, sunDisc: sceneCtx.sunDisc, sun: sceneCtx.sun, sunDir }, camState, fpState, model, renderState, game.running, boatSpec.len);
+    updateCamera(clamped, { camera, sky: sceneCtx.sky, sunDisc: sceneCtx.sunDisc, sunDir }, camState, fpState, model, renderState, game.running, boatSpec.len);
     electronics.update(clamped, simTime, fpState.driveOn);
     if (game.running) {
       updateHUD(clamped, curState, { boatLabel: hudBoatLabel(boatSpec), draft: boatSpec.draft, running: game.running });
       minimap.draw(simTime, curState);
     }
 
-    renderer.render(scene, camera);
+    // Cascades reposition from the camera's up-to-date matrix (updateCamera just finalized it)
+    // and the sun's current colour/intensity (time-of-day.ts mutated sceneCtx.sun above).
+    shadows.setLight(sceneCtx.sun.color, sceneCtx.sun.intensity);
+    shadows.update(sunDir);
+    // Cheap (a handful of Box3/uniform updates) and keeps the per-material cameraNear/shadowFar
+    // uniforms in sync with camera.near, which toggles between drive views (entities/camera.ts).
+    shadows.updateFrustums();
+    renderer.info.reset();
+    postfx.render(clamped);
+    // Real elapsed frame time (`dt`, pre-physics-clamp), not `clamped` — the latter is hard-capped
+    // at 50 ms for the physics accumulator and would make the HUD misreport every real frame
+    // slower than 20 fps as exactly 20 fps.
+    profiler.sample(dt, renderer, quality.tier);
   }
 
   function resize(): void {
@@ -293,6 +395,8 @@ export function initWorld(wrap: HTMLElement): World {
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
+    postfx.setSize(w, h);
+    shadows.updateFrustums();
   }
 
   return { resize, frame, renderer };

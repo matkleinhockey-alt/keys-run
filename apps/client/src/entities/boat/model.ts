@@ -20,6 +20,7 @@ import {
 import { addHelmDisplay, addScreens } from './electronics.js';
 import { usFlagTex, jollyRogerTex, makeFlag, glowTex, quiltTex, type Flag } from './decor-textures.js';
 import { lerp } from '../../core/math.js';
+import { normalTex, grainTex } from '../../core/textures.js';
 import type { LightMatEntry } from '../../core/time-of-day.js';
 
 interface HumanStub { group: THREE.Group; hipY: number; pose(a: THREE.Vector3, b: THREE.Vector3): void }
@@ -71,7 +72,14 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
   const box = (w: number, h: number, d: number, c: number, x: number, y: number, z: number, o?: Partial<THREE.MeshStandardMaterialParameters>) =>
     add(new THREE.Mesh(new THREE.BoxGeometry(w, h, d), M(c, o)), x, y, z);
 
-  const hullMat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.28, metalness: 0.08, side: THREE.DoubleSide });
+  // Part 2 item 6 ("Materials"): the hull was flat vertex-colour with no texture at all — a
+  // procedural gelcoat micro-bump + roughness grain (same noise field world/water.ts's ripples use)
+  // reads as a real painted/moulded surface under the CSM-lit sun instead of a uniform plastic flat.
+  const hullMat = new THREE.MeshStandardMaterial({
+    vertexColors: true, flatShading: true, roughness: 0.28, metalness: 0.08, side: THREE.DoubleSide,
+    normalMap: normalTex([6, 18], 0.7), normalScale: new THREE.Vector2(0.12, 0.12),
+    roughnessMap: grainTex([6, 18], 0.75, 1.05),
+  });
   if (H.cat) {
     const Bs = B * 0.33;
     const Hs: HullSpec = { ...H, F: H.tunnel! + 0.2, spring: 0, entry: 0.55, dr0: H.dr0 + 4, dr1: H.dr1 };
@@ -358,20 +366,28 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
   lights = new THREE.Group();
   g.add(lights);
   {
-    const gm = new THREE.MeshBasicMaterial({ map: glowTex(), color: UWC, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.6 });
+    // r186's colour-managed additive blending composites noticeably hotter than r128's pre-
+    // color-management pipeline did for the same opacity (8 overlapping glow planes, summed in
+    // correct linear light instead of naive gamma space) — opacity trimmed down to match the old,
+    // subtler glow instead of a flood-lit patch of water.
+    const gm = new THREE.MeshBasicMaterial({ map: glowTex(), color: UWC, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.22 });
     const pm = new THREE.MeshBasicMaterial({ color: new THREE.Color(UWC).lerp(new THREE.Color(0xffffff), 0.65) });
-    deps.lightMats.push({ m: gm, day: 0.55, night: 1 });
-    gm.opacity = lerp(0.55, 1, deps.todK);
+    deps.lightMats.push({ m: gm, day: 0.22, night: 0.5 });
+    gm.opacity = lerp(0.22, 0.5, deps.todK);
     const spots: Array<[number, number]> = [];
     for (const t of [0.08, 0.32, 0.58]) for (const sx of [-1, 1]) { const st3 = hullStation(H, L, B, t); spots.push([sx * (st3.b + 0.05), st3.z]); }
     const S0b = hullStation(H, L, B, 0);
     for (const x of [-0.5, 0.5]) spots.push([x * B * 0.6, S0b.z + 0.3]);
+    // r186's shadow-map-free point-light attenuation is now always the physically-correct inverse-
+    // square/decay curve (legacy r128 defaulted to a softer, non-physical cutoff) — these read much
+    // dimmer at the same nominal intensity than they did pre-upgrade, so they're boosted ~3x here to
+    // match the old glow radius/brightness at night and underwater.
     for (const sx of H.cat ? [-1, 1] : [0]) {
-      const pl = new THREE.PointLight(UWC, 2, 7, 1.4);
+      const pl = new THREE.PointLight(UWC, 6, 7, 1.4);
       pl.position.set(sx * B * 0.3, -0.45, S0b.z + 0.7);
       lights.add(pl);
     }
-    { const pl = new THREE.PointLight(UWC, 1.4, 6, 1.6); pl.position.set(0, -0.9, S0b.z - L * 0.18); lights.add(pl); }
+    { const pl = new THREE.PointLight(UWC, 4.2, 6, 1.6); pl.position.set(0, -0.9, S0b.z - L * 0.18); lights.add(pl); }
     spots.forEach(([x, z]) => {
       const pk = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), pm);
       pk.position.set(x, -0.25, z);
@@ -502,7 +518,7 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
       d.position.set(dx * tw, topY - 0.07, tz + dz * tl);
       cabin.add(d);
     }
-    cabinLight = new THREE.PointLight(0x2a5cff, 0.5, Math.max(7, L * 0.8), 1.8);
+    cabinLight = new THREE.PointLight(0x2a5cff, 1.5, Math.max(7, L * 0.8), 1.8);
     cabinLight.position.set(0, topY - 0.4, tz);
     cabin.add(cabinLight);
   }
@@ -527,7 +543,7 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
       stepLight.rotation.y = Math.PI;
       cabin.add(stepLight);
     }
-    cabinLight2 = new THREE.PointLight(0x1a3cff, 0.4, Math.max(6, L * 0.6), 2);
+    cabinLight2 = new THREE.PointLight(0x1a3cff, 1.2, Math.max(6, L * 0.6), 2);
     cabinLight2.position.set(0, soleAt(L * 0.18) + 0.35, L * 0.18);
     cabin.add(cabinLight2);
   }

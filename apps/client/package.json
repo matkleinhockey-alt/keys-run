@@ -2,7 +2,7 @@
   "name": "@keysrun/client",
   "version": "0.0.1",
   "private": true,
-  "description": "Keys Run client app (Phase 0b) — Vite + TypeScript + three.js r128. See docs/ARCHITECTURE.md. Pinned to r128 deliberately: isolates the module port from the later r186 upgrade.",
+  "description": "Keys Run client app (Phase 0b) — Vite + TypeScript + three.js r186. See docs/ARCHITECTURE.md.",
   "type": "module",
   "scripts": {
     "predev": "pnpm --filter @keysrun/shared run build",
@@ -16,13 +16,14 @@
   },
   "dependencies": {
     "@keysrun/shared": "workspace:*",
-    "three": "0.128.0"
+    "postprocessing": "^6.39.5",
+    "three": "0.186.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
-    "@types/three": "0.128.0",
+    "@types/three": "0.186.0",
     "playwright": "1.63.0",
-    "typescript": "5.6.3",
+    "typescript": "^5.9.3",
     "vite": "^5.4.11",
     "vitest": "^2.1.8"
   }
