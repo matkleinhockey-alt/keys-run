@@ -14,12 +14,21 @@
  * `THREE.Vector4[]` purely for the GPU uniform, and `syncWakeUniform` copies the former into the
  * latter once per frame (see entities/boat/visuals.ts). Only one boat exists in Phase 0, so this
  * is exactly legacy's single-boat behaviour.
+ *
+ * Underwater (docs/ARCHITECTURE.md "The underwater world" → "Rendering"): the plane is now
+ * `THREE.DoubleSide` with a `gl_FrontFacing` branch in `baseOnBeforeCompile`'s fog_fragment hook —
+ * front faces (camera above the surface) render exactly as before; back faces (camera below,
+ * looking up) render Snell's window / total-internal-reflection instead. The *other* half of the
+ * underwater look — per-channel light extinction for every material in the scene, caustics, god
+ * rays, marine snow and the surface-crossing transition — lives in `world/underwater/**`, not
+ * here; this file only owns the water plane's own material.
  */
 import * as THREE from 'three';
 import { DEPTHG, INLETG, DG, DGN, DG0X, DG0Z } from '@keysrun/shared/sim/depth-grid';
 import { WAKE_N } from '@keysrun/shared/sim/boat';
 import { isTouch } from '../core/scene.js';
 import { waterNoiseTex } from '../core/textures.js';
+import { WATER_IOR, SNELL_CRITICAL_ANGLE } from './underwater/depth-bands.js';
 
 /** legacy `DSTOPS`/`depthRGB` (index.html:611-616) — unused elsewhere in legacy too (the GPU
  * shader has its own GLSL `depthCol`), kept for fidelity/future CPU-side use. */
@@ -117,7 +126,11 @@ export function createWater(sunDir: THREE.Vector3, waterSegments?: number): Wate
     uDepthBox: { value: new THREE.Vector4(DG0X, DG0Z, DG, DGN) }, uWakeP: { value: wakeVecs },
   };
 
-  const waterMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.16, metalness: 0.05, transparent: true });
+  // DoubleSide: until now this plane only ever rendered front faces, which is literally why there
+  // was no "underwater" — look up from below y=0 and the water simply vanished (docs/ARCHITECTURE.md
+  // "Rendering"). The back face gets its own branch in baseOnBeforeCompile below (Snell's window /
+  // total-internal-reflection "mirror"), driven by gl_FrontFacing, instead of the normal lit look.
+  const waterMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.16, metalness: 0.05, transparent: true, side: THREE.DoubleSide });
   // Named (not an inline arrow assigned straight to onBeforeCompile) because core/shadows.ts's
   // CSM integration needs a stable reference to re-wrap from on every quality-tier switch — see
   // that module's header for why re-wrapping from "whatever onBeforeCompile is currently set"
@@ -186,6 +199,43 @@ float wakeH(vec2 P,inout vec2 grad,inout float foam){ float h=0.;
     normal=normalize(normal+(viewMatrix*vec4(rippleW,0.)).xyz);`)
       .replace('#include <fog_fragment>', `
     vec3 Vw=normalize(cameraPosition-vWP); vec3 Nw=normalize(vWN+rippleW*1.4);
+    if (!gl_FrontFacing) {
+      // Underside of the surface (camera below y=0 looking up) — Snell's window. ARCHITECTURE.md:
+      // "looking up, the entire sky compresses into a ~96 deg cone; outside it the surface
+      // totally-internally-reflects the seabed." Nw above is the SAME ripple-perturbed normal the
+      // top-side branch uses for its fresnel/specular, which is what makes this read as a shifting
+      // mirror rather than a static one — the window's shape visibly ripples with the same swell.
+      vec3 rayDir=-Vw;                              // camera -> fragment, continuing up through the interface
+      float cosThetaW=clamp(dot(rayDir,Nw),-1.,1.);
+      float thetaW=acos(cosThetaW);
+      float windowT=clamp(thetaW/${SNELL_CRITICAL_ANGLE.toFixed(5)},0.,1.);
+      // refract()'s normal must point back into the medium the ray is leaving (water), i.e. -Nw —
+      // see this file's header derivation; GLSL returns exactly vec3(0) on total internal reflection.
+      vec3 refr=refract(rayDir,-Nw,${(1 / WATER_IOR).toFixed(5)});
+      if (dot(refr,refr) < 1e-5) {
+        // Outside the window: TIR, "the surface reflects the seabed". We don't have a real
+        // offscreen reflection buffer (that's the whole rest of the underwater scene, mirrored —
+        // out of budget for a single flat plane), so approximate it with the same inscatter tint
+        // the global fog override blends toward at this depth, lightly animated by the existing
+        // ripple-breakup sample so it still visibly shifts rather than reading as a flat colour.
+        vec3 deepTint=vec3(.04,.1,.15);
+        float shimmer=texture2D(uNorm,vWP.xz*.05+reflect(rayDir,Nw).xz*.02+vec2(uTime*.012,-uTime*.009)).a;
+        gl_FragColor=vec4(deepTint*(.55+.65*shimmer),1.);
+      } else {
+        // Inside the window: refract into the compressed sky. uSky already tracks time-of-day
+        // (createTimeOfDay writes it every frame — see game/world.ts), so dawn/noon/dusk come along
+        // for free without this file needing its own copy of the sky palette.
+        vec3 skyDir=normalize(refr);
+        vec3 zenithC=uSky*.78;
+        vec3 rimC=mix(uSky,vec3(1.,.99,.95),.6);
+        vec3 skyCol=mix(zenithC,rimC,pow(windowT,1.8));
+        float sunCos=max(dot(skyDir,uSunDir),0.);
+        skyCol+=vec3(1.,.92,.78)*pow(sunCos,140.)*1.6;
+        skyCol+=vec3(1.,.97,.92)*pow(sunCos,1800.)*5.;
+        skyCol*=.94+.12*tz.b; // same glassy breakup sample the top-side colour ramp already reads
+        gl_FragColor=vec4(skyCol,1.);
+      }
+    } else {
     float fres=.03+.97*pow(1.-clamp(dot(Nw,Vw),0.,1.),5.);
     gl_FragColor.rgb=mix(gl_FragColor.rgb,uSky,fres*.7);
     gl_FragColor.a=mix(gl_FragColor.a,1.,fres);
@@ -200,6 +250,7 @@ float wakeH(vec2 P,inout vec2 grad,inout float foam){ float h=0.;
     // entities/boat/visuals.ts's comments for that fix.
     float spk=pow(max(dot(Nw,normalize(Vw+uSunDir)),0.),380.);
     gl_FragColor.rgb+=vec3(1.,.95,.84)*spk*2.4;
+    }
     #include <fog_fragment>`);
   };
   waterMat.onBeforeCompile = baseOnBeforeCompile;

@@ -24,6 +24,8 @@ import { createCascadedShadows } from '../core/shadows.js';
 import { createPostFX } from '../core/postfx.js';
 import { createProfiler } from '../ui/profiler.js';
 import { createWater } from '../world/water.js';
+import { installUnderwaterFog } from '../world/underwater/fog-override.js';
+import { createUnderwaterWorld } from '../world/underwater/index.js';
 import { createSeafloor } from '../world/seafloor.js';
 import { createIslands } from '../world/islands.js';
 import { createBridge } from '../world/bridge.js';
@@ -66,6 +68,11 @@ function hullOf(spec: Boat) {
 }
 
 export function initWorld(wrap: HTMLElement): World {
+  // 0. Underwater global fog override (docs/ARCHITECTURE.md "The underwater world" →
+  // "Rendering") — must run before anything compiles a shader that includes `<fog_fragment>`, so
+  // first thing, before any create*() below.
+  installUnderwaterFog();
+
   // 1. renderer / scene / sky / lighting
   const sceneCtx = createScene(wrap);
   const { renderer, scene, camera, sunDir } = sceneCtx;
@@ -142,6 +149,14 @@ export function initWorld(wrap: HTMLElement): World {
   shadows.registerCustomMaterial(islands.frondMaterial, islands.frondBaseCompile);
   shadows.applyToSubtree(scene);
   let postfx = createPostFX(renderer, scene, camera, quality.post);
+
+  // 12c. underwater world (docs/ARCHITECTURE.md "The underwater world" → "Rendering") — marine
+  // snow, the surface-crossing transition, and the caustics/lens-wetting/(High+) god-rays post
+  // effects appended onto postfx's composer. Built after postfx so attachPostFX has a composer to
+  // attach to; re-attached below every time applyQuality() rebuilds that composer.
+  const underwater = createUnderwaterWorld({ scene, camera, renderer, sunDisc: sceneCtx.sunDisc });
+  underwater.attachPostFX(postfx.composer, quality.tier);
+
   const profiler = createProfiler();
   // The postprocessing composer issues several internal renderer.render() calls per frame
   // (RenderPass, an optional NormalPass for SSAO, the final EffectPass blit); with autoReset left
@@ -191,6 +206,7 @@ export function initWorld(wrap: HTMLElement): World {
     }
     postfx.dispose();
     postfx = createPostFX(renderer, scene, camera, quality.post);
+    underwater.attachPostFX(postfx.composer, quality.tier);
     resize();
     setQualityLabels(tier, announce);
   }
@@ -369,6 +385,9 @@ export function initWorld(wrap: HTMLElement): World {
     }
 
     updateCamera(clamped, { camera, sky: sceneCtx.sky, sunDisc: sceneCtx.sunDisc, sunDir }, camState, fpState, model, renderState, game.running, boatSpec.len);
+    // After updateCamera() so the debug-dive hook (or, eventually, the real diver camera) has the
+    // final say on camera.position for this frame — see world/underwater/index.ts's header.
+    underwater.update(clamped);
     electronics.update(clamped, simTime, fpState.driveOn);
     if (game.running) {
       updateHUD(clamped, curState, { boatLabel: hudBoatLabel(boatSpec), draft: boatSpec.draft, running: game.running });
