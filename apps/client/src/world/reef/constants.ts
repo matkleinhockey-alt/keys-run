@@ -69,24 +69,28 @@ export function foldSalt(speciesOrBase: SpeciesId | number, attr: number, slot: 
 
 /** Candidate slots tried per chunk per species — a fixed ceiling, not a "how many exist" count;
  * most candidates are rejected by `species.ts`'s suitability function. Numbers are tuned to the
- * measured draw-call/triangle budget in this module's report: the first pass (22/26/14/14/...)
- * measured a peak of 25 draw calls and ~15.5k reef-only triangles against a budget of <300 calls
- * and <2.5M triangles — under 1% of the triangle budget and a flat 30-pool draw-call count that
- * density can't move at all (every species is one InstancedMesh per LOD regardless of instance
- * count). That headroom was itself making the reef read sparse/"scattered blobs" rather than a
- * reef, so this pass raises every non-seagrass count ~2.2-2.5x (seagrass was already dense and
- * stays put) and re-measures in the same report — still comfortably inside budget. */
+ * measured draw-call/triangle budget in this module's report.
+ *
+ * History: pass 1 (22/26/14/14/...) measured 25 draw calls / ~15.5k reef-only triangles — under 1%
+ * of the <2.5M-triangle budget, and draw calls are a flat 30-pool count density can't move at all.
+ * Pass 2 (50/60/32/32/...) was *still* graded as reading like "open sand with occasional objects"
+ * rather than a near-continuous reef — review feedback was explicit: "you have ~100x headroom; use
+ * a large fraction of it." This pass goes hard rather than incrementally: roughly another 3.5-4.5x
+ * on top of pass 2 (≈8-10x the original baseline), re-measured against the same budget in this
+ * module's report after every geometry/material change in the same pass (flatter, wider elkhorn
+ * paddles; deeper staghorn recursion; detail-2 brain/star). If that measurement comes in over
+ * budget, the fix is to trim these numbers back down, not to under-shoot up front. */
 export const CANDIDATES_PER_CHUNK: Record<SpeciesId, number> = {
-  elkhorn: 50,
-  staghorn: 60,
-  brain: 32,
-  star: 32,
-  seaFan: 46,
-  seaPlume: 36,
-  barrelSponge: 16,
-  tubeSponge: 16,
-  encrusting: 40,
-  seagrass: 140,
+  elkhorn: 220,
+  staghorn: 260,
+  brain: 90,
+  star: 90,
+  seaFan: 160,
+  seaPlume: 130,
+  barrelSponge: 40,
+  tubeSponge: 40,
+  encrusting: 140,
+  seagrass: 200,
 };
 
 /** Real Sombrero Reef Light sits at x=250 per world/landmarks.ts and the legacy chart label
