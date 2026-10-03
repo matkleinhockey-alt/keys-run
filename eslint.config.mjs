@@ -28,7 +28,10 @@ const noThreeInShared = {
 
 export default [
   {
-    ignores: ['**/dist/**', '**/node_modules/**', 'legacy/**', '**/.no-three-out/**'],
+    // `.claude/worktrees/**` holds full checkouts used by background agents. Without this,
+    // `eslint .` at the repo root lints every agent's in-progress code and fails the build on
+    // work that isn't even on this branch.
+    ignores: ['**/dist/**', '**/node_modules/**', 'legacy/**', '**/.no-three-out/**', '.claude/**'],
   },
   {
     files: ['**/*.ts', '**/*.tsx'],
