@@ -64,6 +64,12 @@ export interface UnderwaterWorld {
    * CustomEvent, detail `{underwater: boolean}`) — for the audio agent's lowpass crossfade. This
    * module does not touch audio itself. Returns an unsubscribe function. */
   onSurfaceCross(cb: (goingUnder: boolean) => void): () => void;
+  /** DEV/VERIFICATION HOOK ONLY (same convention as the `__uwDebug`/`__fishDebug` hooks
+   * elsewhere): live-reads the caustics effect's own uniforms so a Playwright script (or anyone
+   * debugging this pass) can directly confirm the postprocessing pipeline actually propagated
+   * `mainCamera` down to it, rather than inferring it from pixels. See `attachPostFX`'s own
+   * comment on `postEffectPass.mainCamera = camera` for the bug this caught. */
+  debugCaustics(): unknown;
   dispose(): void;
 }
 
@@ -86,6 +92,7 @@ export function createUnderwaterWorld(deps: UnderwaterDeps): UnderwaterWorld {
   // disagreeing is what was producing garbage world-positions and making caustics never appear at
   // all, confirmed by dumping the live compiled shader + its actual uniform values.
   let postEffectPass: EffectPass | null = null;
+  let causticsRef: CausticsEffect | null = null; // kept for debugCaustics() — see its own doc comment
 
   // --- Sky-dome hide + background swap once fully submerged. ---
   // Why this is needed on top of fog-override.ts's global `fog_fragment` override: that override
@@ -209,6 +216,7 @@ export function createUnderwaterWorld(deps: UnderwaterDeps): UnderwaterWorld {
     if (godRays) { scene.remove(godRays.lightMesh); godRays.dispose(); godRays = null; }
 
     const caustics = new CausticsEffect();
+    causticsRef = caustics; // debugCaustics() hook
     const wetting = new LensWettingEffect();
     lensWetting = wetting;
 
@@ -220,6 +228,22 @@ export function createUnderwaterWorld(deps: UnderwaterDeps): UnderwaterWorld {
     }
     postEffectPass = new EffectPass(camera, ...effects);
     composer.addPass(postEffectPass);
+    // ROOT CAUSE of caustics never rendering (not the near/far precision issue the previous
+    // session documented — that was real but not the actual blocker): `new EffectPass(camera,
+    // ...)` only threads `camera` into the pass's own `fullscreenMaterial`; it does NOT go
+    // through the pass's `mainCamera` setter, which is the only thing that propagates
+    // `effect.mainCamera = camera` down to each managed Effect (verified directly against
+    // node_modules/postprocessing's build/index.js: EffectPass's constructor builds
+    // `fullscreenMaterial` straight from the `camera` argument and never touches `this.mainCamera`).
+    // CausticsEffect.update() *is* called every frame regardless (EffectPass.render() calls
+    // `effect.update(...)` unconditionally), but its own `this.camera` field — only ever set by
+    // the `mainCamera` setter — stayed null forever, so that update() always early-returned,
+    // leaving `uwcCameraPos` frozen at its constructor default of (0,0,0). The caustics fragment
+    // shader's very first line is `uwCamDepth = max(0, -uwcCameraPos.y)`, so a permanently-zero
+    // `uwcCameraPos` makes `uwCamDepth` permanently 0, which trips the shader's own
+    // `uwCamDepth < 0.05` early-out on every pixel, every frame — caustics has been a no-op since
+    // it was written, regardless of camera near/far. One explicit assignment fixes it.
+    postEffectPass.mainCamera = camera;
   }
 
   return {
@@ -227,6 +251,23 @@ export function createUnderwaterWorld(deps: UnderwaterDeps): UnderwaterWorld {
     attachPostFX,
     isUnderwater() { return transition.isUnderwater(); },
     onSurfaceCross(cb) { return transition.onCross(cb); },
+    debugCaustics(): unknown {
+      if (!postEffectPass || !causticsRef) return { attached: false };
+      const matUniforms = (postEffectPass.fullscreenMaterial as THREE.ShaderMaterial).uniforms;
+      const cwPos = causticsRef.uniforms.get('uwcCameraPos')?.value as THREE.Vector3 | undefined;
+      return {
+        attached: true,
+        cameraPosition: camera.position.toArray(),
+        cameraNear: camera.near,
+        cameraFar: camera.far,
+        matCameraNear: matUniforms.cameraNear?.value,
+        matCameraFar: matUniforms.cameraFar?.value,
+        matTime: matUniforms.time?.value,
+        uwcCameraPos: cwPos ? cwPos.toArray() : null,
+        uwcTanHalfFovY: causticsRef.uniforms.get('uwcTanHalfFovY')?.value,
+        underwaterAmount: transition.underwaterAmount(),
+      };
+    },
     dispose() {
       scene.remove(marineSnow.points);
       marineSnow.dispose();

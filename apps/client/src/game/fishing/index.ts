@@ -29,6 +29,10 @@ export interface FishingSystemDeps {
   getBoat(): BoatState;
   onLanded(fish: LandedFish): void;
   onActionWhileCaught(): void;
+  /** True while the fishing Space/cast input should be ignored (game/world.ts passes
+   * `diver.mode === 'diver'` — Space doubles as the diver's ascend key, and this module's
+   * window-level listener has no idea diving exists; see input.ts's `isSuspended` doc comment). */
+  isSuspended?(): boolean;
 }
 
 export interface FishingSystem {
@@ -55,7 +59,7 @@ export function createFishing(deps: FishingSystemDeps): FishingSystem {
     onLanded: deps.onLanded,
     onActionWhileCaught: deps.onActionWhileCaught,
   });
-  const unbindInput = bindFishingInput(logic, deps.fp, deps.getBoat);
+  const unbindInput = bindFishingInput(logic, deps.fp, deps.getBoat, deps.isSuspended);
 
   function update(dt: number, t: number, boat: BoatState, sw: number, ch: number): void {
     logic.update(dt, t, boat, sw, ch);
