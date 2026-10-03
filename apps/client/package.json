@@ -1,0 +1,24 @@
+{
+  "name": "@keysrun/client",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Keys Run client app skeleton (Phase 0a) — Vite + TypeScript + three.js. No game code ported yet; see docs/ARCHITECTURE.md.",
+  "type": "module",
+  "scripts": {
+    "predev": "pnpm --filter @keysrun/shared run build",
+    "dev": "vite",
+    "prebuild": "pnpm --filter @keysrun/shared run build",
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "echo \"apps/client has no tests yet (Phase 0a skeleton) \" && exit 0",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@keysrun/shared": "workspace:*",
+    "three": "^0.186.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}
