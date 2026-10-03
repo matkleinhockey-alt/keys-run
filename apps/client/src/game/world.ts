@@ -39,6 +39,13 @@ import { applyBoatVisuals, sampleWaterHeight } from '../entities/boat/visuals.js
 import { createBoatInput, bindBoatInput, type BoatStateBox } from '../entities/boat/input.js';
 import { createCamState, createFpState, updateCamera, cycleView, bindCameraPointerControls } from '../entities/camera.js';
 
+import type { DiverEvent } from '@keysrun/shared/sim/diver';
+import { createDiverController, NEUTRAL_BOAT_INPUT } from '../entities/diver/controller.js';
+import { createDiverModel } from '../entities/diver/model.js';
+import { applyDiverVisuals } from '../entities/diver/visuals.js';
+import { updateDiverCamera } from '../entities/diver/camera.js';
+import { updateDiverHud, showDiverHud, clearBlackoutOverlay } from '../entities/diver/hud.js';
+
 import { updateHUD } from '../ui/hud.js';
 import { createMinimap } from '../ui/minimap.js';
 import { populateBoatCards, showHud, showStart } from '../ui/start.js';
@@ -198,6 +205,7 @@ export function initWorld(wrap: HTMLElement): World {
   window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyP') profiler.toggle();
     if (e.code === 'KeyG') applyQuality(QUALITY_TIERS[(QUALITY_TIERS.indexOf(quality.tier) + 1) % QUALITY_TIERS.length]);
+    if (e.code === 'KeyJ') toggleDive();
   });
   document.getElementById('btnQuality')?.addEventListener('click', () => {
     applyQuality(QUALITY_TIERS[(QUALITY_TIERS.indexOf(quality.tier) + 1) % QUALITY_TIERS.length]);
@@ -213,6 +221,42 @@ export function initWorld(wrap: HTMLElement): World {
 
   const input = createBoatInput();
   const stateBox: BoatStateBox = { state: curState };
+
+  // Diver (entities/diver/**): jump off the boat, free-dive, swim, climb back aboard. See
+  // controller.ts's header for the authority-handoff plan — the boat keeps stepping on a
+  // neutral input while its driver is over the side (see fixedStep below); the net agent wires
+  // real server-authoritative drift later behind that same seam.
+  const diver = createDiverController({ canvas: renderer.domElement });
+  const diverModel = createDiverModel();
+  diverModel.group.visible = false;
+  scene.add(diverModel.group);
+
+  function setDiveUI(diving: boolean): void {
+    document.getElementById('gauges')?.classList.toggle('hidden', diving);
+    document.getElementById('mapbox')?.classList.toggle('hidden', diving);
+    document.getElementById('scorebox')?.classList.toggle('hidden', diving);
+    if (isTouch()) {
+      document.getElementById('touch')?.classList.toggle('hidden', diving);
+      document.getElementById('touchDiver')?.classList.toggle('hidden', !diving);
+    }
+    showDiverHud(diving);
+    diverModel.group.visible = diving;
+    if (!diving) clearBlackoutOverlay();
+  }
+
+  function toggleDive(): void {
+    if (!game.running) return;
+    if (diver.mode === 'boat') {
+      diver.enterWater(stateBox.state.x, stateBox.state.z, stateBox.state.h);
+      setDiveUI(true);
+      toast('Overboard — WASD/mouse to swim and look, Space/Ctrl to ascend/descend, Shift to sprint. J to climb back aboard.');
+    } else {
+      if (!diver.canReboard) { toast('Too far from the boat to climb aboard.'); return; }
+      diver.requestReboard();
+      setDiveUI(false);
+    }
+  }
+  document.getElementById('btnDive')?.addEventListener('click', toggleDive);
 
   let seaIdx = 1; // legacy's initial `seaIdx=1` ("Choppy")
   let sw = 0.9, ch = 1; // legacy's initial SW/CH (index.html:435)
@@ -294,6 +338,7 @@ export function initWorld(wrap: HTMLElement): World {
   document.getElementById('btnMarina')?.addEventListener('click', () => {
     game.running = false;
     input.fwd = input.back = input.left = input.right = false;
+    if (diver.mode === 'diver') { diver.exitToBoat(); setDiveUI(false); }
     const lede = document.getElementById('lede');
     if (lede) lede.textContent = 'Switch boats any time.';
     const go = document.getElementById('btnGo');
@@ -318,7 +363,11 @@ export function initWorld(wrap: HTMLElement): World {
       t: simTime, hull: hullOf(boatSpec), sw, ch, worldBounds: WB, pilings, dockRects,
       canDrive: game.running, fightActive: false, fightTarget: null, lineOut: false, luigiOn: false,
     };
-    const next = stepBoat(stateBox.state, input, env, dt);
+    // While diving, the boat's "driver" is over the side: it keeps stepping (so it keeps
+    // existing, and keeps drifting under its own wave/current forces — stepBoat already applies
+    // those at zero throttle/steer) but never sees player input. See entities/diver/controller.ts.
+    const boatInput = diver.mode === 'diver' ? NEUTRAL_BOAT_INPUT : input;
+    const next = stepBoat(stateBox.state, boatInput, env, dt);
     stateBox.state = next;
     return next.events;
   }
@@ -328,9 +377,11 @@ export function initWorld(wrap: HTMLElement): World {
     acc += clamped;
     let steps = 0;
     const events: SimEvent[] = [];
+    const diverEvents: DiverEvent[] = [];
     while (acc >= DT && steps < 5) {
       prevState = stateBox.state;
       events.push(...fixedStep(DT));
+      diverEvents.push(...diver.step(simTime, DT, stateBox.state.x, stateBox.state.z));
       acc -= DT;
       steps++;
     }
@@ -368,11 +419,19 @@ export function initWorld(wrap: HTMLElement): World {
       b.position.y = sampleWaterHeight(curState, b.position.x, b.position.z, simTime, ampAt(b.position.x, b.position.z), sw, ch) - 0.05;
     }
 
-    updateCamera(clamped, { camera, sky: sceneCtx.sky, sunDisc: sceneCtx.sunDisc, sunDir }, camState, fpState, model, renderState, game.running, boatSpec.len);
-    electronics.update(clamped, simTime, fpState.driveOn);
-    if (game.running) {
-      updateHUD(clamped, curState, { boatLabel: hudBoatLabel(boatSpec), draft: boatSpec.draft, running: game.running });
-      minimap.draw(simTime, curState);
+    if (diver.mode === 'diver' && diver.state) {
+      // applyBoatVisuals above already kept the (drifting) boat's own transform/wake current —
+      // just not its camera/HUD, which the diver owns below.
+      applyDiverVisuals(diver.state, diverModel, diverEvents, { t: simTime });
+      updateDiverCamera(camera, diver.cam, diver.state, simTime, clamped);
+      updateDiverHud(diver.state, { canReboard: diver.canReboard });
+    } else {
+      updateCamera(clamped, { camera, sky: sceneCtx.sky, sunDisc: sceneCtx.sunDisc, sunDir }, camState, fpState, model, renderState, game.running, boatSpec.len);
+      electronics.update(clamped, simTime, fpState.driveOn);
+      if (game.running) {
+        updateHUD(clamped, curState, { boatLabel: hudBoatLabel(boatSpec), draft: boatSpec.draft, running: game.running });
+        minimap.draw(simTime, curState);
+      }
     }
 
     // Cascades reposition from the camera's up-to-date matrix (updateCamera just finalized it)

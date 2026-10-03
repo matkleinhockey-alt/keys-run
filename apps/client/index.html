@@ -34,10 +34,27 @@
       <button id="btnSun" aria-label="Sunset mode">🌅</button>
       <button id="btnCam" aria-label="Switch camera view">🎥 3rd</button>
       <button id="btnQuality" aria-label="Cycle graphics quality">⚙ —</button>
+      <button id="btnDive" aria-label="Jump in and free-dive">🤿 Dive</button>
     </div>
     <div id="hint"></div>
     <div id="toast"></div>
+
+    <!-- Diver HUD (entities/diver/hud.ts) — hidden while piloting the boat. -->
+    <div id="diverHud" class="hidden">
+      <div id="breathBar" class="panel">
+        <div class="breathrow"><span>Air</span><b id="airPct">100%</b></div>
+        <div class="breathmeter"><i id="breathFill"></i></div>
+        <div class="row"><span>Depth</span><b id="diveDepth">0.0 m</b></div>
+        <div id="ascentWarn"></div>
+        <div id="narcosisNote">Narcosis — the deep plays tricks down here</div>
+      </div>
+      <button id="reboardHint" class="hidden" aria-label="Climb back aboard">⬆ Press J to climb aboard</button>
+    </div>
   </div>
+
+  <!-- Full-screen tunnel-vision/blackout vignette (entities/diver/hud.ts). Opacity-driven, not
+       hidden-toggled — see style.css's #blackout rule for why. -->
+  <div id="blackout"></div>
 
   <div id="touch" class="hidden">
     <button class="tbtn" id="tL" aria-label="Steer left">◀</button>
@@ -45,6 +62,16 @@
     <button class="tbtn" id="tUp" aria-label="Throttle forward">▲</button>
     <button class="tbtn" id="tDn" aria-label="Reverse">▼</button>
     <button class="tbtn" id="tView" aria-label="Switch view">👁</button>
+  </div>
+
+  <div id="touchDiver" class="hidden">
+    <button class="tbtn" id="tdL" aria-label="Swim left">◀</button>
+    <button class="tbtn" id="tdR" aria-label="Swim right">▶</button>
+    <button class="tbtn" id="tdUp" aria-label="Swim forward">▲</button>
+    <button class="tbtn" id="tdDn" aria-label="Swim backward">▼</button>
+    <button class="tbtn" id="tdAsc" aria-label="Ascend">⬆</button>
+    <button class="tbtn" id="tdDesc" aria-label="Descend">⬇</button>
+    <button class="tbtn" id="tdSprint" aria-label="Sprint">⚡</button>
   </div>
 
   <div id="start" class="overlay">
@@ -55,7 +82,7 @@
       <div class="gorow">
         <button class="go" id="btnGo">Leave the dock</button>
         <button class="secondary" id="btnQualityStart" aria-label="Cycle graphics quality">Quality: —</button>
-        <div class="controls"><kbd>W</kbd> <kbd>S</kbd> throttle · <kbd>A</kbd> <kbd>D</kbd> steer · <kbd>T</kbd> trim (then ▲▼) · <kbd>I</kbd> motors on/off · <kbd>U</kbd> gear D/N/R · <kbd>O</kbd> sunset · <kbd>1</kbd> camera view · <kbd>H</kbd> sea state · <kbd>C</kbd> zoom camera · <kbd>G</kbd> graphics quality · <kbd>P</kbd> perf stats</div>
+        <div class="controls"><kbd>W</kbd> <kbd>S</kbd> throttle · <kbd>A</kbd> <kbd>D</kbd> steer · <kbd>T</kbd> trim (then ▲▼) · <kbd>I</kbd> motors on/off · <kbd>U</kbd> gear D/N/R · <kbd>O</kbd> sunset · <kbd>1</kbd> camera view · <kbd>H</kbd> sea state · <kbd>C</kbd> zoom camera · <kbd>G</kbd> graphics quality · <kbd>P</kbd> perf stats · <kbd>J</kbd> dive in / climb aboard</div>
       </div>
     </div>
   </div>
