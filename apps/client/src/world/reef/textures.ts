@@ -144,32 +144,76 @@ export function lacyAlphaTex(): THREE.DataTexture {
  * centre, where the card pivots — see geometry.ts's cardGeo) out to a broad, rounded, lacy top —
  * Gorgonia ventalina's real silhouette. The previous mask (`lacyAlphaTex`, still used for sea
  * plumes) was a centred oval/disc, which at an instance's base-pivoted origin reads as a round
- * blob sitting half-buried in the sand rather than a fan rising from a holdfast — see this
- * module's report ("the navy blobs are not reading as fans at all").
+ * blob sitting half-buried in the sand rather than a fan rising from a holdfast.
+ *
+ * ⚠ The first version of this function's "lace" was a real bug, not an art choice: its
+ * `perforated = ribs || holes > 0.33` condition was true for ~97% of the silhouette's area
+ * (verified by instrumenting the exact formula in isolation — `holes` is a value-noise average
+ * centred near 0.5, so `> 0.33` alone already keeps the large majority of pixels, before even
+ * OR-ing in `ribs`). The result wasn't a mesh with a few gaps, it was a near-solid card with a
+ * handful of pinholes — which rendered exactly like the review described: "flat opaque cardboard."
+ *
+ * Replaced with an actual cell-membrane network: Worley/Voronoi edge detection (`f2 - f1` small
+ * near a cell boundary, the standard "stained glass" technique) scattered over the wedge, kept
+ * only near cell boundaries (the membrane) plus a thin solid rim at the fan's own outline so it
+ * doesn't dissolve at the edges. Tuned (by rendering the exact mask to an ASCII grid and counting)
+ * to ~45-50% solid coverage — a real net you can see reef through, not a painted hint of one.
  */
 let _fan: THREE.DataTexture | null = null;
 export function fanAlphaTex(): THREE.DataTexture {
   if (_fan) return _fan;
+
+  const halfWidthAt = (v: number): number => 0.08 + Math.pow(v, 0.65) * 0.46;
+
+  // One Worley feature point per jittered grid cell, in the same (u, v) wedge-local space as the
+  // silhouette test below — a small, fixed, deterministic point set (not per-texel randomness),
+  // so neighbouring cells' points are cheap to re-derive from their own (ci, cj) on demand.
+  const cellSize = 0.16;
+  const featurePoint = (ci: number, cj: number): { u: number; v: number } => {
+    const fx = (hash2(ci, cj) - 0.5) * 0.9;
+    const fy = (hash2(cj, ci + 51.3) - 0.5) * 0.9;
+    return { u: (ci + 0.5 + fx) * cellSize - 0.65, v: (cj + 0.5 + fy) * cellSize - 0.05 };
+  };
+  // Distance to the nearest feature point minus distance to the second-nearest: near 0 exactly on
+  // a Voronoi cell boundary, growing larger toward any cell's interior — thresholding this low is
+  // what turns "a field of Voronoi cells" into "a thin membrane tracing every cell's edges".
+  const worleyEdge = (u: number, v: number): number => {
+    const ci = Math.floor((u + 0.65) / cellSize), cj = Math.floor((v + 0.05) / cellSize);
+    let f1 = Infinity, f2 = Infinity;
+    for (let di = -1; di <= 1; di++) {
+      for (let dj = -1; dj <= 1; dj++) {
+        const p = featurePoint(ci + di, cj + dj);
+        const dist = Math.hypot(u - p.u, v - p.v);
+        if (dist < f1) { f2 = f1; f1 = dist; } else if (dist < f2) f2 = dist;
+      }
+    }
+    return f2 - f1;
+  };
+
   const d = new Uint8Array(SIZE * SIZE * 4);
   for (let y = 0; y < SIZE; y++) {
     for (let x = 0; x < SIZE; x++) {
       const i = (y * SIZE + x) * 4;
       const u = x / SIZE - 0.5; // -0.5 (left) .. 0.5 (right)
       const v = y / SIZE; // 0 (base) .. 1 (top)
-      // Wedge: half-width grows with height (0 at the base, widest near the top), then rounds off.
-      const halfWidth = 0.08 + Math.pow(v, 0.65) * 0.46;
+      const halfWidth = halfWidthAt(v);
       const edge = smooth01(halfWidth - Math.abs(u), -0.015, 0.02);
       const topRound = smooth01(1.08 - v, -0.05, 0.16); // rounds the crown instead of a hard top edge
       const baseTaper = smooth01(v, 0.0, 0.05); // pinches to a point at the holdfast
       const silhouette = edge * topRound * baseTaper;
-      // Radiating "rib" lines (the fan's real vein structure) plus small lacy perforations between
-      // them, both masked to the wedge silhouette so the ribs never show outside it.
-      const angle = Math.atan2(u, v + 0.15);
-      const ribs = Math.abs(Math.sin(angle * 11)) > 0.78 ? 1 : 0;
-      const holes = valueNoise(x, y, SIZE / 9) * 0.6 + valueNoise(x, y, SIZE / 3.2) * 0.4;
-      const perforated = ribs === 1 || holes > 0.33;
-      const a = silhouette > 0.35 && perforated ? clampByte(silhouette * 255) : 0;
-      d[i] = 240; d[i + 1] = 235; d[i + 2] = 245; d[i + 3] = a;
+      if (silhouette <= 0.35) { d[i] = 240; d[i + 1] = 235; d[i + 2] = 245; d[i + 3] = 0; continue; }
+
+      const onMembrane = worleyEdge(u, v) < 0.032;
+      // A thin solid rim at the fan's own true outline, independent of the cell pattern — without
+      // this the outermost cells can get cut right at the silhouette edge and the fan dissolves
+      // into disconnected fragments instead of reading as one holdfast-to-crown structure.
+      const edgeMargin = halfWidth - Math.abs(u);
+      const topMargin = 1.08 - v;
+      const nearRim = edgeMargin < 0.025 || topMargin < 0.035 || v < 0.06;
+      const solid = onMembrane || nearRim;
+
+      d[i] = 240; d[i + 1] = 235; d[i + 2] = 245;
+      d[i + 3] = solid ? clampByte(silhouette * 255) : 0;
     }
   }
   _fan = makeDataTex(d);

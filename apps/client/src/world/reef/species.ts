@@ -68,12 +68,14 @@ export const SPECIES: Record<SpeciesId, SpeciesDef> = {
     colorLo: 0x766a24, colorHi: 0xb8a048, scale: [0.7, 1.9], footprint: 2.0,
   },
   // Gorgonia ventalina — the purple sea fan; flat, lacy, oriented broadside to the prevailing
-  // current (see placement.ts's `fanOrientation`). Vivid violet/magenta — real sea fans are one of
-  // the few genuinely saturated-purple things on a reef and should read as a colour accent, not a
-  // navy smudge.
+  // current (see placement.ts's `fanOrientation`). Violet is right for a gorgonian, but the first
+  // pass was pushed hot-magenta-bright on a mask that was (bug, see textures.ts's fanAlphaTex)
+  // rendering nearly opaque — at full saturation and full coverage it read as plastic. Softened
+  // now that the mesh is a genuine net: real light passing through a real gap reads as "alive" on
+  // its own, without needing the colour itself to shout.
   seaFan: {
     id: 'seaFan', reefAssociated: true, depth: [2, 4, 16, 24],
-    colorLo: 0x7c1f9e, colorHi: 0xc868e8, scale: [0.6, 1.4], footprint: 1.1,
+    colorLo: 0x6a3582, colorHi: 0xa072b8, scale: [0.6, 1.4], footprint: 1.1,
   },
   // Pseudoplexaura / Pseudopterogorgia — bushy upright soft-coral plumes/rods. Yellow-green,
   // brightened for the same "must read as alive, not as algae-on-a-rock" reason as the rest.
