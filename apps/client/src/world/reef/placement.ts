@@ -25,7 +25,7 @@ import {
   MICRO_PATCH_PROBABILITY, PATCH_REEF_FULL_RADIUS, PATCH_REEF_FADE_RADIUS,
   SOMBRERO_ANCHOR_X, SOMBRERO_ANCHOR_DZ, SOMBRERO_RADIUS, SOMBRERO_GROOVE_PERIOD,
 } from './constants.js';
-import { SPECIES_LIST, trapezoid, type SpeciesDef } from './species.js';
+import { SPECIES, SPECIES_LIST, trapezoid, type SpeciesDef } from './species.js';
 import { reefGroundY } from './terrain.js';
 import type { ChunkCoord, ChunkPlacement, ReefInstance, SpeciesId } from './types.js';
 
@@ -172,6 +172,41 @@ export function suitability(species: SpeciesDef, x: number, z: number): number {
   return clamp(depthM * reefGate * sand * siteMul, 0, 1);
 }
 
+/** Fixed, hardcoded (never list-order- or index-derived — see this file's header) set of
+ * volumetric "solid" species that a flat alpha-cut card must not be allowed to spawn inside of.
+ * Without this, a sea fan/plume candidate can land with its card slicing straight through a
+ * nearby brain/star boulder or sponge; at the wrong angle the lacy alpha-cutout then reads as a
+ * painted-on decal rather than two separate organisms — a real, visible glitch (see this module's
+ * report), not a cosmetic nicety. Seagrass never needs this: `isReefLike` already keeps it off the
+ * reef entirely, so it never shares a candidate slot with any of these. */
+const CARD_SPECIES: ReadonlySet<SpeciesId> = new Set<SpeciesId>(['seaFan', 'seaPlume']);
+const SOLID_OBSTACLE_IDS: SpeciesId[] = ['elkhorn', 'staghorn', 'brain', 'star', 'encrusting', 'barrelSponge', 'tubeSponge'];
+
+/** Every one of `SOLID_OBSTACLE_IDS`' own placement in this chunk, recomputed from their fixed
+ * saltBase regardless of what list the caller passed to `placeChunk` — so a card species' output
+ * depends only on this chunk's fixed obstacle roster, never on iteration order or on what other
+ * species happen to be in scope. (Same determinism contract as everything else in this file; see
+ * header.) */
+function solidObstaclesInChunk(cx: number, cz: number): ReefInstance[] {
+  const out: ReefInstance[] = [];
+  for (const id of SOLID_OBSTACLE_IDS) out.push(...placeSpeciesInChunk(SPECIES[id], cx, cz));
+  return out;
+}
+
+/** True if a card candidate at (x,z) (already scaled to `cardRadius`, its own realized half-
+ * footprint — see call site) would visibly intersect a solid obstacle instance. Uses each
+ * obstacle's own *realized* half-footprint (`species.footprint * 0.5 * max(scaleX,scaleZ)`, from
+ * that instance's own already-rolled scale), not the species' nominal footprint — a brain/star
+ * coral can scale up to 2.2-2.4x (species.ts), and checking only the unscaled nominal size let an
+ * oversized boulder's actual silhouette extend well past the heuristic's buffer. */
+function collidesWithObstacle(x: number, z: number, cardRadius: number, obstacles: ReefInstance[]): boolean {
+  for (const o of obstacles) {
+    const obRadius = SPECIES[o.species].footprint * 0.5 * Math.max(o.scaleX, o.scaleZ);
+    if (Math.hypot(o.x - x, o.z - z) < cardRadius + obRadius) return true;
+  }
+  return false;
+}
+
 /** Every candidate slot's attributes (presence roll, offset, rotation, scale, colour, tilt) are
  * each their own independent `hashCell` draw keyed only on (chunk, species, attribute, slot) —
  * see constants.ts's `foldSalt` header for why that is what makes this safe under reordering. */
@@ -179,6 +214,9 @@ export function placeSpeciesInChunk(species: SpeciesDef, cx: number, cz: number)
   const count = CANDIDATES_PER_CHUNK[species.id];
   const { x0, z0 } = chunkOrigin(cx, cz);
   const out: ReefInstance[] = [];
+  // Computed once per call (not per-slot) and only for the two card species — see header note
+  // above `CARD_SPECIES`.
+  const obstacles = CARD_SPECIES.has(species.id) ? solidObstaclesInChunk(cx, cz) : null;
 
   for (let slot = 0; slot < count; slot++) {
     const ox = hashCell(REEF_WORLD_SEED, cx, cz, foldSalt(species.id, Attr.OFFSET_X, slot));
@@ -186,18 +224,24 @@ export function placeSpeciesInChunk(species: SpeciesDef, cx: number, cz: number)
     const x = x0 + ox * CHUNK_SIZE;
     const z = z0 + oz * CHUNK_SIZE;
 
+    // Rolled here (ahead of its other uses below) only because the obstacle-collision check
+    // needs this candidate's own realized half-footprint; the hashCell draw itself is unaffected
+    // by being read earlier — same (chunk, species, attribute, slot) key either way.
+    const scaleT = hashCell(REEF_WORLD_SEED, cx, cz, foldSalt(species.id, Attr.SCALE, slot));
+    const baseScale = lerp(species.scale[0], species.scale[1], scaleT);
+
+    if (obstacles && collidesWithObstacle(x, z, species.footprint * 0.5 * baseScale, obstacles)) continue;
+
     const suit = suitability(species, x, z);
     if (suit <= 0) continue;
     const roll = hashCell(REEF_WORLD_SEED, cx, cz, foldSalt(species.id, Attr.PRESENCE, slot));
     if (roll >= suit) continue;
 
     const rotRoll = hashCell(REEF_WORLD_SEED, cx, cz, foldSalt(species.id, Attr.ROT_Y, slot));
-    const scaleT = hashCell(REEF_WORLD_SEED, cx, cz, foldSalt(species.id, Attr.SCALE, slot));
     const colorT = hashCell(REEF_WORLD_SEED, cx, cz, foldSalt(species.id, Attr.COLOR, slot));
     const tiltX = lerp(-0.12, 0.12, hashCell(REEF_WORLD_SEED, cx, cz, foldSalt(species.id, Attr.TILT_X, slot)));
     const tiltZ = lerp(-0.12, 0.12, hashCell(REEF_WORLD_SEED, cx, cz, foldSalt(species.id, Attr.TILT_Z, slot)));
     const axJ = (attr: number): number => lerp(0.82, 1.18, hashCell(REEF_WORLD_SEED, cx, cz, foldSalt(species.id, attr, slot)));
-    const baseScale = lerp(species.scale[0], species.scale[1], scaleT);
 
     let rotY = rotRoll * Math.PI * 2;
     if (species.id === 'seaFan') {
