@@ -38,11 +38,40 @@
  *    the same approximation stock three.js fog already made; we did not make the model less
  *    accurate than what shipped before.
  *  - A material with `fog: false` (the sky dome, the sun disc — core/scene.ts) is intentionally
- *    untouched; see world/water.ts's underside/Snell's-window branch for how the sky is actually
- *    depicted from underwater instead of through this path.
+ *    untouched here; see world/water.ts's underside/Snell's-window branch for how the sky is
+ *    depicted when actually looking up through the surface, and world/underwater/index.ts's
+ *    `applySkyUnderwaterState` for the other case (nothing between the camera and the sky dome at
+ *    all) that this chunk alone cannot reach, since `fog: false` skips `<fog_fragment>` entirely.
+ *
+ * Visibility (docs/ARCHITECTURE.md's depth-band table — 30 m at the surface down to 10 m past
+ * 20 m) is a *second*, independent falloff layered on top of the colour-extinction model above,
+ * not a side effect of it: with the brief's own k values, the slowest-absorbed channel
+ * (k_blue = 0.03/m) alone would not fade an object to the inscatter haze until ~100 m away —
+ * `EXTINCTION` models *colour loss* (why red disappears first), not *turbidity/backscatter*,
+ * which is what actually caps how far you can see anything at all. `uwVisibilityAt` reproduces
+ * depth-bands.ts's `visibilityAt()` table in GLSL (same reasoning as water.ts's `depthCol` —
+ * depth-dependent, not per-fragment-distance-dependent, so it is one more free read of
+ * `cameraPosition`, no new uniform) and blends the rest of the way to pure inscatter haze over
+ * that distance, so close-up objects still get the colour-shift look but nothing reads as visible
+ * past the table's own number.
  */
 import * as THREE from 'three';
-import { EXTINCTION, INSCATTER_COLOR, AMBIENT_HALF_DEPTH, SURFACE_BAND } from './depth-bands.js';
+import { EXTINCTION, INSCATTER_COLOR, AMBIENT_HALF_DEPTH, SURFACE_BAND, DEPTH_BANDS } from './depth-bands.js';
+
+/** `depth-bands.ts`'s `visibilityAt()` piecewise-linear table, reproduced as a GLSL *statement
+ * sequence* (not a function — this chunk is spliced into the body of three's existing `main()`,
+ * where GLSL does not allow nested function definitions) assigning `uwVis` from `uwCameraDepth`.
+ * Generated from `DEPTH_BANDS` itself (not hand-copied) so the two can never silently drift apart. */
+function glslVisibilityStatements(): string {
+  const stops = DEPTH_BANDS;
+  const lines = [`float uwVis;`, `if (uwCameraDepth <= ${stops[0].depth.toFixed(2)}) uwVis = ${stops[0].vis.toFixed(2)};`];
+  for (let i = 1; i < stops.length; i++) {
+    const a = stops[i - 1], b = stops[i];
+    lines.push(`else if (uwCameraDepth <= ${b.depth.toFixed(2)}) uwVis = mix(${a.vis.toFixed(2)}, ${b.vis.toFixed(2)}, (uwCameraDepth - ${a.depth.toFixed(2)}) / ${(b.depth - a.depth).toFixed(2)});`);
+  }
+  lines.push(`else uwVis = ${stops[stops.length - 1].vis.toFixed(2)};`);
+  return lines.join('\n  ');
+}
 
 let installed = false;
 
@@ -76,6 +105,15 @@ export function installUnderwaterFog(): void {
     // veil dims with the camera's depth too, so band 5 doesn't read as a brightly-lit blue soup.
     float uwAmbientK = exp( -uwCameraDepth / ${AMBIENT_HALF_DEPTH.toFixed(3)} );
     vec3 uwBelowColor = gl_FragColor.rgb * uwTransmit + uwInscatter * uwAmbientK * (1.0 - uwTransmit);
+    // Visibility (depth-band table, "30 m at the surface down to 10 m past 20 m") — a second,
+    // independent falloff from the colour-extinction above; see this file's header for why
+    // EXTINCTION alone does not already enforce it. Beyond uwVis metres, fully replace the
+    // (still colour-shifted) uwBelowColor with plain depth-scaled haze — nothing should read as
+    // visible past the table's own distance, regardless of how little its blue channel absorbed.
+    ${glslVisibilityStatements()}
+    float uwTurbidity = smoothstep(uwVis * 0.6, uwVis, uwDist);
+    vec3 uwHaze = uwInscatter * uwAmbientK;
+    uwBelowColor = mix(uwBelowColor, uwHaze, uwTurbidity);
     gl_FragColor.rgb = mix( uwAboveColor, uwBelowColor, uwUnderwaterT );
   } else {
     gl_FragColor.rgb = uwAboveColor;

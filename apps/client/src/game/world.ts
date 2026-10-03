@@ -154,7 +154,7 @@ export function initWorld(wrap: HTMLElement): World {
   // snow, the surface-crossing transition, and the caustics/lens-wetting/(High+) god-rays post
   // effects appended onto postfx's composer. Built after postfx so attachPostFX has a composer to
   // attach to; re-attached below every time applyQuality() rebuilds that composer.
-  const underwater = createUnderwaterWorld({ scene, camera, renderer, sunDisc: sceneCtx.sunDisc });
+  const underwater = createUnderwaterWorld({ scene, camera, renderer, sunDisc: sceneCtx.sunDisc, sky: sceneCtx.sky });
   underwater.attachPostFX(postfx.composer, quality.tier);
 
   const profiler = createProfiler();

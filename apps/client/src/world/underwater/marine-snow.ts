@@ -17,6 +17,13 @@
  * light here, so they saturate to flat white far sooner than they did under r128. Kept dim
  * (max ~0.35 alpha) and small on purpose — real marine snow is barely-visible floating detritus,
  * not bright confetti, so this cuts the saturation risk and the look right at the same time.
+ * This file hit the same landmine a second way during review: `gl_PointSize`'s `1/-mv.z` falloff
+ * was unbounded, and the wrap mechanic can legitimately place a particle centimetres from the
+ * camera — producing one giant soft sprite that washes the whole frame toward flat white/grey
+ * under linear blending. Fixed with a hard `gl_PointSize` cap plus a near-camera fade (vertex
+ * shader, below), not a blending-mode change — NormalBlending (the default used here) was already
+ * the right call since, unlike AdditiveBlending, many overlapping low-alpha sprites asymptote
+ * toward the particle's own colour rather than blowing straight past it to white.
  */
 import * as THREE from 'three';
 import { waterNoiseTex } from '../../core/textures.js';
@@ -74,9 +81,15 @@ export function createMarineSnow(pixelRatio = 1): MarineSnow {
         p.x += sin(uTime * 0.6 + pseed * 37.0) * 0.08;
         p.z += cos(uTime * 0.5 + pseed * 53.0) * 0.08;
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
-        // Fade near the far edge of the attached volume so wrapping never pops visibly.
-        vFade = smoothstep(${BOX.toFixed(1)}, ${(BOX * 0.55).toFixed(1)}, length(p));
-        gl_PointSize = (1.1 + pseed * 1.4) * uPR * (140.0 / -mv.z);
+        // Fade near the far edge of the attached volume so wrapping never pops visibly, AND near
+        // the camera itself (r186 colour-management note, this file's header): the per-axis wrap
+        // can legitimately place a particle a few centimetres from the eye, and gl_PointSize's
+        // 1/-mv.z falloff is unbounded — without this it blows up into a single soft sprite large
+        // enough to cover the whole frame, which under linear-light blending reads as the view
+        // suddenly washing toward flat white/grey rather than "a speck went past the lens".
+        vFade = smoothstep(${BOX.toFixed(1)}, ${(BOX * 0.55).toFixed(1)}, length(p))
+          * smoothstep(0.08, 0.35, -mv.z);
+        gl_PointSize = min((1.1 + pseed * 1.4) * uPR * (140.0 / max(-mv.z, 0.35)), 48.0);
         gl_Position = projectionMatrix * mv;
       }
     `,

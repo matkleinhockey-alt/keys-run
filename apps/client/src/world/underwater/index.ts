@@ -13,6 +13,9 @@
  *  - a temporary debug hook (`window.__uwDebug`) to put the camera underwater for screenshots/QA.
  *    No diver entity exists yet (a different agent owns entities/diver/**) — see this hook's own
  *    comment for the real integration point once it lands.
+ *  - hiding the sky dome / sun disc and swapping `scene.background` for the current depth's
+ *    inscatter tint once fully submerged — see `applySkyUnderwaterState` below for why this is
+ *    needed on top of fog-override.ts's per-material chunk.
  */
 import * as THREE from 'three';
 import { EffectPass, type Effect, type EffectComposer } from 'postprocessing';
@@ -22,19 +25,20 @@ import { createMarineSnow, type MarineSnow } from './marine-snow.js';
 import { CausticsEffect } from './caustics.js';
 import { LensWettingEffect } from './lens-wetting.js';
 import { createGodRays, type GodRaysRig } from './godrays.js';
-import { MARINE_SNOW_FULL_DEPTH } from './depth-bands.js';
+import { MARINE_SNOW_FULL_DEPTH, INSCATTER_COLOR, AMBIENT_HALF_DEPTH } from './depth-bands.js';
 import { depthAt } from '@keysrun/shared/world/depth';
+import { floorY } from '../seafloor.js';
 
-/** Stand-in for the seafloor agent's `seafloorHeightAt(x,z)` (concurrently landing in
- * world/seafloor.ts — a client file this agent must not edit — as part of fixing the
- * `floorY = d => -(0.25 + min(d,14)*0.55)` crush bug documented in docs/ARCHITECTURE.md's
- * "Seafloor" section). That fix's target shape is simply `d => -d`, and `depthAt` (the pure,
- * shared bathymetry function the fix itself is built on, @keysrun/shared/world/depth) already
- * exists and is stable today — so `-depthAt(x,z)` is not a guess, it is exactly what
- * `seafloorHeightAt` will return once that lands. The only call site is the debug-dive depth
- * clamp below (so the QA camera never ends up below the actual terrain); swap to a direct import
- * of the real `seafloorHeightAt` once it exists, for the LOD-chunk-aware version. */
-const fallbackSeafloorHeightAt = (x: number, z: number): number => -depthAt(x, z);
+/** The QA/debug dive hook's seafloor estimate, built from the REAL (not aspirational)
+ * `world/seafloor.ts` — read-only import, this agent does not own that file. `floorY` is still
+ * the documented-hazard, vertically-*compressed* single-plane formula
+ * (`d => -(0.25 + min(d,14) * 0.55)`, docs/ARCHITECTURE.md "Seafloor"): it flattens to y≈-7.95 for
+ * any true depth past 14 m. An earlier version of this hook estimated the floor as `-depthAt(x,z)`
+ * (the *true*, uncompressed bathymetry) — that is lower (more negative, i.e. "deeper") than the
+ * actually-rendered compressed floor at every depth, so the debug camera ended up embedded *below*
+ * the real terrain surface at every single capture, seeing nothing but raw fog colour. Reading the
+ * real export instead fixes that for any depth the compressed mesh still tracks. */
+const seafloorHeightAt = (x: number, z: number): number => floorY(depthAt(x, z));
 
 export interface UnderwaterDeps {
   scene: THREE.Scene;
@@ -43,6 +47,9 @@ export interface UnderwaterDeps {
   /** The real, visible sun disc (core/scene.ts) — god rays mirrors its transform onto its own
    * dedicated light-source mesh every frame rather than reusing/mutating this one; see godrays.ts. */
   sunDisc: THREE.Object3D;
+  /** The sky dome (core/scene.ts's `makeSky`, a 6 km-radius `BackSide` sphere with `fog: false`).
+   * Hidden once fully submerged — see `applySkyUnderwaterState` below. */
+  sky: THREE.Object3D;
 }
 
 export interface UnderwaterWorld {
@@ -61,7 +68,7 @@ export interface UnderwaterWorld {
 }
 
 export function createUnderwaterWorld(deps: UnderwaterDeps): UnderwaterWorld {
-  const { scene, camera, renderer, sunDisc } = deps;
+  const { scene, camera, renderer, sunDisc, sky } = deps;
 
   const transition: SurfaceTransition = createSurfaceTransition(camera);
   const marineSnow: MarineSnow = createMarineSnow(renderer.getPixelRatio());
@@ -69,6 +76,45 @@ export function createUnderwaterWorld(deps: UnderwaterDeps): UnderwaterWorld {
 
   let godRays: GodRaysRig | null = null;
   let lensWetting: LensWettingEffect | null = null;
+
+  // --- Sky-dome hide + background swap once fully submerged. ---
+  // Why this is needed on top of fog-override.ts's global `fog_fragment` override: that override
+  // can only reach materials that opt into three's fog pipeline, and the sky dome + sun disc
+  // (core/scene.ts) are deliberately `fog: false` (so topside haze doesn't dim the sky it fades
+  // toward — correct up there). The sky dome is also a literal 6 km-radius sphere enclosing the
+  // *entire* world, including all underwater space. water.ts's Snell's-window branch only replaces
+  // the view when a ray actually crosses the water plane's mesh (looking up through the ~96 deg
+  // cone); a horizontal or downward underwater look that doesn't cross that plane — which happens
+  // constantly once nothing solid is close enough to block it, e.g. open water past the reef's draw
+  // distance, or anywhere the seafloor/reef geometry hasn't loaded — sails straight past every piece
+  // of fog-respecting geometry and hits the raw, full-brightness sky dome instead: the horizon is
+  // never darker than `uHor` (a pale near-white blue), which is exactly the washed-out look this
+  // produced before this fix (verified against this branch's own screenshots at 15 m/25 m). Once
+  // `transition.underwaterAmount()` is effectively 1, hide the dome + sun disc and paint
+  // `scene.background` with the same depth-correct inscatter tint fog-override.ts's underwater
+  // branch asymptotes toward at long range — so a line of sight with nothing in it reads as "deep
+  // hazy water", not "the open sky, somehow, from 15 m down". Restored the moment the camera
+  // surfaces. Threshold is high (not 0.5) so the swap lands after the fog/FOV/lens-wetting tween is
+  // already visually busy, instead of being its own separate pop.
+  const SKY_HIDE_AMOUNT = 0.98;
+  let skyHidden = false;
+  const bgColor = new THREE.Color();
+  const originalBackground = scene.background;
+  function applySkyUnderwaterState(): void {
+    const amount = transition.underwaterAmount();
+    const hide = amount >= SKY_HIDE_AMOUNT;
+    if (hide !== skyHidden) {
+      skyHidden = hide;
+      sky.visible = !hide;
+      sunDisc.visible = !hide;
+      scene.background = hide ? bgColor : originalBackground;
+    }
+    if (hide) {
+      const cameraDepth = Math.max(0, -camera.position.y);
+      const ambientK = Math.exp(-cameraDepth / AMBIENT_HALF_DEPTH);
+      bgColor.setRGB(INSCATTER_COLOR.r * ambientK, INSCATTER_COLOR.g * ambientK, INSCATTER_COLOR.b * ambientK);
+    }
+  }
 
   // --- Temporary debug/QA hook: drive the camera underwater without a diver entity. ---
   // Integration point for the real diver camera (entities/diver/**, a different agent): once that
@@ -88,8 +134,15 @@ export function createUnderwaterWorld(deps: UnderwaterDeps): UnderwaterWorld {
 
   function update(dt: number): void {
     if (debugState) {
-      const floorY = fallbackSeafloorHeightAt(debugState.x, debugState.z);
-      const y = Math.max(-debugState.depth, floorY + 0.3);
+      // Anti-clip floor clamp, but only where the real (compressed) seafloor mesh is still a
+      // reasonable stand-in for the requested depth. Past ~10 m the mesh has already flattened
+      // toward its y≈-7.95 crush-bug ceiling (docs/ARCHITECTURE.md "Seafloor"), so clamping a
+      // "15 m"/"25 m" debug dive up to that floor would silently relabel it as an ~8 m shot instead.
+      // Trusting the requested depth there is the honest choice — it is open water with nothing
+      // underneath yet (no clipping risk either, since there is nothing solid down there to clip
+      // into) rather than a mislabelled shallow one.
+      const floorClearance = seafloorHeightAt(debugState.x, debugState.z) + 0.3;
+      const y = debugState.depth <= 10 ? Math.max(-debugState.depth, floorClearance) : -debugState.depth;
       camera.position.set(debugState.x, y, debugState.z);
       camera.near = 0.05;
       camera.rotation.set(debugState.pitch, debugState.yaw, 0, 'YXZ');
@@ -98,6 +151,7 @@ export function createUnderwaterWorld(deps: UnderwaterDeps): UnderwaterWorld {
     }
 
     transition.update(dt);
+    applySkyUnderwaterState();
 
     if (godRays) {
       godRays.lightMesh.position.copy(sunDisc.position);
@@ -139,6 +193,7 @@ export function createUnderwaterWorld(deps: UnderwaterDeps): UnderwaterWorld {
       scene.remove(marineSnow.points);
       marineSnow.dispose();
       if (godRays) { scene.remove(godRays.lightMesh); godRays.dispose(); godRays = null; }
+      if (skyHidden) { sky.visible = true; sunDisc.visible = true; scene.background = originalBackground; }
       transition.dispose();
       if (typeof window !== 'undefined') delete (window as unknown as { __uwDebug?: unknown }).__uwDebug;
     },
