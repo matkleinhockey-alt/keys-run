@@ -589,6 +589,11 @@ export function initWorld(wrap: HTMLElement): World {
 
     const amp = ampAt(renderState.x, renderState.z);
     applyBoatVisuals(renderState, model, { t: simTime, dt: clamped, todK: tod.getK(), sw, ch, amp, hull: { len: boatSpec.len, beam: boatSpec.beam, topMs: boatSpec.top * 0.5144 * SPEED_SCALE }, particles, water }, events);
+    // Deck crew dance/brace/idle (entities/crew-model/dance.ts) — layered on top of model.group's
+    // own heave/pitch/roll, which applyBoatVisuals just set for this frame. curState (not
+    // renderState) for speed/steer/air: those are discrete/authoritative fields, same reasoning
+    // as the interpolation comment above — they're never part of the lerped set anyway.
+    crewSystem.update(clamped, simTime, { speed: curState.speed, steer: curState.steer, air: curState.air });
 
     particles.update(clamped, simTime, (x, z, t, a) => sampleWaterHeight(curState, x, z, t, a, sw, ch));
     catchFlow.updateReleased(clamped, simTime, (x, z, t) => sampleWaterHeight(curState, x, z, t, ampAt(x, z), sw, ch));

@@ -1,0 +1,13 @@
+{
+  "name": "@keysrun/assets-pipeline",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Build scripts that turn raw, licensed/third-party art assets (raw/) into the optimized glTF this project ships under apps/client/public/models/. Not imported by any app or package at runtime — see scripts/*.sh and docs/ASSET-LICENCES.md. fbx2gltf is a devDependency here (not dlx'd like @gltf-transform/cli) because it ships a native per-OS binary with no CLI bin entry of its own; scripts/fbx-to-gltf.cjs requires it directly out of node_modules.",
+  "scripts": {
+    "build:crew": "./scripts/build-crew.sh raw/bikini_girl.glb crew-01",
+    "build:dance": "./scripts/build-dance.sh"
+  },
+  "devDependencies": {
+    "fbx2gltf": "0.9.7-p1"
+  }
+}
