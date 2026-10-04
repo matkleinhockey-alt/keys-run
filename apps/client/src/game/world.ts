@@ -359,6 +359,11 @@ export function initWorld(wrap: HTMLElement): World {
   document.getElementById('btnDive')?.addEventListener('click', toggleDive);
   window.addEventListener('keydown', (e) => { if (e.code === 'KeyJ') toggleDive(); });
 
+  // #btnSun was rendered and styled but never given a click handler — only the `O` key reached
+  // toggleSunset(), so the button looked interactive and did nothing (and is the only way to
+  // reach sunset on touch, where there is no keyboard at all).
+  document.getElementById('btnSun')?.addEventListener('click', () => tod.toggleSunset());
+
   bindBoatInput(input, stateBox, {
     toggleTrim() {
       if (FishF.state === 'fight') { fishing.setDrag(FishF.drag + (shiftHeld ? -1 : 1)); return; }
