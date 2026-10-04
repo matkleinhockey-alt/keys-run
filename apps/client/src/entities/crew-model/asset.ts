@@ -1,18 +1,36 @@
 /**
- * Loads the deck-crew glTF — the project's first external 3D asset (see docs/ASSET-LICENCES.md
- * for the licence entry; read it before this ships publicly). Built by
- * packages/assets-pipeline/scripts/build-crew.sh from a Sketchfab export: two LODs, meshopt-
- * compressed geometry, WebP textures (not KTX2/Basis — see that script's header for why: KTX2's
- * Basis transcoder runs in a Worker+WASM and that worker never finished initialising in this
- * project's sandboxed/software-WebGL test environment, so the figures silently never appeared;
- * WebP has no such runtime risk and, empirically, compressed smaller for this asset anyway).
+ * Loads the deck-crew glTF — the project's first external 3D asset with a real skeleton and
+ * animation (see docs/ASSET-LICENCES.md for the full licence entry and, importantly, a note on
+ * *whose* character this is — read it before this ships publicly).
  *
- * Loaded exactly once (module-level singleton promise) and cloned per placed figure — see
- * index.ts's `spawnFigure`. Cloning a `THREE.LOD` deep-clones the node hierarchy but each level's
- * `Mesh.clone()` shares the same `BufferGeometry`/`Material` instances (three's default, cheap)
- * rather than duplicating GPU buffers — correct here because the source has no skeleton to clone
- * per-instance. See this module's header-comment continuation in index.ts for what a rigged
- * version would need instead (`SkeletonUtils.clone`).
+ * This replaces an earlier static, unrigged figure (`raw/bikini_girl.glb`, still built by
+ * packages/assets-pipeline/scripts/build-crew.sh and still sitting at
+ * apps/client/public/models/crew/crew-01.lod{0,1}.glb — untouched, just no longer loaded here)
+ * with a Mixamo "with skin" export: Mixamo's own default "X Bot" character mesh, rigged to a
+ * standard `mixamorig:` skeleton, with the "Hip Hop Dancing" animation baked onto it. **This
+ * changes the deck crew's appearance** — X Bot is a flat reddish-brown, textureless mannequin,
+ * not the textured bikini_girl figure. That trade (a figure that actually dances, vs. the
+ * previous figure's look) was a deliberate call made for this task; see docs/ASSET-LICENCES.md's
+ * "dance-01" entry for the full reasoning and the options left open for whoever owns this next.
+ *
+ * Built by packages/assets-pipeline/scripts/build-dance.sh from
+ * packages/assets-pipeline/raw/hiphop_dancing.fbx: FBX2glTF conversion, stripping Mixamo's
+ * joint-visualization overlay mesh, then meshopt geometry+animation compression (no
+ * simplify/flatten/join — not confirmed safe on a skinned character, see that script's header).
+ * No textures to compress (the source has none). No KTX2 question here either, for the same
+ * reason.
+ *
+ * Loaded exactly once (module-level singleton promise) and **skeleton-cloned** per placed figure
+ * via `SkeletonUtils.clone` (see index.ts's `spawnFigure`) — a skinned mesh's plain
+ * `Object3D.clone()`/`THREE.LOD.clone()` does NOT duplicate its skeleton, so naively cloning N
+ * instances would have them all sharing (and fighting over) one skeleton's bone transforms.
+ *
+ * No LOD split (unlike the old static figure): this ships as a single ~28k-triangle mesh at
+ * every distance. Mesh simplification on a skinned+animated character isn't confirmed safe by
+ * this team (see build-dance.sh), so a decimated, skin-safe distant LOD is deferred rather than
+ * risk a silently broken skin — see this module's `TEMPLATE_HEIGHT_M` note below for the other
+ * place a future LOD1 would need updating (none — a LOD1 would just be a second glTF level added
+ * to a `THREE.LOD` the same way the old asset did; nothing here structurally prevents it).
  *
  * Loading is async and is never awaited by the boot path (apps/client/src/game/world.ts calls
  * `loadCrewAsset` without blocking on it) — the game starts and is playable immediately, and
@@ -22,31 +40,29 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 
-// Served from apps/client/public/ — see packages/assets-pipeline/scripts/build-crew.sh for how
-// these are produced, and docs/ASSET-LICENCES.md for the source/licence.
-const LOD0_URL = '/models/crew/crew-01.lod0.glb'; // ~12k tris — the figure nearest the camera
-const LOD1_URL = '/models/crew/crew-01.lod1.glb'; // ~5k tris — other figures on the same boat
-// entities/camera.ts's chase cam sits at `(hullLen * 1.5 + 11) * zoom` behind the boat *origin* —
-// 21.5 m for the 7 m Robalo up to 30.6 m for the 13.1 m Midnight at default zoom, and a figure up
-// near the bow or back at the transom adds another ~half the hull length on top of that. So on
-// this project's own default chase view, every figure on your own boat is already 15-37 m from
-// the camera — comfortably past a naive "10 m is far" guess (confirmed by measurement: at 10 m
-// every figure was rendering at the ~5k LOD the moment the boat was boarded). Set high enough that
-// the player's own crew always render at full detail in every topside camera (chase/helm/tower),
-// and a figure only drops to the cheap LOD once genuinely distant — which is exactly the case this
-// LOD split is really for: once other players' boats are visible (docs/ARCHITECTURE.md's 260 m
-// boat interest radius), this same THREE.LOD swaps a whole distant boat's crew down to the ~5k
-// mesh for free, with no extra code.
-const LOD1_DISTANCE = 50;
+// Served from apps/client/public/ — see packages/assets-pipeline/scripts/build-dance.sh for how
+// this is produced, and docs/ASSET-LICENCES.md for the source/licence.
+const DANCE_URL = '/models/crew/dance-01.glb';
 
-// The source mesh is normalised to ~1 unit tall with feet at y=0 (packages/assets-pipeline
-// centres it there — see build-crew.sh's `center --pivot below` step). Placements in index.ts
-// scale each clone to a real height in metres, so this constant should stay 1.
-export const TEMPLATE_UNIT_HEIGHT = 1;
+// Measured from the pre-quantization build/dance/pruned.glb bbox (packages/assets-pipeline's
+// `gltf-transform inspect` output, this project's report has the full numbers): bboxMin
+// (-0.90257, -0.00035, -0.14896) to bboxMax (0.90257, 1.80888, 0.17174) — feet already sit at
+// y≈0 (Mixamo's own export convention, no `center --pivot below` step needed unlike bikini_girl),
+// height ≈1.809 m. Unlike the old asset (deliberately normalised to exactly 1 unit tall so a
+// placement's `heightM` doubled as its clone's uniform scale), this mesh is already in
+// real-world-ish metres — index.ts's spawnFigure divides each placement's target `heightM` by
+// this constant to get the actual scale factor, so placements.ts stays unchanged either way.
+export const TEMPLATE_HEIGHT_M = 1.809;
 
 export interface CrewAsset {
-  /** Unparented template — never added to the scene directly. index.ts clones it per figure. */
-  template: THREE.LOD;
+  /** Unparented template — never added to the scene directly. index.ts clones it per figure with
+   * `SkeletonUtils.clone`, never plain `.clone()` (see this module's header). */
+  template: THREE.Object3D;
+  /** The "Hip Hop Dancing" clip (glTF calls it `mixamo.com`, Mixamo's own export-time name for
+   * every clip regardless of which animation it actually is — not used by name, just taken as
+   * `gltf.animations[0]`). ~7 s, loops cleanly. One `THREE.AnimationMixer` + clip action gets
+   * built per cloned figure in index.ts, not shared — mixers carry per-instance playback time. */
+  clip: THREE.AnimationClip;
 }
 
 let pending: Promise<CrewAsset> | null = null;
@@ -67,30 +83,19 @@ function disableShadows(root: THREE.Object3D): void {
   });
 }
 
-/** Loads (once) and returns the shared crew template. Safe to call repeatedly — every call after
- * the first returns the same in-flight/resolved promise.
- *
- * No renderer parameter: a KTX2 build would need one (`KTX2Loader.detectSupport(renderer)`); the
- * current WebP build doesn't touch the renderer at all. If KTX2 is reinstated later (see this
- * file's header), thread a `THREE.WebGLRenderer` back through from
- * entities/crew-model/index.ts's `createCrewSystem` call site in game/world.ts. */
+/** Loads (once) and returns the shared crew template + its dance clip. Safe to call repeatedly —
+ * every call after the first returns the same in-flight/resolved promise. */
 export function loadCrewAsset(): Promise<CrewAsset> {
   if (pending) return pending;
 
   const manager = new THREE.LoadingManager();
   const loader = new GLTFLoader(manager).setMeshoptDecoder(MeshoptDecoder);
 
-  const loadLevel = (url: string): Promise<THREE.Object3D> =>
-    loader.loadAsync(url).then((gltf) => {
-      disableShadows(gltf.scene);
-      return gltf.scene;
-    });
-
-  pending = Promise.all([loadLevel(LOD0_URL), loadLevel(LOD1_URL)]).then(([near, far]) => {
-    const template = new THREE.LOD();
-    template.addLevel(near, 0);
-    template.addLevel(far, LOD1_DISTANCE);
-    return { template };
+  pending = loader.loadAsync(DANCE_URL).then((gltf) => {
+    disableShadows(gltf.scene);
+    const clip = gltf.animations[0];
+    if (!clip) throw new Error(`[crew-model] ${DANCE_URL} has no animations — expected the baked "Hip Hop Dancing" clip`);
+    return { template: gltf.scene, clip };
   });
   return pending;
 }
