@@ -29,7 +29,15 @@ const ROAM_RETIRE_R = ROAM_MAX_R + 40; // legacy's `POP_R+40` free radius
 
 export interface FishWorld {
   group: THREE.Group;
-  update(dt: number, t: number, focus: { x: number; z: number }, boatSpeed: number, extraThreats?: Threat[]): void;
+  /**
+   * `focus` is the point population *activates around* — docs/ARCHITECTURE.md "Fish ownership"
+   * requires this to follow whichever viewer is actually in the water, not an anchored hull: the
+   * caller (game/world.ts) passes the diver's position while `diver.mode === 'diver'`, falling
+   * back to the boat otherwise. `boat` is always the boat's own real position/speed, independent
+   * of `focus` — the hull is a standing threat to nearby fish even while its driver is over the
+   * side and the population focus has moved to the diver (see world.ts's call site).
+   */
+  update(dt: number, t: number, focus: { x: number; z: number }, boat: Threat, extraThreats?: Threat[]): void;
   readonly stats: { schools: number; fish: number; draws: number };
   /** Scans resident chunks (via the same pure `residentsForChunk` activation uses — no game
    * state touched) outward from `(originX, originZ)` out to `maxRadius` for the first species
@@ -42,7 +50,7 @@ export interface FishWorld {
    * height in the water column instead of guessing a world Y blind. */
   waterColumnAt(x: number, z: number, t: number): { floor: number; surf: number };
   /** Verification-only: every currently active school's centroid/type/member-count. */
-  debugActiveSchools(): Array<{ id: string; type: string; cx: number; cz: number; count: number; resident: boolean }>;
+  debugActiveSchools(): Array<{ id: string; type: string; cx: number; cz: number; heading: number; count: number; resident: boolean }>;
   /** Verification-only: per-species-pool draw-call/triangle accounting, isolated from the rest of
    * the scene. */
   debugPoolStats(): Array<{ type: string; triPerInstance: number; meshCount: number; inUse: number; capacity: number }>;
@@ -146,7 +154,7 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
 
   const stats = { schools: 0, fish: 0, draws: 0 };
 
-  function update(dt: number, t: number, focus: { x: number; z: number }, boatSpeed: number, extraThreats: Threat[] = []): void {
+  function update(dt: number, t: number, focus: { x: number; z: number }, boat: Threat, extraThreats: Threat[] = []): void {
     swimClock.value = t;
     throttle -= dt;
     if (throttle <= 0) {
@@ -155,7 +163,7 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
       manageRoamers(focus, t);
     }
 
-    const threats: Threat[] = [{ x: focus.x, z: focus.z, kind: 'boat', speed: boatSpeed }, ...extraThreats];
+    const threats: Threat[] = [boat, ...extraThreats];
     const ctx = { t, dt, threats };
 
     let fishCount = 0;
@@ -199,10 +207,10 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
     return out;
   }
 
-  function debugActiveSchools(): Array<{ id: string; type: string; cx: number; cz: number; count: number; resident: boolean }> {
-    const out: Array<{ id: string; type: string; cx: number; cz: number; count: number; resident: boolean }> = [];
-    for (const s of residents.values()) out.push({ id: s.id, type: s.type, cx: s.cx, cz: s.cz, count: s.members.length, resident: true });
-    for (const s of roamers.values()) out.push({ id: s.id, type: s.type, cx: s.cx, cz: s.cz, count: s.members.length, resident: false });
+  function debugActiveSchools(): Array<{ id: string; type: string; cx: number; cz: number; heading: number; count: number; resident: boolean }> {
+    const out: Array<{ id: string; type: string; cx: number; cz: number; heading: number; count: number; resident: boolean }> = [];
+    for (const s of residents.values()) out.push({ id: s.id, type: s.type, cx: s.cx, cz: s.cz, heading: s.heading, count: s.members.length, resident: true });
+    for (const s of roamers.values()) out.push({ id: s.id, type: s.type, cx: s.cx, cz: s.cz, heading: s.heading, count: s.members.length, resident: false });
     return out;
   }
 
