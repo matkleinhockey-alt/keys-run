@@ -32,6 +32,7 @@ import { createBridge } from '../world/bridge.js';
 import { createLandmarks } from '../world/landmarks.js';
 import { createReef } from '../world/reef/index.js';
 import { createFishWorld } from '../entities/fish/index.js';
+import type { Threat } from '../entities/fish/types.js';
 import { createClouds } from '../world/clouds.js';
 import { createMarinas } from '../world/marinas.js';
 import { createParticleSystem } from '../world/particles.js';
@@ -137,9 +138,10 @@ export function initWorld(wrap: HTMLElement): World {
 
   // 8b. fish — schools of VIS creatures, deterministic resident reef schools plus a roaming
   // layer (entities/fish/index.ts); see docs/ARCHITECTURE.md "Fish at realism *and* density" and
-  // "Fish ownership — three tiers". `fishWorld.update` is called from frame() below with the
-  // boat as the only threat for now — a diver threat can be appended to the optional 4th arg
-  // once entities/diver/** exists, with no change needed inside entities/fish.
+  // "Fish ownership — three tiers". `fishWorld.update` is called from frame() below with a
+  // *focus* point that follows whichever viewer is actually in the water (the diver once
+  // entities/diver/** takes over, the boat otherwise) plus the boat's own position as a standing
+  // threat and the diver as an optional extra threat.
   const fishWorld = createFishWorld();
   scene.add(fishWorld.group);
 
@@ -559,15 +561,26 @@ export function initWorld(wrap: HTMLElement): World {
     // `window.__fishDebugDiver` stays as a fallback for verification scripts that want to inject a
     // synthetic diver without actually driving the dive flow (test/capture-fish-screenshots.mjs);
     // it only applies while nobody is really diving.
+    //
+    // `focus` — the point fish population activates around (entities/fish/index.ts's
+    // updateResidents/manageRoamers) — follows the diver while diving. Before this, it was always
+    // `curState` (the boat), so swimming away from an anchored boat left the diver in dead water:
+    // the legacy `managePopulation`-around-the-boat bug docs/ARCHITECTURE.md's "Resident schools"
+    // section calls out, reintroduced for the diver the moment entities/diver/** existed. The
+    // boat's own position/speed is always passed separately as `boatThreat` — the hull is a real,
+    // standing threat to nearby fish whether or not its driver is currently over the side.
     const diverState = diver.state;
-    let fishThreats: Array<{ x: number; z: number; kind: 'boat' | 'diver'; speed: number }> | undefined;
+    const boatThreat: Threat = { x: curState.x, z: curState.z, kind: 'boat', speed: Math.abs(curState.speed) };
+    let focus = { x: curState.x, z: curState.z };
+    let fishThreats: Threat[] = [];
     if (diver.mode === 'diver' && diverState) {
+      focus = { x: diverState.x, z: diverState.z };
       fishThreats = [{ x: diverState.x, z: diverState.z, kind: 'diver', speed: Math.hypot(diverState.vx, diverState.vy, diverState.vz) }];
     } else {
       const debugDiver = (window as unknown as { __fishDebugDiver?: { x: number; z: number } }).__fishDebugDiver;
-      fishThreats = debugDiver ? [{ x: debugDiver.x, z: debugDiver.z, kind: 'diver', speed: 0.6 }] : undefined;
+      if (debugDiver) fishThreats = [{ x: debugDiver.x, z: debugDiver.z, kind: 'diver', speed: 0.6 }];
     }
-    fishWorld.update(clamped, simTime, { x: curState.x, z: curState.z }, Math.abs(curState.speed), fishThreats);
+    fishWorld.update(clamped, simTime, focus, boatThreat, fishThreats);
 
     const amp = ampAt(renderState.x, renderState.z);
     applyBoatVisuals(renderState, model, { t: simTime, dt: clamped, todK: tod.getK(), sw, ch, amp, hull: { len: boatSpec.len, beam: boatSpec.beam, topMs: boatSpec.top * 0.5144 * SPEED_SCALE }, particles, water }, events);
