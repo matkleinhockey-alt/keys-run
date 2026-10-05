@@ -384,10 +384,27 @@ export function initWorld(wrap: HTMLElement): World {
   // but it means the gun can actually spear something swimming in the world today, not only the
   // synthetic target in apps/client/test/spear-harness.ts — swap for the real registry's targets
   // the moment it lands; nothing else here needs to change.
+  /** `__spearDebug.setSyntheticTarget` (verification-only, see that hook's own comment below). */
+  let debugSyntheticTarget: { key: string; weight: number } | null = null;
+
   function getSpearTargets(): SpearTarget[] {
     const s = diver.state;
     if (diver.mode !== 'diver' || !s) return [];
     const out: SpearTarget[] = [];
+    if (debugSyntheticTarget) {
+      // __spearDebug.setSyntheticTarget — see that hook's own comment, below. Placed from the
+      // *camera's* position, not the diver body's (`s.x/y/z`) — the shaft's real origin is the
+      // view model's muzzle (entities/speargun/index.ts's `tryFire`), which sits noticeably off
+      // the diver's body-centre point (view-model local offset plus the mask camera's own
+      // EYE_HEIGHT) once mask-mode moves the camera there; a generous 0.9 m radius absorbs the
+      // rest of that gap rather than chasing the exact muzzle transform from here.
+      const ox = camera.position.x, oy = camera.position.y, oz = camera.position.z;
+      const px = ox + diverAim.aimDir.x * 2.5, py = oy + diverAim.aimDir.y * 2.5, pz = oz + diverAim.aimDir.z * 2.5;
+      out.push({
+        id: 'debug-synthetic', key: debugSyntheticTarget.key, weight: debugSyntheticTarget.weight,
+        ax: px, ay: py - 0.6, az: pz, bx: px, by: py + 0.6, bz: pz, radius: 0.9,
+      });
+    }
     for (const school of fishWorld.debugActiveSchools()) {
       const S = SPECIES[school.type];
       if (!S) continue; // ambient-only species (e.g. angelfish) have no weight/fight table
@@ -866,6 +883,25 @@ export function initWorld(wrap: HTMLElement): World {
       diver.cam.pitch = pitch;
     },
     exitToBoat(): void { diver.exitToBoat(); },
+  };
+
+  // DEV/VERIFICATION HOOK ONLY (same spirit as __diverDebug/__fishDebug above) — fires the real
+  // speargun on demand and, via `setSyntheticTarget`, guarantees the next shot actually hits
+  // something regardless of what's really swimming nearby (entities/speargun/index.ts's own
+  // header: "the Playwright test... exercises the hit path directly with a synthetic target" —
+  // this is that same idea, reachable from a real running game instead of only the standalone
+  // apps/client/test/spear-harness.ts). No normal code path reads `window.__spearDebug`.
+  (window as unknown as { __spearDebug?: unknown }).__spearDebug = {
+    fire(): boolean { return speargun.tryFire(diverAim); },
+    haul(v: boolean): void { speargun.setHauling(v); },
+    isActive: () => speargun.isActive(),
+    fightState: () => speargun.getFightState(),
+    /** `null` clears it (back to the real `getSpearTargets()` adapter). While set, every call to
+     * `getSpearTargets()` places one capsule 2 m directly along the diver's current aim, so the
+     * very next `fire()` lands — the gun's own 11 m range/25 m/s flight still runs for real. */
+    setSyntheticTarget(t: { key: string; weight: number } | null): void { debugSyntheticTarget = t; },
+    forceReloadReady(): void { speargun.debugForceReloadReady(); },
+    reset(): void { speargun.reset(); },
   };
 
   return {

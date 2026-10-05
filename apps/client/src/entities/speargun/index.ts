@@ -88,6 +88,15 @@ export interface Speargun {
    * direction: hides every visual and drops any in-flight shot/speared fish without resolving it
    * through `landed`/`tornFree`. Safe to call when nothing is active. */
   reset(): void;
+  /** VERIFICATION-ONLY: zeroes the reload timer. Real play never needs this (the 2.5 s reload is
+   * the point) — it exists because this sandbox's fixed-dt accumulator clamps to 0.05 s of
+   * simulated time per *rendered* frame (game/world.ts's `frame()`), and this sandbox's measured
+   * ~2-4 fps means simulated time crawls at roughly a fifth to a tenth of real wall-clock time —
+   * a Playwright script's `waitForTimeout(3000)` was observed not being enough real time for a
+   * 2.5 s *simulated* reload to actually clear. Bypassing it here is simpler and more honest than
+   * padding every verification script with multi-minute real-time waits to chase simulated time
+   * that will never run at real speed in this environment anyway. */
+  debugForceReloadReady(): void;
   /** Unlike game/fishing/rod-viewmodel.ts (which toggles between a first-person rod and a
    * boat-mounted one — see that file's header), there is no boat-mounted speargun: it's either
    * visible (diving) or not shown at all (aboard). `game/world.ts`'s `setDiveUI` calls this on
@@ -221,11 +230,13 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
 
   function setViewVisible(v: boolean): void { gunVM.group.visible = v; }
 
+  function debugForceReloadReady(): void { gun = createGun(); }
+
   function dispose(): void {
     gunVM.dispose();
     shaftVisual.dispose();
     floatLine.dispose();
   }
 
-  return { update, tryFire, setHauling, isActive, getFightState, reset, setViewVisible, dispose };
+  return { update, tryFire, setHauling, isActive, getFightState, reset, debugForceReloadReady, setViewVisible, dispose };
 }

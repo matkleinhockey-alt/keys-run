@@ -92,6 +92,10 @@ interface DiverFigure {
   /** Poses both arms so each hand lands exactly on the given world (pivot-local) target —
    * called once per `show()` with the fish's own grip points. */
   poseArms(targetA: THREE.Vector3, targetB: THREE.Vector3): void;
+  /** The points `show()`'s camera-fit should actually care about: head top, snorkel top, both
+   * shoulders, both (posed) hands — deliberately NOT the torso/tank, which are allowed to run out
+   * the bottom of frame (see TORSO_BOTTOM_Y's comment). Call after `poseArms`. */
+  framePoints(): THREE.Vector3[];
   dispose(): void;
 }
 
@@ -108,13 +112,21 @@ function buildDiverFigure(): DiverFigure {
     return g;
   };
 
-  const wetsuit = new THREE.MeshStandardMaterial({ color: 0x171d24, roughness: 0.45, metalness: 0.08, flatShading: true });
-  const glove = new THREE.MeshStandardMaterial({ color: 0x11151a, roughness: 0.55, flatShading: true });
+  // Lighter than a real neoprene black on purpose — a literal near-black wetsuit against this
+  // scene's dark blue-green backdrop measured as nearly invisible in the first render pass (see
+  // this task's report): "wetsuit-dark-teal" reads as a wetsuit while actually catching the key
+  // light enough to silhouette against the water behind it.
+  const wetsuit = new THREE.MeshStandardMaterial({ color: 0x2d4f58, roughness: 0.4, metalness: 0.1, flatShading: true });
+  const glove = new THREE.MeshStandardMaterial({ color: 0x23282d, roughness: 0.5, flatShading: true });
   const skin = new THREE.MeshStandardMaterial({ color: 0xc9916b, roughness: 0.55, flatShading: true });
   const maskGlass = new THREE.MeshStandardMaterial({ color: 0x0a0e12, roughness: 0.08, metalness: 0.3 });
-  const maskFrame = new THREE.MeshStandardMaterial({ color: 0x23272c, roughness: 0.5, flatShading: true });
-  const snorkelMat = new THREE.MeshStandardMaterial({ color: 0xe0574a, roughness: 0.45, flatShading: true });
-  mats.push(wetsuit, glove, skin, maskGlass, maskFrame, snorkelMat);
+  const maskFrame = new THREE.MeshStandardMaterial({ color: 0x2b3238, roughness: 0.5, flatShading: true });
+  // Dark rubber, not a bright accent colour — the first pass made the snorkel the single most
+  // visually dominant thing in frame by giving it the only saturated colour anywhere on the
+  // figure. A small bright purge-valve accent (near the mouthpiece) is plenty.
+  const snorkelMat = new THREE.MeshStandardMaterial({ color: 0x24292e, roughness: 0.5, flatShading: true });
+  const accentMat = new THREE.MeshStandardMaterial({ color: 0xf2c14e, roughness: 0.4, flatShading: true });
+  mats.push(wetsuit, glove, skin, maskGlass, maskFrame, snorkelMat, accentMat);
 
   const shoulderY = 0.12, chestZ = -0.03;
   // Deliberately cropped at the chest, not the real waist: there are no legs (the frame never
@@ -163,16 +175,22 @@ function buildDiverFigure(): DiverFigure {
   group.add(strap);
 
   // snorkel: mouthpiece near the mask's lower side, a bent tube running up past the top of the
-  // head — two straight segments read fine as a "J" at this fidelity.
+  // head — two straight segments read fine as a "J" at this fidelity. Shorter than a first pass
+  // of this (headY+0.32, nearly 1.4x the head's own radius above the head top) — still clearly a
+  // snorkel, without being the single tallest, most attention-grabbing shape in the frame.
   const snorkA = new THREE.Vector3(0.1, headY - 0.1, chestZ + 0.09);
-  const snorkB = new THREE.Vector3(0.14, headY + 0.08, chestZ + 0.05);
-  const snorkC = new THREE.Vector3(0.14, headY + 0.32, chestZ + 0.03);
-  const snork1 = new THREE.Mesh(unitCyl(0.018, 0.018, 8), snorkelMat);
+  const snorkB = new THREE.Vector3(0.13, headY + 0.07, chestZ + 0.05);
+  const snorkC = new THREE.Vector3(0.13, headY + 0.22, chestZ + 0.03);
+  const snork1 = new THREE.Mesh(unitCyl(0.017, 0.017, 8), snorkelMat);
   setLimb(snork1, snorkA, snorkB);
   group.add(snork1);
-  const snork2 = new THREE.Mesh(unitCyl(0.016, 0.016, 8), snorkelMat);
+  const snork2 = new THREE.Mesh(unitCyl(0.015, 0.015, 8), snorkelMat);
   setLimb(snork2, snorkB, snorkC);
   group.add(snork2);
+  // Small bright purge-valve accent — the snorkel's one deliberate pop of colour, not the whole tube.
+  const purge = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.019, 0.03, 8), accentMat);
+  setLimb(purge, snorkB.clone().add(new THREE.Vector3(0, -0.015, 0)), snorkB.clone().add(new THREE.Vector3(0, 0.015, 0)));
+  group.add(purge);
   const mouthpiece = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 6), new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.6 }));
   mouthpiece.position.copy(snorkA);
   group.add(mouthpiece);
@@ -210,6 +228,15 @@ function buildDiverFigure(): DiverFigure {
     }
   }
 
+  function framePoints(): THREE.Vector3[] {
+    return [
+      new THREE.Vector3(0, headY + 0.145, chestZ), // head top, a touch past the sphere radius
+      snorkC.clone(),
+      arms[0].shoulder.clone(), arms[1].shoulder.clone(),
+      arms[0].hand.position.clone(), arms[1].hand.position.clone(),
+    ];
+  }
+
   function dispose(): void {
     for (const g of geos) g.dispose();
     for (const m of mats) m.dispose();
@@ -221,10 +248,11 @@ function buildDiverFigure(): DiverFigure {
     strap.geometry.dispose();
     neck.geometry.dispose();
     mouthpiece.geometry.dispose();
+    purge.geometry.dispose();
     for (const a of arms) { a.elbow.geometry.dispose(); a.hand.geometry.dispose(); }
   }
 
-  return { group, arms, poseArms, dispose };
+  return { group, arms, poseArms, framePoints, dispose };
 }
 
 // ---- underwater environment --------------------------------------------------------------------
@@ -338,19 +366,29 @@ export function createUnderwaterTrophy(canvasId: string): UnderwaterTrophy {
     const cv = document.getElementById(canvasId) as HTMLCanvasElement | null;
     const scene = new THREE.Scene();
     scene.background = buildUwBackdrop();
-    scene.add(new THREE.HemisphereLight(0x3a6a6e, 0x030a0c, 0.4));
+    // Brighter overall than a strictly "moody" underwater grade would be — legible species/size
+    // is the functional point of this card (task brief), and the first render pass (dark key +
+    // near-black wetsuit/gloves) measured as the hands/arms being essentially unreadable against
+    // the backdrop. Still blue-green shifted throughout, just not under-lit.
+    scene.add(new THREE.HemisphereLight(0x4a7e82, 0x061015, 0.55));
     // Downwelling "sunlight through water" key, blue-green shifted and from almost directly
     // above — the single biggest thing that keeps this from reading as the surface card with a
     // different backdrop.
-    const key = new THREE.DirectionalLight(0xbfe9df, 1.1);
-    key.position.set(1.5, 5, 1.5);
+    const key = new THREE.DirectionalLight(0xcdf0e6, 1.5);
+    key.position.set(1.5, 5, 2);
     scene.add(key);
-    const fill = new THREE.DirectionalLight(0x1c5a66, 0.35);
-    fill.position.set(-2, -1, 1.5);
+    const fill = new THREE.DirectionalLight(0x2a7382, 0.55);
+    fill.position.set(-1.5, -0.5, 2.2);
     scene.add(fill);
-    const rim = new THREE.DirectionalLight(0x8fd9cc, 0.6);
+    const rim = new THREE.DirectionalLight(0x9ee8da, 0.9);
     rim.position.set(-2, 1.5, -2.5);
     scene.add(rim);
+    // A dedicated front-fill aimed at roughly where the hands/fish always are (chestZ..+0.4 in Z)
+    // — the key/rim above are both grazing/top-down by design (that's what reads as "underwater"),
+    // which left the one thing this shot lives or dies on relatively dim.
+    const handFill = new THREE.DirectionalLight(0xdfffe8, 0.5);
+    handFill.position.set(0.5, 0.6, 3);
+    scene.add(handFill);
 
     const camera = new THREE.PerspectiveCamera(34, (cv?.width || 640) / (cv?.height || 300), 0.05, 50);
     const base = buildOffscreenRig(canvasId, scene, camera);
@@ -406,13 +444,15 @@ export function createUnderwaterTrophy(canvasId: string): UnderwaterTrophy {
     const gripB = toPivotSpace(midZLocal + halfSpanLocal);
     diver.poseArms(gripA, gripB);
 
-    // Camera: fit the REAL combined bounding box of the diver figure + fish (not a guessed
-    // coefficient) — a snorkel sticking up well above the head is exactly the kind of extent a
-    // hand-picked "half width" constant would silently crop. Measured from `diver.group`/`fish`
-    // directly (not `r.pivot`, which also holds the decorative particulate field — framing to
-    // fit scattered particles would be wrong).
+    // Camera: fit the REAL extents of what the shot should actually show — head/snorkel/
+    // shoulders/hands (`framePoints()`, deliberately NOT the torso — see TORSO_BOTTOM_Y's comment,
+    // the torso is meant to run out the bottom of frame, not shrink everything else to fit it)
+    // plus the fish's own full bounding box (it usually reaches past the capped hand-grip span —
+    // see `halfSpanLocal` above). Measured from real geometry, not a guessed coefficient — a
+    // snorkel sticking up above the head is exactly the kind of extent a hand-picked constant
+    // would silently crop or, as happened here first, silently over-crop everything else to fit.
     const frameBox = new THREE.Box3();
-    frameBox.union(new THREE.Box3().setFromObject(diver.group));
+    for (const p of diver.framePoints()) frameBox.expandByPoint(p);
     frameBox.union(new THREE.Box3().setFromObject(fish));
     const size = frameBox.getSize(new THREE.Vector3());
     const center = frameBox.getCenter(new THREE.Vector3());
@@ -450,7 +490,11 @@ export function createUnderwaterTrophy(canvasId: string): UnderwaterTrophy {
     // plumbing to do; the brief's "caustics if cheap" qualifier is exactly why that wasn't built.
     r.pivot.position.y = Math.sin(t * 0.9) * 0.025;
     r.pivot.rotation.y = Math.sin(t * 0.5) * 0.09;
-    r.key.intensity = 1.0 + Math.sin(t * 3.1) * 0.12 + Math.sin(t * 7.3 + 1) * 0.06;
+    // Shimmer around the same baseline `ensureRig` set the key to (1.5) — this was previously
+    // hardcoded back down to ~1.0 every frame here, quietly undoing that light's own intensity
+    // the instant the first render() call ran (which, in real play, is every frame — see
+    // catch-flow.ts's `renderPortrait`, called continuously while a catch card is up).
+    r.key.intensity = 1.5 + Math.sin(t * 3.1) * 0.12 + Math.sin(t * 7.3 + 1) * 0.06;
 
     const pos = r.particulate.geometry.attributes.position as THREE.BufferAttribute;
     const arr = pos.array as Float32Array;

@@ -40,9 +40,16 @@ export function createGunViewModel(camera: THREE.Camera): GunViewModel {
   base.rotation.set(-0.04, 0.03, 0, 'YXZ');
   group.add(base);
 
-  const dark = new THREE.MeshStandardMaterial({ color: 0x15181c, roughness: 0.4, metalness: 0.5 });
-  const steel = new THREE.MeshStandardMaterial({ color: 0xb9c0c6, roughness: 0.25, metalness: 0.85 });
-  const rubber = new THREE.MeshStandardMaterial({ color: 0x0b0b0b, roughness: 0.8 });
+  // Lighter than a real gunmetal/rubber black on purpose — this view model is lit by whatever the
+  // *main scene's* lighting is (unlike the trophy card's own dedicated rig in underwater-
+  // trophy.ts), and that dims hard with depth (the real underwater extinction model, which this
+  // task does not own/touch). A near-black held object measured as essentially invisible by ~8 m
+  // depth in testing — exactly the "at rest" shot this is for. A held tool staying legible
+  // regardless of ambient light is a standard first-person convention (most games cheat their
+  // view-model lighting for this reason), not a claim that gear doesn't darken underwater.
+  const dark = new THREE.MeshStandardMaterial({ color: 0x3c4a54, roughness: 0.4, metalness: 0.5 });
+  const steel = new THREE.MeshStandardMaterial({ color: 0xc7ced4, roughness: 0.25, metalness: 0.85 });
+  const rubber = new THREE.MeshStandardMaterial({ color: 0x262b2f, roughness: 0.8 });
 
   const BARREL_LEN = 0.78;
   const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.02, BARREL_LEN, 10).rotateX(Math.PI / 2), dark);
