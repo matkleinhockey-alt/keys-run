@@ -28,14 +28,17 @@
 import * as THREE from 'three';
 import { waterNoiseTex } from '../../core/textures.js';
 import { MARINE_SNOW_MAX } from './depth-bands.js';
+import { depthAt } from '@keysrun/shared/world/depth';
+import { currentAt } from '@keysrun/shared/world/current';
 
 const BOX = 11; // metres — half-extent of the camera-centred volume particles wrap within
 
 export interface MarineSnow {
   points: THREE.Points;
   /** `depthFraction` is clamp01(cameraDepth / MARINE_SNOW_FULL_DEPTH) * underwaterAmount — index.ts
-   * computes it since it already knows both numbers; this module just renders the result. */
-  update(dt: number, cameraPos: THREE.Vector3, depthFraction: number): void;
+   * computes it since it already knows both numbers; this module just renders the result.
+   * `t` is the sim clock, needed to sample the ocean current (@keysrun/shared/world/current). */
+  update(dt: number, cameraPos: THREE.Vector3, depthFraction: number, simTime: number): void;
   dispose(): void;
 }
 
@@ -117,16 +120,27 @@ export function createMarineSnow(pixelRatio = 1): MarineSnow {
   points.renderOrder = 2;
 
   let t = 0;
-  function update(dt: number, cameraPos: THREE.Vector3, depthFraction: number): void {
+  function update(dt: number, cameraPos: THREE.Vector3, depthFraction: number, simTime: number): void {
     t += dt;
     mat.uniforms.uTime.value = t;
     mat.uniforms.uDensity.value = Math.max(0, Math.min(1, depthFraction));
     if (depthFraction <= 0) return; // nothing visible — skip the position churn entirely
+
+    // Marine snow is neutrally buoyant detritus: it goes where the water goes. Sampling the
+    // current once per frame at the camera (rather than per particle) is the same call the weeds
+    // make — the field varies over hundreds of metres and the whole particle box is 22 m across,
+    // so a per-particle sample would return effectively the same vector 900 times.
+    //
+    // This is what makes the current legible *away from the seafloor*: weeds only show flow where
+    // there happen to be weeds, whereas snow is everywhere you can see, so swimming out over the
+    // wall into the Florida Current now visibly streams past you.
+    const flow = currentAt(cameraPos.x, cameraPos.z, simTime, depthAt(cameraPos.x, cameraPos.z));
+
     for (let i = 0; i < MARINE_SNOW_MAX; i++) {
       const o = i * 3;
-      pos[o] += vel[o] * dt;
+      pos[o] += (vel[o] + flow.vx) * dt;
       pos[o + 1] += vel[o + 1] * dt;
-      pos[o + 2] += vel[o + 2] * dt;
+      pos[o + 2] += (vel[o + 2] + flow.vz) * dt;
       // Wrap each axis back into [-BOX, BOX) *relative to the camera*, independently — the
       // "infinite attached volume" trick: subtract the camera's position, wrap into the box, add
       // it back, so particles only ever appear to drift within BOX of wherever the camera now is.

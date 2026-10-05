@@ -245,11 +245,25 @@ function seaPlumeGeo(bushy: boolean): THREE.BufferGeometry {
   return bushy ? crossCardGeo(0.5, 1.3) : cardGeo(0.5, 1.3);
 }
 
+/**
+ * A tuft of blades. Blades are spread across a small radius rather than all rooted at the instance
+ * origin — a rosette of quads sharing one point reads as a single spiky star from above, whereas a
+ * real seagrass shoot cluster covers a patch of seabed. Height and bend vary per blade so a tuft
+ * does not look stamped.
+ */
 function seagrassGeo(blades: number): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
   for (let i = 0; i < blades; i++) {
-    const blade = cardGeo(0.1, 1, 3, 0.18 + (i % 2) * 0.08);
-    blade.rotateY((i / blades) * Math.PI * 2);
+    // Real Thalassia blades run 10-35 cm (to ~60 cm for the tallest shoots and for the
+    // Syringodium mixed in); with species.ts's scale[0.7,1.4] on top, this lands at ~0.3-0.8 m.
+    // The old flat 1.0 m put blades two thirds of the way to the surface in 1.6 m of water, which
+    // read as a reed bed rather than a grass flat.
+    const h = 0.42 + ((i * 7) % 5) * 0.05;
+    const blade = cardGeo(0.1, h, 3, 0.16 + (i % 3) * 0.07);
+    blade.rotateY((i / blades) * Math.PI * 2 + (i % 2) * 0.4);
+    const ang = (i / blades) * Math.PI * 2;
+    const r = blades > 1 ? 0.06 + ((i * 3) % 4) * 0.035 : 0;
+    blade.translate(Math.cos(ang) * r, 0, Math.sin(ang) * r);
     parts.push(blade);
   }
   return merge(parts);
@@ -348,8 +362,11 @@ export function geometryFor(species: SpeciesId): LodGeometry {
       set = { near: tubeSpongeGeo(8, 4, 73), mid: tubeSpongeGeo(5, 3, 73), far: tubeSpongeGeo(4, 1, 73) };
       break;
     case 'seagrass': {
+      // The steepest LOD falloff of any species here, which is what pays for the density bump in
+      // constants.ts: a full tuft up close, a thinned one at mid range, and a single 2-triangle
+      // card in the distance where a tuft is a few pixels of green anyway.
       const far = cardGeo(0.1, 1, 1, 0.1);
-      set = { near: seagrassGeo(3), mid: seagrassGeo(3), far };
+      set = { near: seagrassGeo(6), mid: seagrassGeo(3), far };
       break;
     }
   }

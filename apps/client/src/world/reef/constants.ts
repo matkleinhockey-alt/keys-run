@@ -90,7 +90,12 @@ export const CANDIDATES_PER_CHUNK: Record<SpeciesId, number> = {
   barrelSponge: 40,
   tubeSponge: 40,
   encrusting: 140,
-  seagrass: 200,
+  // Turtle grass is a *meadow*, not scattered stubble. At 200 the seagrass-flat waypoint rendered
+  // ~39 tufts per 50 m chunk — one tuft per ~64 m2, which photographs as a sand desert with a
+  // dozen lonely blades in it. Real Thalassia beds are continuous cover. Raised hard, which is
+  // affordable only because seagrass already has the steepest LOD falloff of any species here
+  // (a 6-blade tuft near, 3 mid, a single card far — geometry.ts) and the far tier is 2 triangles.
+  seagrass: 900,
 };
 
 /** Real Sombrero Reef Light sits at x=250 per world/landmarks.ts and the legacy chart label

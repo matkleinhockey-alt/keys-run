@@ -34,6 +34,7 @@ import { createReef } from './world/reef/index.js';
 import { placeChunk, worldToChunk, diveSiteAt } from './world/reef/placement.js';
 import { chainZ } from '@keysrun/shared/world/chain';
 import { depthAt } from '@keysrun/shared/world/depth';
+import { steadyCurrentAt, surgeAt, currentAt, type Flow } from '@keysrun/shared/world/current';
 import type { SpeciesId } from './world/reef/types.js';
 
 const hash2 = (x: number, z: number): number => {
@@ -192,6 +193,13 @@ const waypoints = buildWaypoints();
 
 interface HarnessApi {
   waypointNames: string[];
+  /** Pins the harness clock so sway can be stepped deterministically instead of sampled off a
+   * free-running rAF — without this, two screenshots differ by an unknown amount of elapsed time
+   * and nothing can be concluded from comparing them. Pass null to resume real time. */
+  setTime(t: number | null): void;
+  /** The raw current field at a point (@keysrun/shared/world/current), for asserting on numbers
+   * rather than on pixels. */
+  flowAt(x: number, z: number, t: number): { steady: Flow; surge: Flow; total: Flow };
   goto(name: string): { name: string; eye: [number, number, number] } | null;
   stats(): { calls: number; triangles: number };
   statsReefOnly(): { calls: number; triangles: number };
@@ -201,6 +209,11 @@ interface HarnessApi {
 
 const api: HarnessApi = {
   waypointNames: waypoints.map((w) => w.name),
+  setTime(t: number | null) { pinnedTime = t; },
+  flowAt(x: number, z: number, t: number) {
+    const d = depthAt(x, z);
+    return { steady: steadyCurrentAt(x, z, t), surge: surgeAt(x, z, t, d), total: currentAt(x, z, t, d) };
+  },
   goto(name: string) {
     const wp = waypoints.find((w) => w.name === name);
     if (!wp) return null;
@@ -233,9 +246,17 @@ const api: HarnessApi = {
 };
 (window as unknown as { __reefHarness: HarnessApi }).__reefHarness = api;
 
+/** Harness clock: real time unless pinned via `setTime` — see HarnessApi. */
+let pinnedTime: number | null = null;
+
 function frame(): void {
   requestAnimationFrame(frame);
+  const t = pinnedTime ?? performance.now() / 1000;
   reef.update(camera.position.x, camera.position.z);
+  // Drives the current-driven weed sway (world/reef/flow.ts). Without this the harness renders
+  // every flexible species bolt upright, which would make it useless for checking exactly the
+  // thing it is now most needed for.
+  reef.updateFlow(camera.position.x, camera.position.z, t);
   renderer.render(scene, camera);
 }
 frame();

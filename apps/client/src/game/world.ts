@@ -789,7 +789,7 @@ export function initWorld(wrap: HTMLElement): World {
     reef.updateFlow(camera.position.x, camera.position.z, simTime);
     // Needs the final camera position to know the viewer's depth, and must run before anything
     // renders so the extinction/fog state is right for this frame.
-    underwater.update(clamped);
+    underwater.update(clamped, simTime);
     // Last: needs the model's and camera's matrixWorld both up to date (applyBoatVisuals /
     // updateCamera or updateDiverCamera above, plus any override), same as legacy's
     // `drawLine(time)` running after both `updateBoat`/`updateCamera`.

@@ -55,7 +55,9 @@ export interface UnderwaterDeps {
 export interface UnderwaterWorld {
   /** Call once per frame, after updateCamera() has set the camera's final transform and before
    * postfx.render(). */
-  update(dt: number): void;
+  /** `simTime` is the world clock; marine snow needs it to sample the ocean current it drifts
+   * with (world/underwater/marine-snow.ts). */
+  update(dt: number, simTime: number): void;
   /** Call once at boot (after the first createPostFX) and again every time game/world.ts
    * recreates the postfx composer (quality tier change) — see this file's header. */
   attachPostFX(composer: EffectComposer, tier: QualityTier): void;
@@ -183,7 +185,7 @@ export function createUnderwaterWorld(deps: UnderwaterDeps): UnderwaterWorld {
     };
   }
 
-  function update(dt: number): void {
+  function update(dt: number, simTime: number): void {
     if (debugState) {
       const y = debugCameraY(debugState.depth, debugState.x, debugState.z);
       camera.position.set(debugState.x, y, debugState.z);
@@ -205,7 +207,7 @@ export function createUnderwaterWorld(deps: UnderwaterDeps): UnderwaterWorld {
 
     const cameraDepth = Math.max(0, -camera.position.y);
     const snowFraction = Math.min(1, cameraDepth / MARINE_SNOW_FULL_DEPTH) * transition.underwaterAmount();
-    marineSnow.update(dt, camera.position, snowFraction);
+    marineSnow.update(dt, camera.position, snowFraction, simTime);
   }
 
   function attachPostFX(composer: EffectComposer, tier: QualityTier): void {

@@ -131,7 +131,10 @@ export const SPECIES: Record<SpeciesId, SpeciesDef> = {
   },
   // Thalassia testudinum turtle-grass flats — explicitly not reef-associated.
   seagrass: {
-    id: 'seagrass', reefAssociated: false, depth: [0.6, 1.2, 3.6, 4.9],
+    // Extended down from 4.9 m: Thalassia testudinum grows to ~10 m in water this clear, and the
+    // old ceiling stopped the beds dead at the inshore edge of Hawk Channel — i.e. exactly where a
+    // diver actually swims. Now grass carries from the shallow flats out to the channel floor.
+    id: 'seagrass', reefAssociated: false, depth: [0.5, 1.2, 6.5, 9.5],
     colorLo: 0x2f7a3a, colorHi: 0x5cae52, scale: [0.7, 1.4], footprint: 0.5,
     // Unlignified ribbon blades — the most mobile thing on the seafloor, and the reference
     // point this whole scale is normalised against.
