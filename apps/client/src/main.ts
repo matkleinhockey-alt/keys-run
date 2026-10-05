@@ -101,7 +101,12 @@ async function boot(): Promise<void> {
       world.frame(dt);
       if (net && remoteBoats) {
         netSimT += Math.min(0.05, dt);
-        remoteBoats.update(now, netSimT, net.getRemoteBoats(now));
+        // One `getRemoteBoats` call feeds both consumers: the 3D boats and the minimap's contact
+        // markers must agree, and extrapolation is time-dependent, so calling it twice per frame
+        // would hand them poses from two different instants.
+        const snapshots = net.getRemoteBoats(now);
+        remoteBoats.update(now, netSimT, snapshots);
+        world.setRemoteBoatsForNet(snapshots.map((s) => ({ x: s.pose.x, z: s.pose.z, h: s.pose.h })));
       }
     } catch (e) {
       const t = now / 1000;

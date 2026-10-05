@@ -57,7 +57,7 @@ import { createCatchFlow } from './catch/catch-flow.js';
 import { bindCatchInput } from './catch/input.js';
 
 import { updateHUD } from '../ui/hud.js';
-import { createMinimap } from '../ui/minimap.js';
+import { createMinimap, type MinimapContact } from '../ui/minimap.js';
 import { populateBoatCards, showHud, showStart } from '../ui/start.js';
 import { toast } from '../ui/toast.js';
 import { spotClear, findClearSpot } from '../state/game.js';
@@ -105,6 +105,11 @@ export interface World {
    * envelope's speed/accel/turn-rate caps agree with what's actually being driven. See the
    * project report's "what's shaky" section. */
   setHullIndexForNet(hullIndex: number): void;
+  /** Every other connected player's pose, for the minimap's contact markers. main.ts already holds
+   * the NetClient and pumps net/remote-boats.ts from the same frame loop, so this hands the chart
+   * the poses it already has rather than giving world.ts its own net dependency. Pass an empty
+   * array when offline — the chart then simply draws no contacts. */
+  setRemoteBoatsForNet(remotes: readonly MinimapContact[]): void;
 }
 
 function hullOf(spec: Boat) {
@@ -436,6 +441,9 @@ export function initWorld(wrap: HTMLElement): World {
 
   // 14. HUD + minimap
   const minimap = createMinimap();
+  // Latest poses of the other connected players, pushed in by main.ts (setRemoteBoatsForNet) and
+  // read by the minimap each frame. Empty offline, and left untouched by every other system here.
+  let netRemoteBoats: readonly MinimapContact[] = [];
 
   // 15. start screen
   function placeBoat(spec: Boat): void {
@@ -667,7 +675,7 @@ export function initWorld(wrap: HTMLElement): World {
       electronics.update(clamped, simTime, fpState.driveOn);
       if (game.running) {
         updateHUD(clamped, curState, { boatLabel: hudBoatLabel(boatSpec), draft: boatSpec.draft, running: game.running });
-        minimap.draw(simTime, curState);
+        minimap.draw(simTime, curState, netRemoteBoats);
         catchFlow.updateTouchDock(curState);
       }
     }
@@ -800,6 +808,9 @@ export function initWorld(wrap: HTMLElement): World {
     },
     setHullIndexForNet(hullIndex) {
       placeBoat(BOATS[hullIndex] ?? BOATS[0]);
+    },
+    setRemoteBoatsForNet(remotes) {
+      netRemoteBoats = remotes;
     },
   };
 

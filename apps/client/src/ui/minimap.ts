@@ -17,9 +17,23 @@ const MW = WORLD.size;
 const inCity = (x: number, z: number): boolean => x > 250 && x < 3900 && z < -2560 && z > -3600;
 const inMiami = (x: number, z: number): boolean => x > -500 && x < 4200 && z < -1450;
 
+/** One other connected player, as the chart needs them: a position and a heading, nothing else.
+ *
+ * Deliberately not `RemoteBoatSnapshot` (net/client.ts). The minimap has no other reason to know
+ * the networking layer exists, and the two fields it actually plots are the stable part of that
+ * type — keeping the dependency pointed this way means the chart still compiles, and still draws,
+ * for an offline player where there is no NetClient at all. */
+export interface MinimapContact {
+  x: number;
+  z: number;
+  /** World heading, radians — same convention and sign as `BoatState.h`. */
+  h: number;
+}
+
 export interface Minimap {
   canvas: HTMLCanvasElement;
-  draw(t: number, boat: BoatState): void;
+  /** `remotes` is every *other* connected player; omit it (or pass an empty array) when offline. */
+  draw(t: number, boat: BoatState, remotes?: readonly MinimapContact[]): void;
 }
 
 export function createMinimap(): Minimap {
@@ -109,16 +123,45 @@ export function createMinimap(): Minimap {
     c.fillStyle = 'rgba(30,40,55,.85)'; c.font = 'italic 9px Georgia, serif'; c.textAlign = 'right'; c.fillText('Soundings in feet', MS - 12, 16);
   }
 
-  function drawMap(t: number, boat: BoatState): void {
+  /** The own-boat arrowhead, drawn at the canvas origin pointing up (-y). `s` scales it so the
+   * same silhouette can serve as the smaller "another player" contact — one shape, so a remote
+   * boat is unmistakably the same kind of thing as yours, just not yours. */
+  function boatMarker(s: number): void {
+    mctx.beginPath();
+    mctx.moveTo(0, -9 * s);
+    mctx.lineTo(6 * s, 7 * s);
+    mctx.lineTo(0, 4 * s);
+    mctx.lineTo(-6 * s, 7 * s);
+    mctx.closePath();
+    mctx.fill();
+    mctx.stroke();
+  }
+
+  function drawMap(t: number, boat: BoatState, remotes?: readonly MinimapContact[]): void {
     mctx.drawImage(mapBase, 0, 0);
     const toM = (x: number, z: number): [number, number] => [(x - WORLD.x0) / MW * MS, (z - WORLD.z0) / MW * MS];
     mctx.font = '13px sans-serif'; mctx.textAlign = 'center';
     MARINAS.forEach((M) => { const [x, y] = toM(M.sx, M.sz + M.dir * 24); mctx.fillStyle = '#7a1f3d'; mctx.fillText('⚓', x, y + 4); });
     GOLF.forEach((G) => { const w = islandWorld(G.I, G.lx, G.lz), [x, y] = toM(w[0], w[1]); mctx.fillText('⛳', x, y + 4); });
+
+    // Other players first, so a remote contact can never obscure your own boat when two players
+    // are on top of each other at a hotspot — which is exactly when the chart matters most.
+    // Teal against the own-boat amber: both read instantly on the buff/blue chart, and the pair
+    // is distinguishable without relying on colour alone, since the contacts are visibly smaller.
+    if (remotes && remotes.length > 0) {
+      mctx.fillStyle = '#3fd0c9'; mctx.strokeStyle = '#0d3b66'; mctx.lineWidth = 1.5;
+      for (const r of remotes) {
+        const [rx, ry] = toM(r.x, r.z);
+        mctx.save(); mctx.translate(rx, ry); mctx.rotate(-r.h);
+        boatMarker(0.62);
+        mctx.restore();
+      }
+    }
+
     const [bx, by] = toM(boat.x, boat.z);
     mctx.save(); mctx.translate(bx, by); mctx.rotate(-boat.h);
     mctx.fillStyle = '#f2c14e'; mctx.strokeStyle = '#0d3b66'; mctx.lineWidth = 2;
-    mctx.beginPath(); mctx.moveTo(0, -9); mctx.lineTo(6, 7); mctx.lineTo(0, 4); mctx.lineTo(-6, 7); mctx.closePath(); mctx.fill(); mctx.stroke();
+    boatMarker(1);
     mctx.restore();
     void t;
   }
