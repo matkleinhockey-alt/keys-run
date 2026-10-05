@@ -20,13 +20,15 @@ const OUT = path.join(HERE, 'screenshots', 'catch-portrait', TAG);
 fs.mkdirSync(OUT, { recursive: true });
 
 // name, species key, a mid-range weight (lb), covering a big pelagic, a reef fish and an
-// odd-shaped/elongated species per the task brief.
+// odd-shaped/elongated species per the task brief. `grouper` added for the fish-geometry task's
+// "rounded tail" case (apps/client/src/entities/fish/fins.ts's buildTail 'round' style).
 const SPECIES = [
   ['mahi', 'mahi', 25],
   ['tarpon', 'tarpon', 80],
   ['yellowtail', 'yellowtail', 3],
   ['hogfish', 'hogfish', 8],
   ['barracuda', 'barracuda', 20],
+  ['grouper', 'grouper', 25],
 ];
 
 const browser = await chromium.launch();

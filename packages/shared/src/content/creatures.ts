@@ -190,7 +190,7 @@ export interface FishShape {
 export const SHAPE: Record<string, FishShape> = {
   bonefish:{peak:.38,nose:1,ped:.17,tail:'fork',tl:.24,th:.5,dor:[[.33,.48,.55,'tri']],anal:[[.7,.78,.22,'tri']],pec:.15,belly:.9},
   permit:{peak:.42,nose:.42,ped:.11,tail:'fork',tl:.34,th:.62,dor:[[.4,.72,.32,'sickle']],anal:[[.46,.74,.34,'sickle']],pec:.16},
-  tarpon:{peak:.38,nose:.75,ped:.16,tail:'fork',tl:.26,th:.6,dor:[[.43,.56,.55,'sickle']],anal:[[.62,.78,.32,'tri']],pec:.12},
+  tarpon:{peak:.38,nose:.75,ped:.16,tail:'deepfork',tl:.26,th:.6,dor:[[.43,.56,.55,'sickle']],anal:[[.62,.78,.32,'tri']],pec:.12},
   barracuda:{peak:.52,nose:1.5,ped:.26,tail:'fork',tl:.18,th:.75,dor:[[.3,.38,.38,'tri'],[.64,.71,.42,'tri']],anal:[[.65,.72,.38,'tri']],pec:.09},
   snook:{peak:.34,nose:1,ped:.22,tail:'fork',tl:.2,th:.6,dor:[[.3,.45,.55,'spiny'],[.5,.66,.4,'round']],anal:[[.67,.75,.35,'tri']],pec:.12},
   redfish:{peak:.38,nose:.75,ped:.26,tail:'truncate',tl:.17,th:.55,dor:[[.28,.43,.42,'spiny'],[.45,.72,.3,'long']],anal:[[.66,.77,.3,'round']],pec:.14},
