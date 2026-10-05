@@ -1,36 +1,42 @@
 /**
- * Loads the deck-crew glTF — the project's first external 3D asset with a real skeleton and
- * animation (see docs/ASSET-LICENCES.md for the full licence entry and, importantly, a note on
- * *whose* character this is — read it before this ships publicly).
+ * Loads the deck-crew glTF — the realistic `bikini_girl` Sketchfab figure, now actually rigged
+ * and dancing (see docs/ASSET-LICENCES.md for the full licence entry: this derived asset combines
+ * that CC-BY-4.0 model with a Mixamo animation, and needs attribution for the former).
  *
- * This replaces an earlier static, unrigged figure (`raw/bikini_girl.glb`, still built by
- * packages/assets-pipeline/scripts/build-crew.sh and still sitting at
- * apps/client/public/models/crew/crew-01.lod{0,1}.glb — untouched, just no longer loaded here)
- * with a Mixamo "with skin" export: Mixamo's own default "X Bot" character mesh, rigged to a
- * standard `mixamorig:` skeleton, with the "Hip Hop Dancing" animation baked onto it. **This
- * changes the deck crew's appearance** — X Bot is a flat reddish-brown, textureless mannequin,
- * not the textured bikini_girl figure. That trade (a figure that actually dances, vs. the
- * previous figure's look) was a deliberate call made for this task; see docs/ASSET-LICENCES.md's
- * "dance-01" entry for the full reasoning and the options left open for whoever owns this next.
+ * This replaces the PREVIOUS `dance-01.glb` (Mixamo's own generic "X Bot" mannequin — a
+ * flat-reddish-brown, textureless stand-in baked into `raw/hiphop_dancing.fbx` itself) with the
+ * project's actual textured crew figure (`raw/bikini_girl.glb`, 49,860 tris, CC-BY-4.0, no
+ * skeleton of its own) bound to that same Mixamo `mixamorig:` skeleton + "Hip Hop Dancing" clip.
+ * The bind was done locally with Blender's heat-map "Automatic Weights" — the same class of
+ * technique Mixamo's own web auto-rigger uses — by
+ * packages/assets-pipeline/scripts/rig-dancer.blender.py; see that script's header for the full
+ * alignment/pose/topology debugging history (scale+orientation matching, bending the T-pose rig's
+ * arms to roughly match the girl's actual "hands at her hair" rest pose, and the one genuinely
+ * load-bearing fix: merging 11,686 duplicate/overlapping vertices that otherwise left the heat-
+ * weight solver unable to solve the mesh at all). The bind was judged by rendering it in Blender
+ * across the whole dance, not guessed at — see test/screenshots/crew-rigged/ and this task's
+ * report for that render and the honest call on quality, including its one known limitation:
+ * Mixamo's generic bone-chain lengths aren't rescaled to the girl's actual limb proportions, which
+ * shows as visible-but-bounded arm elongation on the dance's biggest reach beats (not torn or
+ * exploded geometry).
  *
- * Built by packages/assets-pipeline/scripts/build-dance.sh from
- * packages/assets-pipeline/raw/hiphop_dancing.fbx: FBX2glTF conversion, stripping Mixamo's
- * joint-visualization overlay mesh, then meshopt geometry+animation compression (no
- * simplify/flatten/join — not confirmed safe on a skinned character, see that script's header).
- * No textures to compress (the source has none). No KTX2 question here either, for the same
- * reason.
+ * Built by packages/assets-pipeline/scripts/build-dance.sh: the Blender rig step above, then
+ * `gltf-transform optimize` (meshopt geometry+animation compression, WebP textures). Unlike the
+ * previous build, simplify is now ENABLED — confirmed safe for this skinned mesh by direct
+ * before/after render comparison (see the script header and this task's report), so the earlier
+ * blanket caution against simplifying a skinned character no longer applies here.
  *
  * Loaded exactly once (module-level singleton promise) and **skeleton-cloned** per placed figure
  * via `SkeletonUtils.clone` (see index.ts's `spawnFigure`) — a skinned mesh's plain
  * `Object3D.clone()`/`THREE.LOD.clone()` does NOT duplicate its skeleton, so naively cloning N
  * instances would have them all sharing (and fighting over) one skeleton's bone transforms.
  *
- * No LOD split (unlike the old static figure): this ships as a single ~28k-triangle mesh at
- * every distance. Mesh simplification on a skinned+animated character isn't confirmed safe by
- * this team (see build-dance.sh), so a decimated, skin-safe distant LOD is deferred rather than
- * risk a silently broken skin — see this module's `TEMPLATE_HEIGHT_M` note below for the other
- * place a future LOD1 would need updating (none — a LOD1 would just be a second glTF level added
- * to a `THREE.LOD` the same way the old asset did; nothing here structurally prevents it).
+ * LOD: build-dance.sh now also writes a far LOD (`dance-01.lod1.glb`, ~5k tris) alongside this
+ * near one (~12k tris, down from the source's 49,860) — same two-tier split as the static figure's
+ * `crew-01.lod{0,1}.glb`. Neither this module nor index.ts wires that second file into a
+ * `THREE.LOD` yet (matching crew-01's own current status: built, not yet consumed) — a future
+ * LOD1 would just be a second glTF level added to a `THREE.LOD` the same way the old static asset
+ * did; nothing here structurally prevents it.
  *
  * Loading is async and is never awaited by the boot path (apps/client/src/game/world.ts calls
  * `loadCrewAsset` without blocking on it) — the game starts and is playable immediately, and
@@ -44,15 +50,15 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 // this is produced, and docs/ASSET-LICENCES.md for the source/licence.
 const DANCE_URL = '/models/crew/dance-01.glb';
 
-// Measured from the pre-quantization build/dance/pruned.glb bbox (packages/assets-pipeline's
-// `gltf-transform inspect` output, this project's report has the full numbers): bboxMin
-// (-0.90257, -0.00035, -0.14896) to bboxMax (0.90257, 1.80888, 0.17174) — feet already sit at
-// y≈0 (Mixamo's own export convention, no `center --pivot below` step needed unlike bikini_girl),
-// height ≈1.809 m. Unlike the old asset (deliberately normalised to exactly 1 unit tall so a
-// placement's `heightM` doubled as its clone's uniform scale), this mesh is already in
-// real-world-ish metres — index.ts's spawnFigure divides each placement's target `heightM` by
-// this constant to get the actual scale factor, so placements.ts stays unchanged either way.
-export const TEMPLATE_HEIGHT_M = 1.809;
+// Measured directly in Blender at rest pose (pose_position='REST') on the built dance-01.glb:
+// bboxMin (-0.2954, -0.2067, 0.0000) to bboxMax (0.2957, 0.2067, 1.8298) — feet at z≈0 (the rig
+// script places them there explicitly; see rig-dancer.blender.py), height ≈1.830 m. This is
+// bikini_girl's own body scaled uniformly to match the Mixamo rig's natural height (not the old
+// X-Bot mesh's height, though the two happen to be within 2mm of each other). Like the previous
+// asset, this mesh is already in real-world-ish metres (not unit-height) — index.ts's spawnFigure
+// divides each placement's target `heightM` by this constant to get the actual scale factor, so
+// placements.ts stays unchanged either way.
+export const TEMPLATE_HEIGHT_M = 1.8298;
 
 export interface CrewAsset {
   /** Unparented template — never added to the scene directly. index.ts clones it per figure with

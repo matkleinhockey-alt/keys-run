@@ -78,61 +78,56 @@ its own row here if/when it's actually brought into the repo.
 
 ---
 
-## Dancing deck crew figure (`dance-01`)
+## Dancing deck crew figure (`dance-01`) — bikini_girl rigged to the Mixamo skeleton
 
 | field | value |
 |---|---|
-| asset | `packages/assets-pipeline/raw/hiphop_dancing.fbx` → `apps/client/public/models/crew/dance-01.glb` |
-| title | "Hip Hop Dancing" (Mixamo animation) on Mixamo's default "X Bot" character mesh |
-| author | Mixamo (Adobe) |
-| source | Mixamo library (mixamo.com) — exact download date not recorded; file was already present in the user's Downloads when this task started |
-| licence (as recorded) | Adobe Mixamo general terms of use (free for personal and commercial use, no attribution required, as of this writing) |
-| commercial use | Believed permitted under Mixamo's ToS. |
-| **status** | **NOT CONFIRMED BY A HUMAN — a human must read Adobe's current Mixamo ToS before any public/Steam release.** |
+| asset | `packages/assets-pipeline/raw/bikini_girl.glb` + `packages/assets-pipeline/raw/hiphop_dancing.fbx` → `apps/client/public/models/crew/dance-01.glb` (+ `dance-01.lod1.glb`) |
+| what it is | A **derived/combined asset**: the realistic "Bikini girl" Sketchfab mesh (see the `crew-01` entry above for its own provenance) bound, locally in Blender, to Mixamo's `mixamorig:` skeleton and "Hip Hop Dancing" animation clip — i.e. the same outcome Mixamo's own web auto-rigger produces, done with Blender's heat-map "Automatic Weights" instead. |
+| mesh provenance | "Bikini girl" by doublesob ([sketchfab.com/ssorpeg](https://sketchfab.com/ssorpeg)), <https://sketchfab.com/3d-models/bikini-girl-95aba54a1796409ea85285c5a841b9a5>, **CC-BY-4.0 — attribution required**. Same licence terms and same NOT-YET-CONFIRMED-BY-A-HUMAN status as the `crew-01` entry above (this is the identical source mesh, just rigged instead of static) — see that entry's "Why this isn't marked CONFIRMED" section, which applies here too. |
+| animation/skeleton provenance | Mixamo (Adobe) "Hip Hop Dancing" library animation + standard `mixamorig:` skeleton, from `raw/hiphop_dancing.fbx`. Adobe Mixamo general terms of use (free for personal and commercial use, no attribution required, as of this writing) — **NOT CONFIRMED BY A HUMAN**, same as before. |
+| **status** | **LIKELY OK, NOT YET CONFIRMED BY A HUMAN for either provenance — must be confirmed before any public/Steam release.** Because this ships the mesh, CC-BY-4.0's attribution requirement applies to this asset exactly as it does to `crew-01`: the same "Bikini girl" / doublesob / link-back credit is needed on the game's credits screen (not yet implemented — see `crew-01`'s TODO list above, which now also covers this asset). |
 
-### IMPORTANT — this is a different, stand-in character, not the bikini_girl crew rigged
+### History — this superseded a different, stand-in character
 
-The above superseded entry ("Mixamo animation (not used by this pipeline)") assumed this file
-would eventually be used to *animate* the existing `bikini_girl` crew figure, once the user ran
-that mesh through Mixamo's own auto-rigger. **That has not happened.** Direct inspection of the
-FBX (its embedded strings, e.g. `...Dropbox (Adobe)\Mixamo\Characters\X Bot\clean.ma`, and its
-mesh name `Beta_Surface`/`Beta_Joints`) confirms this is a Mixamo **"with skin"** library export:
-it ships Mixamo's own generic default character ("X Bot") complete with its own mesh and
-skeleton, not a rigged version of this project's bikini_girl model. The two don't look alike —
-X Bot is a flat reddish-brown, textureless mannequin (Mixamo didn't export a diffuse texture for
-it); bikini_girl is the textured Sketchfab figure above.
-
-**This means the game currently ships two different-looking crew figures**: the static,
-non-dancing `bikini_girl` (used wherever `entities/crew-model/asset.ts` still points at it) and
-this rigged, dancing X Bot. Whoever owns this next should decide whether to:
-1. Keep X Bot as the permanent dancing figure (simplest — it already works end to end), or
-2. Get the user to actually run `bikini_girl.glb` through Mixamo's auto-rigger (producing a new
-   FBX/glTF with the *bikini_girl mesh* bound to a `mixamorig:` skeleton) and re-point this same
-   pipeline at that file instead — the rest of the pipeline below (strip/prune/optimize) and the
-   `entities/crew-model/` runtime code should need little to no change, since it already expects
-   a generic `mixamorig:`-skeleton + single animation clip shape.
-
-This was flagged rather than silently decided — see this task's report for the same note.
+Earlier, this file shipped Mixamo's own generic "X Bot" mannequin (`hiphop_dancing.fbx`'s *own*
+embedded mesh, `Beta_Surface` — a flat reddish-brown, textureless stand-in Mixamo bundles with
+every "with skin" library export) dancing, while the textured `bikini_girl` figure stood around
+statically elsewhere on the same boats. That was flagged at the time as temporary — see this
+task's report for the rigging work that replaced it with the actual bind described above.
 
 ### Technical notes
 
-- Source FBX: Kaydara FBX binary v7700, 2.2 MB, 1 mesh ("Beta_Surface", ~28k triangles / 14.3k
-  vertices after welding) + skeleton (`mixamorig:` naming, ~65 joints) + 1 animation
-  (`mixamo.com`, 7 s / originally 8,500 keyframes). A second mesh+skin ("Beta_Joints") ships in
-  the same file — Mixamo's own joint-visualization overlay for its rig preview, not part of the
-  character — and is dropped by the pipeline (see below).
-- No textures: the FBX's material (`Beta_HighLimbsGeoSG3`) is a flat PBR colour
-  (`baseColorFactor` ≈ `[0.67, 0.24, 0.21]`, a reddish-brown "skin" tone), not an image texture.
-  This is why X Bot renders as a flat mannequin colour rather than a textured character.
-- Pipeline (`packages/assets-pipeline/scripts/build-dance.sh`): FBX2glTF (native binary, the
-  `fbx2gltf` npm devDependency — see `packages/assets-pipeline/package.json`) → strip the
-  `Beta_Joints` node (`scripts/strip-mesh-node.cjs`) → `gltf-transform prune` → `gltf-transform
-  optimize` with meshopt geometry+animation compression and **simplify/flatten/join/instance all
-  disabled** (meshoptimizer's mesh simplifier and gltf-transform's scene-flattening/joining are
-  not confirmed safe on a skinned+animated character by this team; rather than risk a silently
-  broken skin, this ships at native resolution). Result: 2.06 MB → 174.5 KB, `gltf-transform
-  validate` reports zero errors (one benign `NODE_SKINNED_MESH_NON_ROOT` warning, standard for
-  this export shape). No KTX2/WebP step — there are no textures to compress.
-- No distant/cheap LOD: unlike `crew-01`'s two-LOD split, this asset ships as a single ~28k-tri
-  mesh at every distance (see `entities/crew-model/asset.ts`'s header for where a decimated,
-  skin-safe LOD1 would plug in later — deferred, not forgotten).
+- Rigging: `packages/assets-pipeline/scripts/rig-dancer.blender.py` (Blender 5.2, headless).
+  Imports both raw assets, aligns scale (bikini_girl is unit-height in its raw export; the Mixamo
+  rig is real-world metres) and pose (bikini_girl's rest pose has both arms raised to her hair, not
+  Mixamo's T-pose — the rig's arm chain is bent in pose-space to roughly match before binding),
+  merges 11,686 duplicate/overlapping vertices in the Sketchfab mesh (without this, non-manifold
+  edges and 1,335 disconnected geometry islands make Blender's heat-weight solver fail on the
+  ENTIRE mesh — not a partial/warned failure, confirmed as zero weighted vertices on every one of
+  65 vertex groups), disables deform on the 40 Mixamo finger bones (no separated finger geometry
+  on this mesh for them to own), binds with Blender's "Automatic Weights", re-attaches the
+  original action, and exports a single full-resolution (49,860-tri) rigged + animated GLB.
+- **Known limitation**: Mixamo's generic bone-chain lengths are not rescaled to bikini_girl's
+  actual limb proportions (only rotated into her rest pose, never resized). Combined with
+  replaying the original T-pose-authored animation against a hand-bent rest pose (a standard but
+  not mathematically exact technique for an A/T-pose rest mismatch), this shows up as
+  visible-but-bounded arm elongation on the dance's biggest reach beats. It is **not** torn,
+  collapsed, or exploded geometry — judged by rendering the bind across the full ~7 s clip in
+  Blender, not guessed at. See `apps/client/test/screenshots/crew-rigged/` for that render and
+  this task's report for the full honest call.
+- Build pipeline (`packages/assets-pipeline/scripts/build-dance.sh`): the Blender rig step above,
+  then `gltf-transform optimize` twice (near/far LOD) with meshopt geometry+animation compression
+  and WebP textures (1024px near / 384px far, matching `crew-01`'s texture-size split).
+  **Simplify is enabled** for both LODs — unlike the previous build (which disabled it as
+  "not confirmed safe on a skinned character"), this was directly tested: pre- vs post-simplify
+  dance frames rendered in Blender are visually identical in pose/deformation, just lower-poly.
+  `gltf-transform validate` reports zero errors on both outputs (same benign
+  `NODE_SKINNED_MESH_NON_ROOT` warning as before, plus an expected `UNSUPPORTED_EXTENSION` notice
+  for `EXT_meshopt_compression`, which the official validator doesn't recognise but every target
+  loader does).
+- Sizes: near LOD 11,964 tris / 523.9 KB (`dance-01.glb`, what the game loads); far LOD 5,222 tris
+  / 255.0 KB (`dance-01.lod1.glb`, built but not yet wired to runtime LOD switching — same status
+  as `crew-01.lod{0,1}.glb`). Source mesh was 49,860 tris / 4.71 MB. Previous (X-Bot) `dance-01.glb`
+  was 174.5 KB with no textures at all; the size increase is the textures this asset now actually
+  carries (baseColor + normal, WebP), not bloat — X-Bot never had any.

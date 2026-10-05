@@ -1,77 +1,87 @@
 #!/usr/bin/env bash
-# Builds the rigged, dancing deck-crew glTF from the user's Mixamo "Hip Hop Dancing" FBX.
+# Builds the rigged, dancing deck-crew glTF — the REALISTIC `bikini_girl` mesh bound to the
+# Mixamo `mixamorig:` skeleton + "Hip Hop Dancing" clip, two LODs, meshopt-compressed.
 #
-# --- What this actually ships ---
-# `raw/hiphop_dancing.fbx` is a Mixamo "with skin" library export: it carries its OWN mesh
-# ("Beta_Surface", the generic Mixamo "X Bot" character — confirmed by the embedded FBX strings,
-# e.g. `...Mixamo\Characters\X Bot\clean.ma`), a standard `mixamorig:` skeleton, and the
-# "Hip Hop Dancing" animation baked onto that skeleton. It is NOT a retarget of this project's own
-# `raw/bikini_girl.glb` crew figure — that mesh has no skeleton (see docs/ASSET-LICENCES.md) and
-# was never run through Mixamo's auto-rigger. So until someone does that, the dancing crew figure
-# this script produces looks like Mixamo's generic X Bot mannequin (flat reddish-brown material,
-# no texture — Mixamo didn't export one), NOT like the bikini_girl figure the static crew uses.
-# Both assets ship side by side; see entities/crew-model/asset.ts for which one the game actually
-# loads, and docs/ASSET-LICENCES.md for the full note.
+# --- What this ships now, vs before ---
+# Earlier versions of this script shipped Mixamo's own generic "X Bot" mannequin (the mesh baked
+# into `raw/hiphop_dancing.fbx` itself) dancing — a stand-in, not the project's actual crew figure
+# (see docs/ASSET-LICENCES.md's "dance-01" entry for that whole history). This version does what
+# that entry's own TODO asked for: runs `raw/bikini_girl.glb` (textured, 49,860 tris, NO skeleton)
+# through a local auto-rigger — Blender's heat-map "Automatic Weights", the same class of
+# technique Mixamo's own web auto-rigger uses — binding it to the Mixamo skeleton + animation
+# instead. scripts/rig-dancer.blender.py does the actual rigging (see its own header for the full
+# alignment/pose/topology debugging history: scale+orientation matching, bending the T-pose rig's
+# arms to roughly match the girl's actual "hands at her hair" rest pose, and — the one genuinely
+# load-bearing fix — merging 11,686 duplicate/overlapping vertices that otherwise left the mesh at
+# 1,335 disconnected islands and made Blender's heat-weight solver fail on the ENTIRE mesh, not
+# just a warning). The bind was judged by rendering it in Blender across the whole dance (not
+# guessed at) — see this task's report and test/screenshots/crew-rigged/ for that render and the
+# honest call on quality, including its one known limitation (Mixamo's generic bone-chain lengths
+# aren't rescaled to the girl's actual limb proportions, which shows as visible-but-bounded arm
+# elongation on the dance's biggest reach beats — not torn/exploded geometry).
 #
 # --- Pipeline ---
-# 1. FBX2glTF (native binary, installed via the `fbx2gltf` npm devDependency — see package.json's
-#    description for why that's a real dependency instead of `pnpm dlx`, unlike every other tool
-#    in this pipeline) converts the FBX to a loose (non-binary) glTF + .bin.
-# 2. scripts/strip-mesh-node.cjs detaches the `Beta_Joints` node from the scene graph: Mixamo's
-#    "with skin" export bundles a second mesh that's just small marker geometry at every joint,
-#    meant for Mixamo's own in-browser rig preview — left in, it renders as clutter stuck to the
-#    dancer's skeleton. See that script's header for why this is safe without reindexing anything.
-# 3. `gltf-transform prune` drops everything that was only reachable through the node just
-#    detached (its mesh, material, skin, and now-orphaned accessors) — confirmed to remove exactly
-#    one Node/Skin/Mesh/Primitive/Material plus their accessors, nothing from the real figure.
-# 4. `gltf-transform optimize` compresses geometry+animation with meshopt and losslessly
-#    resamples/dedupes animation keyframes. Deliberately run with `--simplify false` and
-#    `--flatten false --join false --instance false`: meshoptimizer's simplifier and
-#    gltf-transform's scene-flattening/joining are tuned for static meshes, and this project has
-#    no confirmation they preserve skin weights / joint hierarchy correctly on a skinned+animated
-#    character — rather than risk a silently-broken skin, this ships the figure at its native
-#    ~28k-triangle resolution. See entities/crew-model/asset.ts's header for the LOD implication
-#    (this asset has no distant/cheap LOD yet, unlike the static crew-01 figure — flagged there as
-#    deferred work, not an oversight).
+# 1. Blender (headless) imports both raw assets, aligns scale/pose, merges doubles, binds with
+#    Automatic Weights, re-attaches the original action, exports one full-res (49,860-tri) rigged
+#    GLB — scripts/rig-dancer.blender.py, see its header for the "why" of every step.
+# 2. `gltf-transform optimize`, twice (near/far LOD), same tool build-crew.sh uses for the static
+#    figure. Unlike this script's own earlier version, simplify is now ENABLED for this skinned
+#    mesh: confirmed safe by direct render comparison (pre- vs post-simplify dance frames are
+#    visually identical in pose/deformation, just lower-poly — see this task's report), so the
+#    earlier blanket caution ("not confirmed safe on a skinned character") no longer applies to
+#    this asset. flatten/join/instance/palette stay disabled regardless — those collapse the scene
+#    graph in ways not needed here and not worth re-litigating for a single-figure, single-material
+#    asset.
 #
 # Usage: ./scripts/build-dance.sh
-# Writes apps/client/public/models/crew/dance-01.glb directly (single file, no LOD split — see
-# above), unlike build-crew.sh which writes two LOD files into build/ for a caller to place.
+# Writes:
+#   apps/client/public/models/crew/dance-01.glb       (near LOD,  ~11-12k tris — what the game loads)
+#   apps/client/public/models/crew/dance-01.lod1.glb   (far LOD,   ~5k tris — built, not yet wired to
+#                                                        runtime LOD switching; same status as the
+#                                                        static figure's unused crew-01.lod{0,1}.glb)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-IN_RAW="raw/hiphop_dancing.fbx"
+BLENDER="${BLENDER:-blender}"
+if ! command -v "$BLENDER" >/dev/null 2>&1; then
+  for candidate in /opt/homebrew/bin/blender /Applications/Blender.app/Contents/MacOS/Blender; do
+    if [ -x "$candidate" ]; then BLENDER="$candidate"; break; fi
+  done
+fi
+
 OUT_DIR="build/dance"
-OUT_FINAL="../../apps/client/public/models/crew/dance-01.glb"
+RIGGED="$OUT_DIR/rigged.glb"
+FINAL_DIR="../../apps/client/public/models/crew"
 GLTF="pnpm dlx @gltf-transform/cli"
 
 rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
 
-echo "=== FBX2glTF: $IN_RAW -> $OUT_DIR/raw_out/raw.gltf ==="
-# fbx2gltf's wrapper requires the *parent* of its dest argument to already exist (it does its own
-# realpathSync before invoking the native tool) but the native tool itself appends a `_out/`
-# subdirectory for a non-binary (.gltf) destination — so the dest argument here is "$OUT_DIR/raw.gltf"
-# (parent "$OUT_DIR" already made above) and the file actually lands at "$OUT_DIR/raw_out/raw.gltf".
-node scripts/fbx-to-gltf.cjs "$IN_RAW" "$OUT_DIR/raw.gltf"
-
-echo "=== stripping Beta_Joints (Mixamo's rig-preview overlay mesh) ==="
-node scripts/strip-mesh-node.cjs "$OUT_DIR/raw_out/raw.gltf" Beta_Joints
-
-echo "=== prune (drop what stripping just orphaned) ==="
-$GLTF prune "$OUT_DIR/raw_out/raw.gltf" "$OUT_DIR/pruned.glb"
-
-echo "=== optimize (meshopt geometry+animation compression, no simplify/flatten/join) ==="
-$GLTF optimize "$OUT_DIR/pruned.glb" "$OUT_FINAL" \
-  --compress meshopt --simplify false --flatten false --join false --instance false --palette false --resample true --prune true
+echo "=== Blender: rig bikini_girl.glb to the Mixamo skeleton + Hip Hop Dancing clip ==="
+"$BLENDER" --background --python scripts/rig-dancer.blender.py -- "$(pwd)/$RIGGED"
 
 echo ""
-echo "=== validate ${OUT_FINAL} ==="
-$GLTF validate "$OUT_FINAL" || true
+echo "=== optimize: near LOD (~11-12k tris) -> dance-01.glb ==="
+$GLTF optimize "$RIGGED" "$FINAL_DIR/dance-01.glb" \
+  --simplify-ratio 0.24 --simplify-error 0.02 --texture-compress webp --texture-size 1024 --compress meshopt \
+  --flatten false --join false --instance false --palette false --resample true --prune true
 
 echo ""
-echo "=== inspect ${OUT_FINAL} ==="
-$GLTF inspect "$OUT_FINAL" | grep -A3 "glPrimitives\|ANIMATIONS\|^info:" || true
+echo "=== optimize: far LOD (~5k tris) -> dance-01.lod1.glb ==="
+$GLTF optimize "$RIGGED" "$FINAL_DIR/dance-01.lod1.glb" \
+  --simplify-ratio 0.10 --simplify-error 0.06 --texture-compress webp --texture-size 384 --compress meshopt \
+  --flatten false --join false --instance false --palette false --resample true --prune true
 
 echo ""
-echo "wrote $OUT_FINAL"
+echo "=== validate ==="
+$GLTF validate "$FINAL_DIR/dance-01.glb" || true
+$GLTF validate "$FINAL_DIR/dance-01.lod1.glb" || true
+
+echo ""
+echo "=== inspect dance-01.glb ==="
+$GLTF inspect "$FINAL_DIR/dance-01.glb" | grep -A3 "glPrimitives\|ANIMATIONS\|^info:" || true
+echo "=== inspect dance-01.lod1.glb ==="
+$GLTF inspect "$FINAL_DIR/dance-01.lod1.glb" | grep -A3 "glPrimitives\|ANIMATIONS\|^info:" || true
+
+echo ""
+echo "wrote $FINAL_DIR/dance-01.glb and $FINAL_DIR/dance-01.lod1.glb"
