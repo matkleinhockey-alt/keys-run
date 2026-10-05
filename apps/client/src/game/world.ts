@@ -51,7 +51,7 @@ import { applyDiverVisuals } from '../entities/diver/visuals.js';
 import { updateDiverCamera } from '../entities/diver/camera.js';
 import { updateDiverHud, showDiverHud, clearBlackoutOverlay } from '../entities/diver/hud.js';
 
-import { SPECIES } from '@keysrun/shared/content/species';
+import { SPEAR_RANGE, closestDistSqSegmentSegment } from '@keysrun/shared/sim/spear';
 import { createSpeargun, type DiverAimInput, type SpearTarget } from '../entities/speargun/index.js';
 import { bindSpeargunInput } from '../entities/speargun/input.js';
 
@@ -69,14 +69,16 @@ import { SPAWN_X, SPAWN_DZ, SPAWN_H } from '../state/constants.js';
 
 const DT = 1 / 30;
 
-/** Deterministic string -> [0,1) — `getSpearTargets` uses this to pick a stable weight for a
- * given school id (FNV-1a, same family of hash as content-addressed caches elsewhere in this
- * codebase) so a shot in flight never sees its own target's weight change mid-tick. */
-function hashUnit(id: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < id.length; i++) { h ^= id.charCodeAt(i); h = Math.imul(h, 16777619); }
-  return (h >>> 0) / 4294967295;
-}
+/** Query radius for `getSpearTargets` (below): comfortably past `SPEAR_RANGE` so a fish right at
+ * the edge of range is never clipped just because the query origin (the diver body, not the
+ * gun's muzzle — same small gap `debugSyntheticTarget`'s own comment calls out) sits a little
+ * behind the real shaft origin. */
+const SPEAR_QUERY_RADIUS = SPEAR_RANGE + 6;
+/** How close (m) a *missed* shaft has to pass a real fish to spook it and its school (Problem 2 —
+ * see the near-miss detection in `frame()`'s fixed-step loop, below). Added on top of the fish's
+ * own capsule radius, same shape as `SPEAR_QUERY_RADIUS`'s margin above the gun's own `ax..bz`
+ * hit-test. */
+const SPEAR_NEAR_MISS_MARGIN = 1.1;
 
 const lerpN = (a: number, b: number, t: number): number => a + (b - a) * t;
 /** Shortest-path angle interpolation, so a heading crossing the ±π seam doesn't spin the long way. */
@@ -380,15 +382,11 @@ export function initWorld(wrap: HTMLElement): World {
   // landFish` rod fishing uses (the module tags the fish `source: 'spear'` itself).
   //
   // `getSpearTargets`: the tier-3 tracked-fish registry entities/speargun/index.ts's header
-  // anticipates (docs/ARCHITECTURE.md "Fish ownership — three tiers") doesn't exist yet, and this
-  // agent's scope explicitly excludes editing entities/fish/** to add one. `debugActiveSchools()`
-  // (already exported, verification-only today) is the closest real stand-in on hand: one capsule
-  // per active school, centred on the school's own centroid/heading at the diver's current depth
-  // (schools don't expose a per-school Y), weighted deterministically from the school's id so a
-  // shot's target doesn't change species/weight mid-flight. Coarser than a real per-fish hitbox,
-  // but it means the gun can actually spear something swimming in the world today, not only the
-  // synthetic target in apps/client/test/spear-harness.ts — swap for the real registry's targets
-  // the moment it lands; nothing else here needs to change.
+  // anticipates (docs/ARCHITECTURE.md "Fish ownership — three tiers") now exists —
+  // `entities/fish/index.ts`'s `spearTargetsNear` returns real per-fish capsules built from each
+  // member's own live render transform, not a per-school stand-in, so the capsule the gun
+  // hit-tests against is exactly the fish the player sees. This function is now a thin adapter:
+  // gate on diving, keep the debug-synthetic hook, delegate the rest.
   /** `__spearDebug.setSyntheticTarget` (verification-only, see that hook's own comment below). */
   let debugSyntheticTarget: { key: string; weight: number } | null = null;
 
@@ -410,20 +408,11 @@ export function initWorld(wrap: HTMLElement): World {
         ax: px, ay: py - 0.6, az: pz, bx: px, by: py + 0.6, bz: pz, radius: 0.9,
       });
     }
-    for (const school of fishWorld.debugActiveSchools()) {
-      const S = SPECIES[school.type];
-      if (!S) continue; // ambient-only species (e.g. angelfish) have no weight/fight table
-      const dx = school.cx - s.x, dz = school.cz - s.z;
-      if (dx * dx + dz * dz > 400) continue; // ~20 m — comfortably past SPEAR_RANGE, cheap skip
-      const hx = Math.sin(school.heading) * 0.35, hz = Math.cos(school.heading) * 0.35;
-      out.push({
-        id: school.id, key: school.type,
-        weight: S.min + (S.max - S.min) * hashUnit(school.id),
-        ax: school.cx - hx, ay: s.y, az: school.cz - hz,
-        bx: school.cx + hx, by: s.y, bz: school.cz + hz,
-        radius: 0.5,
-      });
-    }
+    // Real fish, queried from the diver's own body position (SPEAR_QUERY_RADIUS already pads
+    // comfortably past SPEAR_RANGE for the muzzle/body-origin gap — see the debug branch above).
+    // `fishWorld.spearTargetsNear` is structurally identical to `SpearTarget` (CapsuleTarget plus
+    // key/weight) by construction, so this needs no remapping.
+    out.push(...fishWorld.spearTargetsNear(s.x, s.y, s.z, SPEAR_QUERY_RADIUS));
     return out;
   }
 
@@ -433,6 +422,21 @@ export function initWorld(wrap: HTMLElement): World {
     onLanded(fish) { catchFlow.landFish(fish); },
   });
   bindSpeargunInput(renderer.domElement, speargun, () => diverAim, () => diver.mode === 'diver' && !diver.state?.blackedOut);
+
+  // Problem 2 (fish react to being shot at): speargun.isActive()/getFightState() are the only
+  // signals entities/speargun/** exposes (it is another agent's concurrent, out-of-scope file —
+  // see this task's brief), so a clean miss is detected from the *outside* as an edge: `isActive()`
+  // rising when a shot leaves the muzzle, staying active-without-a-fight while it flies, then
+  // falling back to false with no fight ever having started in between. `shotHadFight` is what
+  // tells those two falling edges apart — a hit keeps `isActive()` true (shot -> speared, no
+  // falling edge at all) and a fight *ending* (landed/tornFree) is a real falling edge too, just
+  // one this near-miss check must ignore (that fish was never missed). The actual spook happens in
+  // `frame()`'s fixed-step loop, right after `speargun.update()`, using the aim captured at the
+  // *rising* edge (`shotOx/.../shotDz` below) rather than whatever the diver is looking at by the
+  // time the shot resolves a flight-time later — see that block's own comment.
+  let prevSpearActive = false;
+  let shotHadFight = false;
+  let shotOx = 0, shotOy = 0, shotOz = 0, shotDx = 0, shotDy = 0, shotDz = -1;
 
   function setDiveUI(diving: boolean): void {
     document.getElementById('gauges')?.classList.toggle('hidden', diving);
@@ -619,6 +623,9 @@ export function initWorld(wrap: HTMLElement): World {
     let steps = 0;
     const events: SimEvent[] = [];
     const diverEvents: DiverEvent[] = [];
+    // Problem 2 — collected during this frame's fixed-step loop below, consumed just before
+    // fishWorld.update() further down (see that call site's own comment).
+    const pendingSpearSpooks: Array<{ x: number; z: number }> = [];
     while (acc >= DT && steps < 5) {
       prevState = stateBox.state;
       events.push(...fixedStep(DT));
@@ -641,6 +648,35 @@ export function initWorld(wrap: HTMLElement): World {
         diverAim.blackedOut = ds.blackedOut;
         diverAim.speed = Math.hypot(ds.vx, ds.vy, ds.vz);
         speargun.update(DT, simTime, diverAim, sw, ch);
+
+        // Problem 2 (fish react to being shot at) — see this block's setup, above `frame()`, for
+        // why isActive()/getFightState() edges are what this has to work with. Capture the aim at
+        // the instant a shot leaves the muzzle (closest this can get to the shaft's real origin/
+        // direction without reaching into entities/speargun/**'s private `ShotState`), then at the
+        // instant it resolves with no fight ever having started, test that captured ray (full
+        // SPEAR_RANGE — by the time isActive() falls back to false the real shaft has either hit
+        // something or travelled the whole range, so the whole ray was, in fact, swept) against
+        // every real fish capsule nearby, same closest-segment-distance test sim/spear.ts's own
+        // hit test uses, just with a wider miss margin than an actual hit.
+        const spearActiveNow = speargun.isActive();
+        if (spearActiveNow && !prevSpearActive) {
+          shotHadFight = false;
+          shotOx = diverAim.position.x; shotOy = diverAim.position.y; shotOz = diverAim.position.z;
+          shotDx = diverAim.aimDir.x; shotDy = diverAim.aimDir.y; shotDz = diverAim.aimDir.z;
+        }
+        if (spearActiveNow && speargun.getFightState()) shotHadFight = true;
+        if (!spearActiveNow && prevSpearActive && !shotHadFight) {
+          const p1 = { x: shotOx, y: shotOy, z: shotOz };
+          const p2 = { x: shotOx + shotDx * SPEAR_RANGE, y: shotOy + shotDy * SPEAR_RANGE, z: shotOz + shotDz * SPEAR_RANGE };
+          for (const fish of fishWorld.spearTargetsNear(shotOx, shotOy, shotOz, SPEAR_RANGE + SPEAR_NEAR_MISS_MARGIN)) {
+            const { distSq } = closestDistSqSegmentSegment(
+              p1, p2, { x: fish.ax, y: fish.ay, z: fish.az }, { x: fish.bx, y: fish.by, z: fish.bz },
+            );
+            const bound = fish.radius + SPEAR_NEAR_MISS_MARGIN;
+            if (distSq <= bound * bound) pendingSpearSpooks.push({ x: (fish.ax + fish.bx) / 2, z: (fish.az + fish.bz) / 2 });
+          }
+        }
+        prevSpearActive = spearActiveNow;
       } else if (speargun.isActive()) {
         // Climbed back aboard (or never dove) with a shaft out or a fish on the spear — drop it
         // rather than let it sit frozen; mirrors the rod's own reelIn() on the *other* transition
@@ -719,6 +755,12 @@ export function initWorld(wrap: HTMLElement): World {
       const debugDiver = (window as unknown as { __fishDebugDiver?: { x: number; z: number } }).__fishDebugDiver;
       if (debugDiver) fishThreats = [{ x: debugDiver.x, z: debugDiver.z, kind: 'diver', speed: 0.6 }];
     }
+    // Problem 2 — one 'spear' Threat per fish a just-resolved miss passed close to (collected by
+    // this frame's fixed-step loop, above). Placed at the fish's own position, not the diver's:
+    // behavior.ts's `nearestTrigger` already checks every active school's centroid against every
+    // threat regardless of who it's "for", so this alone is enough to spook that fish's own school
+    // (and any other school close enough to the same point) — no school-id plumbing needed.
+    for (const p of pendingSpearSpooks) fishThreats.push({ x: p.x, z: p.z, kind: 'spear', speed: 0 });
     fishWorld.update(clamped, simTime, focus, boatThreat, fishThreats);
 
     const amp = ampAt(renderState.x, renderState.z);
@@ -840,6 +882,11 @@ export function initWorld(wrap: HTMLElement): World {
     poolStats: fishWorld.debugPoolStats,
     stats: () => fishWorld.stats,
     blowCount: fishWorld.debugBlowCount,
+    /** Verification-only: the real per-fish spear capsules `getSpearTargets` builds, exposed
+     * directly so a screenshot script can confirm a capsule's (ax,ay,az)-(bx,by,bz) midpoint lands
+     * on the same point a rendered fish occupies, instead of taking the alignment on faith. No
+     * normal code path reads this. */
+    spearTargetsNear: fishWorld.spearTargetsNear,
     teleport(x: number, z: number, h?: number): void {
       stateBox.state = { ...stateBox.state, x, z, h: h ?? stateBox.state.h, speed: 0 };
       curState = stateBox.state;

@@ -43,16 +43,21 @@ export interface FleeParams {
   /** Flee trigger radius from a diver — closer than the boat (a diver is quiet and slow), but
    * underwater and therefore a direct, credible threat even to species that ignore the boat. */
   diverRadius: number;
+  /** Flee trigger radius from a near-miss speargun shot (`Threat.kind: 'spear'`) — deliberately
+   * larger than `diverRadius`: a shaft actually hissing past is a startle event closer to "a
+   * predator struck and missed" than casual diver proximity, so even an `apex`-class fish reacts,
+   * just over a smaller radius/with a smaller speed bump than a `skittish` schooling fish. */
+  spearRadius: number;
   /** Flee speed multiplier (legacy's `V.level==='bottom'?1.8:3.2`, now per behaviour class
    * instead of per depth-level). */
   speedMul: number;
 }
 
 const FLEE_PARAMS: Record<FleeClass, FleeParams> = {
-  apex: { boatRadius: 4, boatSpeedRadius: 0.25, diverRadius: 3, speedMul: 1.35 },
-  glide: { boatRadius: 7, boatSpeedRadius: 0.4, diverRadius: 5, speedMul: 1.15 },
-  wary: { boatRadius: 9, boatSpeedRadius: 0.5, diverRadius: 7, speedMul: 2.2 },
-  skittish: { boatRadius: 6, boatSpeedRadius: 0.6, diverRadius: 9, speedMul: 3.2 },
+  apex: { boatRadius: 4, boatSpeedRadius: 0.25, diverRadius: 3, spearRadius: 6, speedMul: 1.35 },
+  glide: { boatRadius: 7, boatSpeedRadius: 0.4, diverRadius: 5, spearRadius: 8, speedMul: 1.15 },
+  wary: { boatRadius: 9, boatSpeedRadius: 0.5, diverRadius: 7, spearRadius: 10, speedMul: 2.2 },
+  skittish: { boatRadius: 6, boatSpeedRadius: 0.6, diverRadius: 9, spearRadius: 12, speedMul: 3.2 },
 };
 
 export function fleeParamsFor(cls: FleeClass): FleeParams {
@@ -68,7 +73,9 @@ export function nearestTrigger(
   let best: Threat | null = null, bestD = Infinity;
   for (const th of threats) {
     const d = Math.hypot(th.x - cx, th.z - cz);
-    const radius = th.kind === 'diver' ? p.diverRadius : (th.speed > 2 ? p.boatRadius + th.speed * p.boatSpeedRadius : p.boatRadius);
+    const radius = th.kind === 'diver' ? p.diverRadius
+      : th.kind === 'spear' ? p.spearRadius
+      : (th.speed > 2 ? p.boatRadius + th.speed * p.boatSpeedRadius : p.boatRadius);
     if (d < radius && d < bestD) { best = th; bestD = d; }
   }
   return best;

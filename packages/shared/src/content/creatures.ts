@@ -127,13 +127,15 @@ export function isCatchable(key: string): boolean {
 
 /**
  * Per-habitat ambient-life tables, keyed primarily by `Zone` (@keysrun/shared/world/depth) but
- * with two extra keys — `ReefWall` and `Humps` — that are *not* zone names. `zoneAt` only ever
- * returns the seven `Zone` strings; `ReefWall`/`Humps` are a finer habitat split that
- * apps/client/src/entities/fish/spawn.ts layers on top of `zoneAt` using depth (the reef crest vs.
- * the 3.4->45.4 m wall drop) and proximity to a named `HUMPS` structure, so this table can tell
- * "shallow patch reef" apart from "ledge/drop" and "real offshore structure" apart from "open
- * water" without changing `zoneAt`'s return type or touching `packages/shared/src/world` at all.
- * See docs/ARCHITECTURE.md's depth-band table and "The Humps" in the task brief.
+ * with three extra keys — `ReefWall`, `DeepWall` and `Humps` — that are *not* zone names. `zoneAt`
+ * only ever returns the seven `Zone` strings; `ReefWall`/`DeepWall`/`Humps` are a finer habitat
+ * split that apps/client/src/entities/fish/spawn.ts layers on top of `zoneAt` using depth (the
+ * reef crest vs. the wall top/ledges vs. the deep wall, over the 3.4->45.4 m drop) and proximity
+ * to a named `HUMPS` structure, so this table can tell "shallow patch reef" apart from "wall top/
+ * ledge" apart from "deep wall/wreck" apart from "real offshore structure" apart from "open water"
+ * without changing `zoneAt`'s return type or touching `packages/shared/src/world` at all. See
+ * docs/ARCHITECTURE.md's depth-band table (five bands: 0-5/5-10/10-15/15-20/20+ m) and "The Humps"
+ * in the task brief.
  */
 export const ZONE_LIFE: Record<string, Array<[string, number]>> = {
   // Mangrove creek channels — juveniles sheltering along the edges.
@@ -153,9 +155,18 @@ export const ZONE_LIFE: Record<string, Array<[string, number]>> = {
   // Patch reef / Sombrero crest — the existing shallow reef life (depthAt < REEF_WALL_DEPTH).
   // Dolphins work the reef line hunting bait off the coral too.
   'Reef':[['yellowtail',5],['parrotfish',3],['angelfish',2],['hogfish',2],['grouper',2],['gag',1.2],['redgrouper',1.2],['nurse',1],['turtle',1.5],['barracuda',1.5],['mutton',2],['lionfish',1.5],['graytrigger',2],['cero',2],['goliath',.4],['dolphin',1]],
-  // The reef wall's ledges and drop-off (depthAt >= REEF_WALL_DEPTH, spawn.ts) — grouper holding on
-  // ledges, bigger snapper/jack schools working the drop, dolphins cruising the wall edge.
+  // The reef wall's top and ledges (depthAt in [REEF_WALL_DEPTH, DEEP_WALL_DEPTH), spawn.ts) —
+  // docs/ARCHITECTURE.md bands 3-4 (reef wall top / elkhorn-staghorn, ledges and overhangs):
+  // grouper holding on ledges, bigger snapper/jack schools working the drop, dolphins cruising
+  // the wall edge. `DeepWall` below (band 5, >= DEEP_WALL_DEPTH) used to be the same table all the
+  // way to 45 m — split out so the deep wall/wreck band actually feels different, not just emptier.
   'ReefWall':[['grouper',3],['gag',2],['redgrouper',2],['yellowtail',4],['mutton',2.5],['amberjack',2],['kingfish',1.5],['cero',1.5],['nurse',1],['goliath',.6],['graytrigger',1.2],['lionfish',1],['hammerhead',.3],['cobia',1],['dolphin',1.3]],
+  // The deep wall and wrecks (depthAt >= DEEP_WALL_DEPTH, spawn.ts) — docs/ARCHITECTURE.md band 5
+  // (20 m+, "deep wall, wrecks, the Humps... torch required, blackout risk"). Bigger-bodied
+  // structure-holders and more apex presence than the wall top, less of the small schooling
+  // yellowtail/mutton clutter that reads as "shallow reef" — this is what makes the deep band feel
+  // like a different place rather than the same reef with the lights turned down.
+  'DeepWall':[['grouper',3.5],['gag',2.5],['redgrouper',2],['amberjack',3],['kingfish',2],['cobia',1.5],['goliath',1.3],['nurse',1.5],['hammerhead',.7],['bullshark',.5],['mutton',1.4],['yellowtail',1],['cero',1],['dolphin',1]],
   // Gulf Stream / open offshore — pelagics (roaming layer only; see spawn.ts). Dolphin pods are a
   // common sight riding the current lines; pilot whales/humpbacks are a genuine *rare* event out
   // here — tiny weights are deliberate (see the task brief's "Encounter rarity").
