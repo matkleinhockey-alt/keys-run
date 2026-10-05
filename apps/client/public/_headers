@@ -1,0 +1,30 @@
+# Cache-Control rules for Cloudflare Pages / Workers Static Assets.
+#
+# Cloudflare does not read vercel.json, so the equivalent rules from that file
+# are restated here. Vite copies everything in public/ to the dist root
+# verbatim, which is where Cloudflare expects to find this file.
+#
+# Keep this in sync with vercel.json's "headers" block for as long as both
+# deploy targets exist.
+
+# Vite emits content-hashed filenames here (index-BQqCM8C7.js), so the bytes at
+# a given URL can never change. Safe to cache forever.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Model filenames are deliberately NOT content-hashed (crew-01.lod0.glb) —
+# entities/crew loads them by stable path. A re-exported character therefore
+# reuses its URL, so `immutable` here would strand every player who already
+# loaded the old mesh on it, with no way to bust the cache short of renaming
+# the file. A day of caching plus revalidation keeps the 1.4 MB of GLBs off the
+# wire on repeat visits without making model updates undeliverable.
+/models/*
+  Cache-Control: public, max-age=86400, must-revalidate
+
+# The HTML entry point must never be cached: it is what points at the current
+# hashed asset filenames, so a stale copy pins the client to a dead build.
+/
+  Cache-Control: public, max-age=0, must-revalidate
+
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
