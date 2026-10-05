@@ -15,6 +15,7 @@ import { VIS } from '@keysrun/shared/content/creatures';
 import { createSpeciesPool, allocSlot, freeSlot, type SpeciesPool } from './pool.js';
 import { stepSchool, waterColumnAt } from './school.js';
 import { renderSchool, finalizePoolRender } from './render.js';
+import { createSpoutSystem } from './spout.js';
 import {
   chunkOf, chunkKey, residentsForChunk, instantiateResident,
   tryRoamCell, instantiateRoamer, ROAM_CELL, ROAM_MIN_R, ROAM_MAX_R, ROAM_TARGET, DORMANT_TTL_S,
@@ -71,6 +72,17 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
   const residents = new Map<string, SchoolState>(); // chunkKey -> active resident
   const roamers = new Map<string, SchoolState>(); // id -> active roamer
   const dormant = new Map<string, DormantEntry>(); // id -> frozen roamer
+
+  // Whale blow/spout visual — see spout.ts. One shared effect pool for the whole fish world,
+  // fed by 'blow' SchoolEvents (school.ts's stepMember) below.
+  const spoutSystem = createSpoutSystem(group);
+
+  // Bow-riding (behavior.ts/school.ts) needs the boat's *heading*, which the `Threat` the boat is
+  // passed as doesn't carry (sim/boat.ts's Threat shape is x/z/speed only — see types.ts). Rather
+  // than touch game/world.ts's boat-sim plumbing (out of this module's scope), heading is
+  // reconstructed here from the boat's own frame-to-frame displacement — cheap, and exactly
+  // equivalent for a planing hull that doesn't instantaneously strafe sideways.
+  let lastBoatX: number | null = null, lastBoatZ: number | null = null, lastBoatHeading = 0;
 
   let throttle = 0;
 
@@ -163,7 +175,18 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
       manageRoamers(focus, t);
     }
 
-    const threats: Threat[] = [boat, ...extraThreats];
+    // Reconstruct the boat's heading from its own displacement (see this module's header on why
+    // `boat: Threat` alone isn't enough for bow-riding) — guarded against near-zero movement so a
+    // drifting/idling boat doesn't make the heading jitter frame to frame.
+    let boatWithHeading: Threat = boat;
+    if (lastBoatX !== null && lastBoatZ !== null) {
+      const dx = boat.x - lastBoatX, dz = boat.z - lastBoatZ;
+      if (Math.hypot(dx, dz) > 0.02) lastBoatHeading = Math.atan2(-dx, -dz);
+      boatWithHeading = { ...boat, heading: lastBoatHeading };
+    }
+    lastBoatX = boat.x; lastBoatZ = boat.z;
+
+    const threats: Threat[] = [boatWithHeading, ...extraThreats];
     const ctx = { t, dt, threats };
 
     let fishCount = 0;
@@ -171,7 +194,8 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
     for (const state of residents.values()) {
       const pool = pools.get(state.type);
       if (!pool) continue;
-      stepSchool(state, pool.V, ctx);
+      const events = stepSchool(state, pool.V, ctx);
+      for (const ev of events) if (ev.type === 'blow') spoutSystem.spawn(ev.x, ev.y, ev.z);
       renderSchool(state, pool);
       touched.add(pool);
       fishCount += state.members.length;
@@ -179,12 +203,14 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
     for (const state of roamers.values()) {
       const pool = pools.get(state.type);
       if (!pool) continue;
-      stepSchool(state, pool.V, ctx);
+      const events = stepSchool(state, pool.V, ctx);
+      for (const ev of events) if (ev.type === 'blow') spoutSystem.spawn(ev.x, ev.y, ev.z);
       renderSchool(state, pool);
       touched.add(pool);
       fishCount += state.members.length;
     }
     for (const pool of touched) finalizePoolRender(pool);
+    spoutSystem.update(dt);
 
     stats.schools = residents.size + roamers.size;
     stats.fish = fishCount;

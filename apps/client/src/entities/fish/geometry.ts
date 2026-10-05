@@ -126,6 +126,13 @@ function TM(px: number, py: number, pz: number, rx: number, ry: number, rz: numb
 
 const sph = (a?: number, b?: number): THREE.SphereGeometry => new THREE.SphereGeometry(1, a || 14, b || 10);
 
+/** Cetaceans (dolphin + the two whale species) share "no pelvic fin, dark whole eye" styling in
+ * `buildFishGeo` below — legacy only ever had `key === 'dolphin'` to check against; this
+ * generalises that to the new whale keys without duplicating the special-casing per species. The
+ * dolphin's long beak cone stays dolphin-only (`key === 'dolphin'` lower down) since neither whale
+ * has one. */
+const CETACEAN_KEYS = new Set(['dolphin', 'pilotwhale', 'humpback']);
+
 /** legacy `buildCreatureGeoOld` (index.html:2251-2300) — rays, turtles, manatees (and the
  * fish/shark/dolphin/tuna primitive fallback body legacy kept alongside it, unused here since
  * every fish/shark/dolphin/tuna VIS entry has a SHAPE and goes through buildFishGeo instead —
@@ -315,7 +322,7 @@ export function buildFishGeo(key: string, V: CreatureVis): THREE.BufferGeometry 
     g1.rotateY(th2);
     g1.rotateZ(sx * (S.shark ? -0.35 : -0.15));
     parts.push({ g: g1, m: TM(sx * W / 2 * prof(tP) * 0.82, -Hh * 0.12, -L / 2 + tP * L, 0, 0, 0, 1, 1, 1), c: S.shark ? back : fin });
-    if (!S.shark && key !== 'dolphin') {
+    if (!S.shark && !CETACEAN_KEYS.has(key)) {
       const g2 = pfin(pl * 0.55, pl * 0.25);
       g2.rotateY(Math.atan2(-0.95, sx * 0.3));
       parts.push({ g: g2, m: TM(sx * W * 0.12, botY(0.36) + 0.01, -L / 2 + 0.36 * L, 0, 0, 0, 1, 1, 1), c: fin });
@@ -326,8 +333,8 @@ export function buildFishGeo(key: string, V: CreatureVis): THREE.BufferGeometry 
   const te = 0.09, ke = prof(te), ex = W / 2 * ke * 0.86, ey = Hh * 0.1 * ke + Hh * 0.04, ez = -L / 2 + te * L;
   const er = Math.max(0.008, Math.min(Hh, W) * 0.085);
   for (const sx of [-1, 1]) {
-    parts.push({ g: new THREE.SphereGeometry(er, 10, 8), m: TM(sx * ex, ey, ez, 0, 0, 0, 0.6, 1, 1), c: new THREE.Color(S.shark || key === 'dolphin' ? 0x1a1a1a : 0xe8dca0) });
-    if (!S.shark && key !== 'dolphin') parts.push({ g: new THREE.SphereGeometry(er * 0.6, 8, 6), m: TM(sx * (ex + er * 0.35), ey, ez, 0, 0, 0, 0.5, 1, 1), c: new THREE.Color(0x0a0a0c) });
+    parts.push({ g: new THREE.SphereGeometry(er, 10, 8), m: TM(sx * ex, ey, ez, 0, 0, 0, 0.6, 1, 1), c: new THREE.Color(S.shark || CETACEAN_KEYS.has(key) ? 0x1a1a1a : 0xe8dca0) });
+    if (!S.shark && !CETACEAN_KEYS.has(key)) parts.push({ g: new THREE.SphereGeometry(er * 0.6, 8, 6), m: TM(sx * (ex + er * 0.35), ey, ez, 0, 0, 0, 0.5, 1, 1), c: new THREE.Color(0x0a0a0c) });
   }
   parts.push({ g: new THREE.BoxGeometry(W * 0.38 * prof(0.04), 0.006, L * 0.035), m: TM(0, -Hh * 0.06 * prof(0.04), -L / 2 + L * 0.03, 0, 0, 0, 1, 1, 1), c: new THREE.Color(0x24201c) });
   if (V.bill) parts.push({ g: new THREE.ConeGeometry(0.03, 1, 8), m: TM(0, Hh * 0.02, -L / 2 - L * V.bill / 2 + 0.04, -Math.PI / 2, 0, 0, 1, L * V.bill, 1), c: back });

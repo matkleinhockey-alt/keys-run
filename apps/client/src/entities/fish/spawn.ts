@@ -148,7 +148,8 @@ function buildMembers(seed: number, cx: number, cz: number, V: CreatureVis, coun
       slot: -1, ox: Math.cos(ang) * r, oz: Math.sin(ang) * r, oy, swimPhase,
       scale: memberScale(baseScale, V, originX, originZ),
       act: null, actPhase: 0, actTimer: 1 + 7 * hashCell(seed, cx, cz, SALT.MEMBER_PHASE + 500 + i),
-      splashed: false, wx: originX, wy: 0, wz: originZ, yaw: 0, pitch: 0, roll: 0, worldScale: 0,
+      splashed: false, splashed2: false, breaching: false,
+      wx: originX, wy: 0, wz: originZ, yaw: 0, pitch: 0, roll: 0, worldScale: 0,
     });
   }
   return members;
@@ -202,7 +203,7 @@ export function instantiateResident(spec: ResidentSpec, cx: number, cz: number):
     id: `res:${chunkKey(cx, cz)}`,
     type: spec.type,
     cx: spec.anchorX, cz: spec.anchorZ, heading: spec.heading,
-    phase: spec.heading * 17.3, turn: 0, flee: 0, fleeHeading: spec.heading,
+    phase: spec.heading * 17.3, turn: 0, flee: 0, fleeHeading: spec.heading, bowRide: 0,
     glide: 0, dive: 0, diveTimer: 6 + 8 * spec.diveTimerSeed, diveTarget: 0,
     anchor: { x: spec.anchorX, z: spec.anchorZ, r: spec.anchorR },
     resident: true,
@@ -267,7 +268,7 @@ export function instantiateRoamer(spawn: RoamSpawn): SchoolState {
     id: `roam:${roamCounter}`,
     type: spawn.type,
     cx: spawn.x, cz: spawn.z, heading: spawn.heading,
-    phase: spawn.heading * 11.7, turn: 0, flee: 0, fleeHeading: spawn.heading,
+    phase: spawn.heading * 11.7, turn: 0, flee: 0, fleeHeading: spawn.heading, bowRide: 0,
     glide: 0, dive: 0, diveTimer: 6, diveTarget: 0,
     anchor: null, resident: false,
     members: spawn.members,

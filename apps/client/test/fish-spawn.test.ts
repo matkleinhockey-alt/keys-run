@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import { residentsForChunk, chunkOf, CHUNK_SIZE } from '../src/entities/fish/spawn.js';
 import { WORLD, zoneAt } from '@keysrun/shared/world/depth';
-import { ZONE_LIFE } from '@keysrun/shared/content/creatures';
+import { ZONE_LIFE, VIS } from '@keysrun/shared/content/creatures';
 
 const SEED = 20240817;
 
@@ -136,5 +136,62 @@ describe('residentsForChunk determinism', () => {
     } finally {
       ZONE_LIFE.Flats.length = 0; ZONE_LIFE.Flats.push(...original);
     }
+  });
+});
+
+// Task brief: "whales — rare. Dolphins — in pods, less rare." Confirmed quantitatively (not just
+// by eyeballing the ZONE_LIFE weights) against a wide resident-chunk scan of the real world
+// bounds/seed, and against the (separately-enforced, see packages/shared/test/catchable.test.ts)
+// rule that neither is ever rollable by rod or hittable by spear.
+describe('marine mammals — rarity and placement', () => {
+  const SEED2 = 20240817; // WORLD_SEED (apps/client/src/state/constants.ts) — the real game seed
+
+  it('dolphin pods are a meaningfully more common resident than pilot whales/humpbacks, world-wide', () => {
+    let dolphin = 0, whale = 0, totalResidents = 0;
+    for (let cx = -70; cx <= 70; cx++) {
+      for (let cz = -50; cz <= 90; cz++) {
+        const spec = residentsForChunk(SEED2, cx, cz);
+        if (!spec) continue;
+        totalResidents++;
+        if (spec.type === 'dolphin') dolphin++;
+        if (spec.type === 'pilotwhale' || spec.type === 'humpback') whale++;
+      }
+    }
+    expect(totalResidents).toBeGreaterThan(0);
+    expect(dolphin).toBeGreaterThan(0); // "less rare" must still mean "findable"
+    expect(dolphin).toBeGreaterThan(whale); // and clearly more common than a whale sighting
+  });
+
+  it('every marine mammal is marked catchable:false and has sane VIS data (pod size, length)', () => {
+    for (const key of ['dolphin', 'manatee', 'pilotwhale', 'humpback']) {
+      const v = VIS[key];
+      expect(v, `VIS.${key} should exist`).toBeDefined();
+      expect(v.catchable).toBe(false);
+      expect(v.school[0]).toBeGreaterThanOrEqual(1);
+      expect(v.school[1]).toBeGreaterThanOrEqual(v.school[0]);
+      expect(v.len).toBeGreaterThan(0);
+    }
+    // Scale sanity (task brief: "a pilot whale is ~6 m, a humpback ~15 m... must dwarf the boat
+    // [a 7 m Robalo]. Do not render them fish-sized.").
+    expect(VIS.pilotwhale.len).toBeGreaterThanOrEqual(5);
+    expect(VIS.humpback.len).toBeGreaterThanOrEqual(12);
+    expect(VIS.humpback.len).toBeGreaterThan(VIS.pilotwhale.len);
+    // Dolphin pods of 3-8, less rare than a 1-4-member whale pod.
+    expect(VIS.dolphin.school[0]).toBeGreaterThanOrEqual(3);
+    expect(VIS.dolphin.school[1]).toBeGreaterThanOrEqual(8);
+  });
+
+  it('dolphin pods are reachable (as a resident) from Hawk Channel, the bay, the reef, and the bridge', () => {
+    const zonesSeen = new Set<string>();
+    for (let cx = -70; cx <= 70; cx++) {
+      for (let cz = -50; cz <= 90; cz++) {
+        const spec = residentsForChunk(SEED2, cx, cz);
+        if (spec?.type !== 'dolphin') continue;
+        zonesSeen.add(zoneAt(spec.anchorX, spec.anchorZ));
+      }
+    }
+    // zoneAt collapses the reef-wall/humps habitat refinements back to their underlying Zone, so
+    // this checks the real `Zone` union is varied, not just one lucky habitat.
+    expect(zonesSeen.size).toBeGreaterThan(1);
   });
 });

@@ -29,6 +29,14 @@ export interface FishMember {
   actPhase: number;
   actTimer: number;
   splashed: boolean;
+  /** A second within-cycle one-shot guard, alongside `splashed` — used by the whale 'blow' act
+   * (school.ts) to fire its "fluke-up on sounding" moment once, later in the same cycle, without
+   * re-triggering the earlier "blow" moment's own guard. Unused (stays false) by every other act. */
+  splashed2: boolean;
+  /** True for the one surfacing cycle (out of a humpback's many) that was rolled a breach instead
+   * of a gentle blow — set once when the act starts (school.ts), per the task brief's "if you're
+   * feeling ambitious, a rare breach". Unused by every other species/act. */
+  breaching: boolean;
   /** Last computed world transform — read by render.ts, and by anything that wants to point a
    * camera or a spear at a specific fish later without re-deriving it. */
   wx: number;
@@ -60,6 +68,11 @@ export interface SchoolState {
   turn: number;
   flee: number;
   fleeHeading: number;
+  /** Smoothed 0..1 bow-riding engagement (dolphin schools only; behavior.ts's `isBowRider`/
+   * `bowRideTarget`, school.ts's `stepSchool`) — lerped like `dive` rather than snapping, so a pod
+   * eases into and out of riding instead of teleporting onto the bow line the instant a boat gets
+   * close enough. Always 0 for every non-dolphin species. */
+  bowRide: number;
   /** Flyingfish-style airborne glide timer (legacy `g.glide`). */
   glide: number;
   /** Smoothed 0..1 dive-deeper bias (legacy `g.dv`). */
@@ -81,6 +94,13 @@ export interface Threat {
   kind: 'boat' | 'diver';
   /** Absolute speed, m/s — legacy's `Math.abs(boat.speed)` gate (faster boat spooks fish sooner). */
   speed: number;
+  /** World heading, radians, same convention as `sim/boat.ts`'s `state.h`
+   * (`fx=-sin(h), fz=-cos(h)` is forward) — optional because only a `kind:'boat'` threat ever
+   * carries one, and only once something actually derives it (index.ts reconstructs it from the
+   * boat's own frame-to-frame displacement, since the boat sim's `Threat` doesn't otherwise expose
+   * heading). Consulted by behavior.ts's `bowRideTarget`; absent/undefined means "don't bow-ride
+   * this threat" rather than defaulting to a guessed heading. */
+  heading?: number;
 }
 
 export interface SchoolCtx {

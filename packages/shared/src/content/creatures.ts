@@ -34,6 +34,18 @@ export interface CreatureVis {
   dMin: number;
   dMax: number;
   act?: string;
+  /**
+   * Explicit tier-1 "decoration" marker (docs/ARCHITECTURE.md "Fish ownership — three tiers":
+   * "Species with `catchable: false` have no server representation at all"). Absent or `true`
+   * means an ordinary catchable fish — every such key also has a matching entry in `SPECIES`/
+   * `ZONE_TABLE` (content/species.ts). `false` marks a creature that must never be rollable by
+   * rod (`sim/fight.ts`'s `pickSpecies`, which filters on `isCatchable` below) or hittable by
+   * spear (`sim/spear.ts`'s `stepSpear`, via a `CapsuleTarget.catchable` built by
+   * `capsuleFromSpecies`) — marine mammals (dolphins, whales, manatees) today. This is the single
+   * source of truth both paths consult, expressed as data rather than a `species === 'dolphin'`
+   * branch scattered through fishing/spearfishing code — see `test/catchable.test.ts`.
+   */
+  catchable?: boolean;
 }
 
 export const VIS: Record<string, CreatureVis> = {
@@ -84,9 +96,34 @@ export const VIS: Record<string, CreatureVis> = {
   stingray:{kind:'ray',len:1,wing:1.1,back:'#8a7b62',belly:'#f0ebe0',level:'bottom',speed:.5,school:[1,2],spread:2.5,dMin:.4,dMax:10},
   eagleray:{kind:'ray',len:1.1,wing:2.3,back:'#2b2f38',belly:'#f2f2f2',pattern:'dots',flap:true,level:'mid',speed:1.2,school:[1,3],spread:4,dMin:1.5,dMax:25},
   turtle:{kind:'turtle',len:1,back:'#7b5a34',belly:'#d8c08a',pattern:'mottle',level:'mid',speed:.7,school:[1,1],spread:0,dMin:2,dMax:80,act:'breathe'},
-  manatee:{kind:'manatee',len:3,back:'#7d8384',belly:'#9aa0a0',level:'mid',speed:.35,school:[1,2],spread:4,dMin:1,dMax:6,act:'breathe'},
-  dolphin:{kind:'dolphin',len:2.4,back:'#646d78',belly:'#d9dde2',level:'surface',speed:3,school:[3,6],spread:4.5,dMin:3,dMax:1e5,act:'porpoise'}
+  // Protected, non-catchable (catchable:false below) — already placed in the shallow bay/creek
+  // ZONE_LIFE tables below, not offshore with the whales (see this task's brief).
+  manatee:{kind:'manatee',len:3,back:'#7d8384',belly:'#9aa0a0',level:'mid',speed:.35,school:[1,2],spread:4,dMin:1,dMax:6,act:'breathe',catchable:false},
+  // Bottlenose dolphin — pods of 3-8, a regular/cheering sight (Hawk Channel, the bay, the reef
+  // line, the bridge; see ZONE_LIFE below), never catchable. `act:'porpoise'` (behavior.ts/
+  // school.ts) is the rhythmic breaching arc; bow-riding is a separate, boat-seeking behavior
+  // layered on top in school.ts (`BOW_RIDE_*` constants, behavior.ts) since it needs the boat's
+  // heading, not just its position.
+  dolphin:{kind:'dolphin',len:2.6,h:.34,w:.3,back:'#5b6670',belly:'#dde2e6',fin:'#43505a',level:'surface',speed:3.4,school:[3,8],spread:5,dMin:2.5,dMax:1e5,act:'porpoise',catchable:false},
+  // Short-finned pilot whale — ~6 m, dark/matte, travels in small pods near real structure (the
+  // Humps are a genuine Keys pilot-whale spot) and occasionally the open Gulf Stream. `hump:.5`
+  // in SHAPE.pilotwhale below gives the bulbous melon forehead; `act:'blow'` is the slow
+  // surface-blow/fluke-up cycle (school.ts), with a far longer act cooldown (behavior.ts's
+  // ACT_CD.blow) than a dolphin's porpoise — "long dive intervals" is the whole point.
+  pilotwhale:{kind:'whale',len:6,h:1.05,w:.95,back:'#2a2a2c',belly:'#3a3a3c',level:'surface',speed:2.4,school:[2,4],spread:6,dMin:12,dMax:1e5,act:'blow',catchable:false},
+  // Humpback — ~15 m, must dwarf the 7 m Robalo. Rare, Gulf-Stream/offshore only. `pec:.34` +
+  // `wings:true` in SHAPE.humpback below are the signature huge pectoral "wings" (up to ~1/3 body
+  // length on a real humpback); `pattern:'mottle'` reads as barnacles/scarring on the dark back.
+  humpback:{kind:'whale',len:15,h:2.6,w:2.1,back:'#1c2430',belly:'#8f97a0',pattern:'mottle',level:'surface',speed:1.8,school:[1,2],spread:10,dMin:25,dMax:1e5,act:'blow',catchable:false}
 };
+
+/** Single source of truth for "can this creature ever be landed" — see `CreatureVis.catchable`'s
+ * doc comment. Consulted by both catch paths (`sim/fight.ts`'s `pickSpecies`, `sim/spear.ts`'s
+ * `capsuleFromSpecies`) so a species only needs its flag set once, here, to be excluded from
+ * every way of catching it. */
+export function isCatchable(key: string): boolean {
+  return VIS[key]?.catchable !== false;
+}
 
 /**
  * Per-habitat ambient-life tables, keyed primarily by `Zone` (@keysrun/shared/world/depth) but
@@ -103,22 +140,31 @@ export const ZONE_LIFE: Record<string, Array<[string, number]>> = {
   'Creek':[['snook',3],['redfish',2.5],['tarpon',1.5],['manatee',1],['mangrove',3.5],['ladyfish',2.5],['trout',1.5],['jackcrevalle',1]],
   // Very shallow skinny water — bonefish/permit on the sand, small sharks cruising the edges.
   'Flats':[['bonefish',5],['permit',2.2],['stingray',3],['redfish',1.5],['barracuda',2],['blacktip',1.5],['lemonshark',1],['eagleray',1],['ladyfish',3],['pompano',1.2]],
-  // Florida Bay backcountry — juvenile snapper, small barracuda, rays on the sand, baitfish schools.
-  'Backcountry':[['redfish',4],['snook',3],['trout',3],['mangrove',2.5],['tarpon',2],['bonefish',1.5],['permit',1],['barracuda',1.2],['manatee',1.2],['stingray',2.2],['jackcrevalle',2],['ladyfish',3],['pompano',1.5],['tripletail',.6]],
-  // Bridge pilings and the channels that run under them — structure-holders in current.
-  'Bridge':[['tarpon',5],['snook',2],['mangrove',3],['eagleray',1],['sheepshead',3],['goliath',.6],['jackcrevalle',1.5],['nurse',1],['cobia',1],['barracuda',1]],
-  // Mixed mid-water schools, mackerel and jacks between the Bay and the reef line.
-  'Hawk Channel':[['mangrove',4],['eagleray',2],['turtle',1.5],['barracuda',2],['nurse',1.5],['mutton',2],['dolphin',1],['cero',2],['pompano',1.5],['cobia',1],['graytrigger',1.2],['jackcrevalle',1.8],['yellowtail',1.5],['sheepshead',1.2]],
+  // Florida Bay backcountry — juvenile snapper, small barracuda, rays on the sand, baitfish
+  // schools, manatees in the shallows, and dolphin pods working the bay ("the bay" in the task
+  // brief).
+  'Backcountry':[['redfish',4],['snook',3],['trout',3],['mangrove',2.5],['tarpon',2],['bonefish',1.5],['permit',1],['barracuda',1.2],['manatee',1.2],['stingray',2.2],['jackcrevalle',2],['ladyfish',3],['pompano',1.5],['tripletail',.6],['dolphin',1.5]],
+  // Bridge pilings and the channels that run under them — structure-holders in current. Dolphin
+  // pods regularly work the bridge channels for bait pushed through on the tide.
+  'Bridge':[['tarpon',5],['snook',2],['mangrove',3],['eagleray',1],['sheepshead',3],['goliath',.6],['jackcrevalle',1.5],['nurse',1],['cobia',1],['barracuda',1],['dolphin',1.2]],
+  // Mixed mid-water schools, mackerel and jacks between the Bay and the reef line — classic
+  // bottlenose water, hence the higher dolphin weight ("less rare" per the task brief).
+  'Hawk Channel':[['mangrove',4],['eagleray',2],['turtle',1.5],['barracuda',2],['nurse',1.5],['mutton',2],['dolphin',1.8],['cero',2],['pompano',1.5],['cobia',1],['graytrigger',1.2],['jackcrevalle',1.8],['yellowtail',1.5],['sheepshead',1.2]],
   // Patch reef / Sombrero crest — the existing shallow reef life (depthAt < REEF_WALL_DEPTH).
-  'Reef':[['yellowtail',5],['parrotfish',3],['angelfish',2],['hogfish',2],['grouper',2],['gag',1.2],['redgrouper',1.2],['nurse',1],['turtle',1.5],['barracuda',1.5],['mutton',2],['lionfish',1.5],['graytrigger',2],['cero',2],['goliath',.4]],
+  // Dolphins work the reef line hunting bait off the coral too.
+  'Reef':[['yellowtail',5],['parrotfish',3],['angelfish',2],['hogfish',2],['grouper',2],['gag',1.2],['redgrouper',1.2],['nurse',1],['turtle',1.5],['barracuda',1.5],['mutton',2],['lionfish',1.5],['graytrigger',2],['cero',2],['goliath',.4],['dolphin',1]],
   // The reef wall's ledges and drop-off (depthAt >= REEF_WALL_DEPTH, spawn.ts) — grouper holding on
-  // ledges, bigger snapper/jack schools working the drop.
-  'ReefWall':[['grouper',3],['gag',2],['redgrouper',2],['yellowtail',4],['mutton',2.5],['amberjack',2],['kingfish',1.5],['cero',1.5],['nurse',1],['goliath',.6],['graytrigger',1.2],['lionfish',1],['hammerhead',.3],['cobia',1]],
-  // Gulf Stream / open offshore — pelagics (roaming layer only; see spawn.ts).
-  'Offshore':[['mahi',5],['flyingfish',4],['dolphin',2],['blackfin',3],['sailfish',1.5],['wahoo',1],['turtle',.8],['marlin',.6],['blackmarlin',.25],['swordfish',.3],['yellowfin',2.5],['albacore',1.2],['bluefin',.8],['kingfish',1.5],['amberjack',1.5],['hammerhead',.3]],
+  // ledges, bigger snapper/jack schools working the drop, dolphins cruising the wall edge.
+  'ReefWall':[['grouper',3],['gag',2],['redgrouper',2],['yellowtail',4],['mutton',2.5],['amberjack',2],['kingfish',1.5],['cero',1.5],['nurse',1],['goliath',.6],['graytrigger',1.2],['lionfish',1],['hammerhead',.3],['cobia',1],['dolphin',1.3]],
+  // Gulf Stream / open offshore — pelagics (roaming layer only; see spawn.ts). Dolphin pods are a
+  // common sight riding the current lines; pilot whales/humpbacks are a genuine *rare* event out
+  // here — tiny weights are deliberate (see the task brief's "Encounter rarity").
+  'Offshore':[['mahi',5],['flyingfish',4],['dolphin',2.5],['blackfin',3],['sailfish',1.5],['wahoo',1],['turtle',.8],['marlin',.6],['blackmarlin',.25],['swordfish',.3],['yellowfin',2.5],['albacore',1.2],['bluefin',.8],['kingfish',1.5],['amberjack',1.5],['hammerhead',.3],['pilotwhale',.12],['humpback',.07]],
   // The Humps (Marathon Hump, West Hump) and other named structure far offshore — real relief that
-  // concentrates bottom fish and jacks well out in otherwise-open water.
-  'Humps':[['amberjack',4],['grouper',2.5],['gag',1.5],['redgrouper',1.5],['cobia',2],['mutton',2],['yellowtail',2],['kingfish',1.5],['barracuda',1.5],['goliath',.5],['bullshark',.4],['nurse',1]]
+  // concentrates bottom fish and jacks well out in otherwise-open water. Marathon's actual humps
+  // are a known pilot-whale spot — a tiny weight here makes that a learnable, place-based rarity
+  // (docs/ARCHITECTURE.md's resident-school note) rather than a per-frame dice roll.
+  'Humps':[['amberjack',4],['grouper',2.5],['gag',1.5],['redgrouper',1.5],['cobia',2],['mutton',2],['yellowtail',2],['kingfish',1.5],['barracuda',1.5],['goliath',.5],['bullshark',.4],['nurse',1],['pilotwhale',.4],['humpback',.08]]
 };
 
 /** [startU, endU, heightScale, finStyle] along the body, used by finEdge/buildFishGeo. */
@@ -186,5 +232,11 @@ export const SHAPE: Record<string, FishShape> = {
   bullshark:{peak:.36,nose:.8,ped:.12,tail:'hetero',tl:.26,th:1,dor:[[.32,.44,.8,'sickle'],[.7,.75,.25,'tri']],anal:[[.72,.77,.2,'tri']],pec:.5,shark:true},
   lemonshark:{peak:.38,nose:1,ped:.12,tail:'hetero',tl:.26,th:1,dor:[[.36,.47,.6,'sickle'],[.6,.7,.55,'sickle']],anal:[[.68,.74,.25,'tri']],pec:.5,shark:true},
   hammerhead:{peak:.38,nose:1.2,ped:.1,tail:'hetero',tl:.3,th:1.1,dor:[[.3,.42,1.5,'sickle'],[.72,.76,.3,'tri']],anal:[[.72,.77,.3,'tri']],pec:.4,shark:true},
-  dolphin:{peak:.38,nose:.7,ped:.14,tail:'flukes',tl:.2,th:1,dor:[[.42,.55,.7,'sickle']],anal:[],pec:.2,hump:.18}
+  dolphin:{peak:.38,nose:.7,ped:.14,tail:'flukes',tl:.2,th:1,dor:[[.42,.55,.7,'sickle']],anal:[],pec:.2,hump:.18},
+  // Short-finned pilot whale — bulbous melon forehead (strong `hump`), low hooked dorsal set
+  // forward of mid-body (real pilot whales, unlike a dolphin's tall mid-back sickle), flukes.
+  pilotwhale:{peak:.3,nose:.5,ped:.16,tail:'flukes',tl:.22,th:1.1,dor:[[.28,.4,.4,'sickle']],anal:[],pec:.16,hump:.5},
+  // Humpback — the signature huge pectoral "wings" (`pec:.34,wings:true` — up to ~1/3 body length
+  // on the real animal), a tiny stubby rounded dorsal far aft, flukes, a slightly knobbly head.
+  humpback:{peak:.3,nose:.6,ped:.2,tail:'flukes',tl:.26,th:1.15,dor:[[.56,.63,.15,'round']],anal:[],pec:.34,wings:true,hump:.18}
 };

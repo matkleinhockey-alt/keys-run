@@ -30,7 +30,10 @@ import { shoreInfo } from '@keysrun/shared/world/chain';
 import { ampFor, waveHBase } from '@keysrun/shared/waves';
 import type { CreatureVis } from '@keysrun/shared/content/creatures';
 import { clamp, lerp, rand } from '../../core/math.js';
-import { angLerp, fleeClassFor, fleeParamsFor, nearestTrigger, ACT_DUR, ACT_CD } from './behavior.js';
+import {
+  angLerp, fleeClassFor, fleeParamsFor, nearestTrigger, ACT_DUR, ACT_CD,
+  isBowRider, bowRideTarget, BOW_RIDE_RADIUS, BOW_RIDE_MIN_SPEED, BOW_RIDE_MAX_SPEED,
+} from './behavior.js';
 import type { SchoolCtx, SchoolState, FishMember } from './types.js';
 
 /** legacy `floorY` (apps/client/src/world/seafloor.ts, out of this task's ownership) — duplicated
@@ -50,13 +53,12 @@ export function waterColumnAt(x: number, z: number, t: number): { floor: number;
   return { floor: floorY(d), surf: waveHBase(x, z, t, ampFor(d)) };
 }
 
-export interface SchoolEvent {
-  type: 'splash';
-  x: number;
-  z: number;
-  r: number;
-  p: number;
-}
+export type SchoolEvent =
+  | { type: 'splash'; x: number; z: number; r: number; p: number }
+  /** A whale's blow/spout at the peak of its 'blow' act (school.ts's `stepMember`) — the visual
+   * tell that sells a whale at distance (task brief). `index.ts` is the intended consumer (see
+   * entities/fish/spout.ts): this module reports the moment/location, same split as 'splash'. */
+  | { type: 'blow'; x: number; y: number; z: number };
 
 /** legacy `updateCreatures`'s per-group block. `V` is the school's species spec (caller looks it
  * up once by `state.type` — kept out of `SchoolState` itself so the state stays plain/small, in
@@ -67,8 +69,20 @@ export function stepSchool(state: SchoolState, V: CreatureVis, ctx: SchoolCtx): 
   const events: SchoolEvent[] = [];
   const g = state;
 
+  // Bow-riding (dolphin schools only — behavior.ts's `isBowRider`): a moving boat within range
+  // is noticed and ridden instead of fled from, so the boat threat is pulled out of the flee
+  // trigger check below while riding (a pod shouldn't simultaneously bolt from the very boat
+  // it's tucked up against the bow of).
+  const boatThreat = isBowRider(V) ? threats.find((th) => th.kind === 'boat') : undefined;
+  const canBowRide = !!boatThreat && boatThreat.heading !== undefined
+    && Math.hypot(boatThreat.x - g.cx, boatThreat.z - g.cz) < BOW_RIDE_RADIUS
+    && boatThreat.speed > BOW_RIDE_MIN_SPEED && boatThreat.speed < BOW_RIDE_MAX_SPEED;
+  g.bowRide = lerp(g.bowRide, canBowRide ? 1 : 0, Math.min(1, dt * 0.6));
+  const bowRiding = g.bowRide > 0.4 && !!boatThreat && boatThreat.heading !== undefined;
+  const triggerThreats = bowRiding ? threats.filter((th) => th !== boatThreat) : threats;
+
   const cls = fleeClassFor(g.type, V);
-  const trigger = nearestTrigger(g.cx, g.cz, cls, threats);
+  const trigger = nearestTrigger(g.cx, g.cz, cls, triggerThreats);
   if (trigger) {
     if (g.flee <= 0 && V.act === 'glide' && !g.glide) g.glide = rand(1.6, 3.4);
     g.flee = 1.5;
@@ -77,7 +91,20 @@ export function stepSchool(state: SchoolState, V: CreatureVis, ctx: SchoolCtx): 
   if (V.act === 'glide' && !g.glide && Math.random() < dt * 0.03) g.glide = rand(1.6, 3.4);
 
   let sp = V.speed;
-  if (g.flee > 0) {
+  if (bowRiding && boatThreat && boatThreat.heading !== undefined) {
+    // Pick a side deterministically per school (so several simultaneous pods spread across both
+    // sides of the bow instead of stacking) and steer the centroid toward the pressure-wave slot
+    // just off that side — see behavior.ts's `bowRideTarget`. Member offsets (ox/oz, below) still
+    // fan the pod out around this point, and the per-member 'porpoise' act keeps running
+    // unmodified, so a riding pod still porpoises as it rides.
+    const side = Math.sin(g.phase) >= 0 ? 1 : -1;
+    const tgt = bowRideTarget(boatThreat.x, boatThreat.z, boatThreat.heading, side);
+    const dx = tgt.x - g.cx, dz = tgt.z - g.cz;
+    g.heading = angLerp(g.heading, Math.atan2(-dx, -dz), dt * 3.2);
+    // keep pace with the boat (plus a little headroom to actually catch up/stay ahead) rather
+    // than the species' own cruising speed
+    sp = Math.max(boatThreat.speed * 1.05, 2.5);
+  } else if (g.flee > 0) {
     g.flee -= dt;
     g.heading = angLerp(g.heading, g.fleeHeading, dt * 4);
     sp *= fleeParamsFor(cls).speedMul;
@@ -85,7 +112,7 @@ export function stepSchool(state: SchoolState, V: CreatureVis, ctx: SchoolCtx): 
     g.heading += (Math.sin(t * 0.37 + g.phase) * 0.35 + Math.sin(t * 0.11 + g.phase * 2) * 0.2) * dt;
   }
 
-  if (g.anchor && g.flee <= 0) {
+  if (g.anchor && g.flee <= 0 && !bowRiding) {
     const ax = g.cx - g.anchor.x, az = g.cz - g.anchor.z, d0 = Math.hypot(ax, az) || 1;
     const R = g.anchor.r || 10, dir = (g.phase % 2) < 1 ? 1 : -1, rc = clamp((R - d0) / R, -1, 1) * 0.9;
     const vx = -az / d0 * dir + ax / d0 * rc, vz = ax / d0 * dir + az / d0 * rc;
@@ -151,7 +178,13 @@ function stepMember(
   let pitch = 0, roll = 0;
   if (V.act && V.act !== 'glide') {
     m.actTimer -= dt;
-    if (!m.act && m.actTimer <= 0 && g.flee <= 0 && (V.act !== 'tail' || d < 2.6)) { m.act = V.act; m.actPhase = 0; m.splashed = false; }
+    if (!m.act && m.actTimer <= 0 && g.flee <= 0 && (V.act !== 'tail' || d < 2.6)) {
+      m.act = V.act; m.actPhase = 0; m.splashed = false; m.splashed2 = false;
+      // Rare bonus breach (task brief: "if you're feeling ambitious, a rare breach") — humpback
+      // only, rolled fresh each time a blow cycle starts. Cosmetic timing only (same precedent as
+      // the glide roll above), not placement, so plain Math.random() is fine here.
+      m.breaching = V.act === 'blow' && g.type === 'humpback' && Math.random() < 0.04;
+    }
     if (m.act) {
       m.actPhase += dt / ACT_DUR[m.act];
       const p = Math.min(1, m.actPhase), k = Math.sin(p * Math.PI);
@@ -160,6 +193,25 @@ function stepMember(
       else if (m.act === 'bust') { y = surf - 0.5 + k * 0.75; pitch = Math.cos(p * Math.PI) * 0.6; if (p > 0.4 && !m.splashed) { m.splashed = true; events.push({ type: 'splash', x: mx, z: mz, r: 9, p: 0.8 }); } }
       else if (m.act === 'breathe') { y = lerp(y, surf - 0.1, k); pitch = 0.22 * k; }
       else if (m.act === 'porpoise') { y = surf - 0.6 + k * 1.35; pitch = Math.cos(p * Math.PI) * 0.8; if (p > 0.85 && !m.splashed) { m.splashed = true; events.push({ type: 'splash', x: mx, z: mz, r: 6, p: 0.6 }); } }
+      else if (m.act === 'blow') {
+        // Whale surfacing-to-breathe cycle: a nose-up rise with a blow near the peak, then a
+        // nose-down fluke-up as it sounds back under (task brief: "a blow/spout on surfacing...
+        // occasional fluke-up on sounding"). `m.breaching` swaps in a bigger lunge + a real
+        // splash instead of the usual gentle roll and blow.
+        const rise = m.breaching ? 1.6 : 0.35;
+        y = lerp(y, surf - 0.25 + rise, k);
+        pitch = Math.cos(p * Math.PI) * (m.breaching ? 1.1 : 0.5);
+        if (p > 0.35 && p < 0.6 && !m.splashed) {
+          m.splashed = true;
+          events.push(m.breaching
+            ? { type: 'splash', x: mx, z: mz, r: 14, p: 1 }
+            : { type: 'blow', x: mx, y: surf, z: mz });
+        }
+        if (p > 0.82 && !m.splashed2) {
+          m.splashed2 = true;
+          events.push({ type: 'splash', x: mx, z: mz, r: 9, p: 0.7 }); // fluke breaking the surface on the way back down
+        }
+      }
       if (m.actPhase >= 1) { m.act = null; const cd = ACT_CD[V.act]; m.actTimer = rand(cd[0], cd[1]); }
     }
   }
