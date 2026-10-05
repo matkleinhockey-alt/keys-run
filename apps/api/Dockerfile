@@ -58,4 +58,11 @@ USER node
 EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
   CMD wget -qO- "http://127.0.0.1:${PORT}/health" || exit 1
-CMD ["node", "dist/index.js"]
+# Migrate, then serve. railway.json declares the same thing as a
+# `preDeployCommand`, but that is only honoured when Railway resolves this
+# service's config-as-code — a `railway up` with an explicitly-set
+# RAILWAY_DOCKERFILE_PATH does not, and the first production deploy then came up
+# against a completely empty database (every query 500'd on a missing table).
+# Running it here makes the container self-migrating however it was deployed.
+# drizzle-kit migrations are idempotent, so this is a no-op on an up-to-date DB.
+CMD ["sh", "-c", "node dist/db/migrate.js && node dist/index.js"]
