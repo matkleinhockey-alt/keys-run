@@ -78,8 +78,13 @@ export interface FishWorld {
    * `waterColumnAt`, used by test/capture-fish-screenshots.mjs to place a camera at a sensible
    * height in the water column instead of guessing a world Y blind. */
   waterColumnAt(x: number, z: number, t: number): { floor: number; surf: number };
-  /** Verification-only: every currently active school's centroid/type/member-count. */
-  debugActiveSchools(): Array<{ id: string; type: string; cx: number; cz: number; heading: number; count: number; resident: boolean }>;
+  /** Verification-only: every currently active school's centroid/type/member-count, plus its
+   * live `flee` countdown (school.ts's `stepSchool` sets this to 1.5 the instant `nearestTrigger`
+   * finds a threat, including a Problem-2 `'spear'` near-miss threat, then ticks it down to 0) —
+   * `>0` is a direct, no-guessing signal that a school is actively spooked right now, used by
+   * test/capture-spearable-fish.mjs to confirm a missed shot's flee response actually fired
+   * instead of inferring it from position deltas. */
+  debugActiveSchools(): Array<{ id: string; type: string; cx: number; cz: number; heading: number; count: number; resident: boolean; flee: number }>;
   /** Verification-only: per-species-pool draw-call/triangle accounting, isolated from the rest of
    * the scene. */
   debugPoolStats(): Array<{ type: string; triPerInstance: number; meshCount: number; inUse: number; capacity: number }>;
@@ -283,10 +288,10 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
     return out;
   }
 
-  function debugActiveSchools(): Array<{ id: string; type: string; cx: number; cz: number; heading: number; count: number; resident: boolean }> {
-    const out: Array<{ id: string; type: string; cx: number; cz: number; heading: number; count: number; resident: boolean }> = [];
-    for (const s of residents.values()) out.push({ id: s.id, type: s.type, cx: s.cx, cz: s.cz, heading: s.heading, count: s.members.length, resident: true });
-    for (const s of roamers.values()) out.push({ id: s.id, type: s.type, cx: s.cx, cz: s.cz, heading: s.heading, count: s.members.length, resident: false });
+  function debugActiveSchools(): Array<{ id: string; type: string; cx: number; cz: number; heading: number; count: number; resident: boolean; flee: number }> {
+    const out: Array<{ id: string; type: string; cx: number; cz: number; heading: number; count: number; resident: boolean; flee: number }> = [];
+    for (const s of residents.values()) out.push({ id: s.id, type: s.type, cx: s.cx, cz: s.cz, heading: s.heading, count: s.members.length, resident: true, flee: s.flee });
+    for (const s of roamers.values()) out.push({ id: s.id, type: s.type, cx: s.cx, cz: s.cz, heading: s.heading, count: s.members.length, resident: false, flee: s.flee });
     return out;
   }
 
