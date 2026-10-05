@@ -24,6 +24,7 @@ import { beamBetween } from '../../entities/boat/hull.js';
 import { makeFishMesh } from '../fishing/fish-mesh.js';
 import { createCooler, meatLine, nearMarina, type CoolerFish } from './cooler.js';
 import { createPortrait } from './portrait.js';
+import { createUnderwaterTrophy } from './underwater-trophy.js';
 
 function $(id: string): HTMLElement | null { return document.getElementById(id); }
 function setText(id: string, s: string): void { const el = $(id); if (el) el.textContent = s; }
@@ -34,6 +35,10 @@ export interface CaughtFishInfo {
   x: number;
   z: number;
   zone: string;
+  /** Which path landed it — rod fishing (the default, boat-deck grip-and-grin/gin-pole photo) or
+   * the speargun (the underwater grip-and-grin, see underwater-trophy.ts). Optional/defaults to
+   * 'rod' so game/fishing's existing call site (which predates this field) needs no change. */
+  source?: 'rod' | 'spear';
 }
 
 interface SessionStats {
@@ -147,12 +152,18 @@ export function createCatchFlow(deps: CatchFlowDeps) {
   const session: SessionStats = { count: 0, score: 0, caught: new Set(), best: null, slam1: false, slam2: false };
   const cooler = createCooler();
   const portrait = createPortrait('fishCanvas');
+  // Shares `#fishCanvas` with `portrait` — see underwater-trophy.ts's header: only one of the two
+  // is ever "shown" at a time (a rod catch and a speared catch can't both be the current catch).
+  const trophy = createUnderwaterTrophy('fishCanvas');
   const released: ReleasedFish[] = [];
 
   let photo: PhotoHandle | null = null;
   let lastPts = 0;
   let lastStats: { inches: number; sex: string } | null = null;
   let current: CaughtFishInfo | null = null;
+  /** Which card is live — drives `renderPortrait`/`finishCatch`'s branching. Mirrors `current`:
+   * meaningful only while `current` is non-null. */
+  let currentSource: 'rod' | 'spear' = 'rod';
   let caughtAt = 0;
 
   function updateScore(): void {
@@ -177,6 +188,7 @@ export function createCatchFlow(deps: CatchFlowDeps) {
 
     const fs = fishStats(fish.key, fish.weight);
     lastPts = pts; lastStats = fs; current = fish; caughtAt = performance.now();
+    currentSource = fish.source === 'spear' ? 'spear' : 'rod';
 
     setText('cZone', `${ZONE_DESC[fish.zone] ?? fish.zone} · ${nearestName(fish.x, fish.z)}`);
     setText('cLen', `${fs.inches} in`);
@@ -190,10 +202,18 @@ export function createCatchFlow(deps: CatchFlowDeps) {
     setText('cFact', S.fact);
     const bonusEl = $('cBonus');
     if (bonusEl) { bonusEl.textContent = bonus; bonusEl.classList.toggle('hidden', !bonus); }
+    setText('cBadge', currentSource === 'spear' ? '🔱 Speared underwater' : '');
 
-    model.station = 0;
-    model.fishSpot.copy(model.stations[0].spot);
-    try { photo = setupPhoto(model, fish.key, fish.weight); portrait.show(S.color, scaledLenM(fish.key, fish.weight), ELONGATED_SPECIES.has(fish.key)); } catch (e) { console.error('photo setup', e); photo = null; }
+    if (currentSource === 'spear') {
+      // No boat prop involved — a speared fish is landed wherever the diver was, possibly nowhere
+      // near the boat (this function deliberately takes no `BoatState`, see its own header note).
+      photo = null;
+      try { trophy.show(S.color, scaledLenM(fish.key, fish.weight)); } catch (e) { console.error('trophy setup', e); }
+    } else {
+      model.station = 0;
+      model.fishSpot.copy(model.stations[0].spot);
+      try { photo = setupPhoto(model, fish.key, fish.weight); portrait.show(S.color, scaledLenM(fish.key, fish.weight), ELONGATED_SPECIES.has(fish.key)); } catch (e) { console.error('photo setup', e); photo = null; }
+    }
 
     const choice = cooler.prepareKeepChoice(boatSpec.id, fish.key, fish.weight);
     const keepBtn = $('btnKeep') as HTMLButtonElement | null;
@@ -201,12 +221,15 @@ export function createCatchFlow(deps: CatchFlowDeps) {
     setText('cNote', choice.note);
 
     $('card')?.classList.remove('hidden');
+    $('card')?.classList.toggle('dive', currentSource === 'spear');
     document.body.classList.add('photoing');
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     updateScore();
   }
 
   function finishCatch(): void {
+    $('card')?.classList.remove('dive');
+    trophy.clear();
     if (photo?.rig?.parent) photo.rig.parent.remove(photo.rig);
     if (photo?.hangGroup?.parent) photo.hangGroup.parent.remove(photo.hangGroup);
     $('card')?.classList.add('hidden');
@@ -273,7 +296,8 @@ export function createCatchFlow(deps: CatchFlowDeps) {
   }
 
   function renderPortrait(t: number, renderer: THREE.WebGLRenderer): void {
-    portrait.render(renderer, t);
+    if (currentSource === 'spear') trophy.render(renderer, t);
+    else portrait.render(renderer, t);
   }
 
   /** legacy `openCooler()` (index.html:2996-3002), supplying the active boat's identity. */
@@ -317,9 +341,12 @@ export function createCatchFlow(deps: CatchFlowDeps) {
   // code path reads `window.__catchPortraitDebug`.
   (window as unknown as { __catchPortraitDebug?: unknown }).__catchPortraitDebug = {
     land(key: string, weight: number): void { landFish({ key, weight, x: 0, z: 0, zone: 'Reef' }); },
+    /** Same idea, for the underwater trophy card (underwater-trophy.ts) — `source: 'spear'`
+     * routes `landFish` to `trophy.show` instead of the boat-deck photo. */
+    landSpeared(key: string, weight: number): void { landFish({ key, weight, x: 0, z: 0, zone: 'Reef', source: 'spear' }); },
     renderFrame(t: number): void {
       const renderer = (window as unknown as { __renderer?: THREE.WebGLRenderer }).__renderer;
-      if (renderer) portrait.render(renderer, t);
+      if (renderer) renderPortrait(t, renderer);
     },
   };
 

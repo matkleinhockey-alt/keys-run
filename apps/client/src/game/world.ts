@@ -44,12 +44,16 @@ import { applyBoatVisuals, sampleWaterHeight } from '../entities/boat/visuals.js
 import { createBoatInput, bindBoatInput, type BoatStateBox } from '../entities/boat/input.js';
 import { createCamState, createFpState, updateCamera, cycleView, bindCameraPointerControls } from '../entities/camera.js';
 
-import type { DiverEvent } from '@keysrun/shared/sim/diver';
+import { AIR_MAX, type DiverEvent } from '@keysrun/shared/sim/diver';
 import { createDiverController, NEUTRAL_BOAT_INPUT } from '../entities/diver/controller.js';
 import { createDiverModel } from '../entities/diver/model.js';
 import { applyDiverVisuals } from '../entities/diver/visuals.js';
 import { updateDiverCamera } from '../entities/diver/camera.js';
 import { updateDiverHud, showDiverHud, clearBlackoutOverlay } from '../entities/diver/hud.js';
+
+import { SPECIES } from '@keysrun/shared/content/species';
+import { createSpeargun, type DiverAimInput, type SpearTarget } from '../entities/speargun/index.js';
+import { bindSpeargunInput } from '../entities/speargun/input.js';
 
 import { createFishing } from './fishing/index.js';
 import { F as FishF, lineOut as fishingLineOut } from './fishing/state.js';
@@ -64,6 +68,15 @@ import { spotClear, findClearSpot } from '../state/game.js';
 import { SPAWN_X, SPAWN_DZ, SPAWN_H } from '../state/constants.js';
 
 const DT = 1 / 30;
+
+/** Deterministic string -> [0,1) — `getSpearTargets` uses this to pick a stable weight for a
+ * given school id (FNV-1a, same family of hash as content-addressed caches elsewhere in this
+ * codebase) so a shot in flight never sees its own target's weight change mid-tick. */
+function hashUnit(id: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) { h ^= id.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h >>> 0) / 4294967295;
+}
 
 const lerpN = (a: number, b: number, t: number): number => a + (b - a) * t;
 /** Shortest-path angle interpolation, so a heading crossing the ±π seam doesn't spin the long way. */
@@ -357,6 +370,48 @@ export function initWorld(wrap: HTMLElement): World {
   });
   bindCatchInput(catchFlow, () => stateBox.state);
 
+  // 13d. speargun (entities/speargun/**) — first-person harpoon. Fires at whatever
+  // `getSpearTargets` below returns and, on a hit, lands through the exact same `catchFlow.
+  // landFish` rod fishing uses (the module tags the fish `source: 'spear'` itself).
+  //
+  // `getSpearTargets`: the tier-3 tracked-fish registry entities/speargun/index.ts's header
+  // anticipates (docs/ARCHITECTURE.md "Fish ownership — three tiers") doesn't exist yet, and this
+  // agent's scope explicitly excludes editing entities/fish/** to add one. `debugActiveSchools()`
+  // (already exported, verification-only today) is the closest real stand-in on hand: one capsule
+  // per active school, centred on the school's own centroid/heading at the diver's current depth
+  // (schools don't expose a per-school Y), weighted deterministically from the school's id so a
+  // shot's target doesn't change species/weight mid-flight. Coarser than a real per-fish hitbox,
+  // but it means the gun can actually spear something swimming in the world today, not only the
+  // synthetic target in apps/client/test/spear-harness.ts — swap for the real registry's targets
+  // the moment it lands; nothing else here needs to change.
+  function getSpearTargets(): SpearTarget[] {
+    const s = diver.state;
+    if (diver.mode !== 'diver' || !s) return [];
+    const out: SpearTarget[] = [];
+    for (const school of fishWorld.debugActiveSchools()) {
+      const S = SPECIES[school.type];
+      if (!S) continue; // ambient-only species (e.g. angelfish) have no weight/fight table
+      const dx = school.cx - s.x, dz = school.cz - s.z;
+      if (dx * dx + dz * dz > 400) continue; // ~20 m — comfortably past SPEAR_RANGE, cheap skip
+      const hx = Math.sin(school.heading) * 0.35, hz = Math.cos(school.heading) * 0.35;
+      out.push({
+        id: school.id, key: school.type,
+        weight: S.min + (S.max - S.min) * hashUnit(school.id),
+        ax: school.cx - hx, ay: s.y, az: school.cz - hz,
+        bx: school.cx + hx, by: s.y, bz: school.cz + hz,
+        radius: 0.5,
+      });
+    }
+    return out;
+  }
+
+  const diverAim: DiverAimInput = { position: { x: 0, y: 0, z: 0 }, aimDir: { x: 0, y: 0, z: -1 }, breath: 1, blackedOut: false, speed: 0 };
+  const speargun = createSpeargun({
+    scene, camera, getTargets: getSpearTargets,
+    onLanded(fish) { catchFlow.landFish(fish); },
+  });
+  bindSpeargunInput(renderer.domElement, speargun, () => diverAim, () => diver.mode === 'diver' && !diver.state?.blackedOut);
+
   function setDiveUI(diving: boolean): void {
     document.getElementById('gauges')?.classList.toggle('hidden', diving);
     document.getElementById('mapbox')?.classList.toggle('hidden', diving);
@@ -367,6 +422,7 @@ export function initWorld(wrap: HTMLElement): World {
     }
     showDiverHud(diving);
     diverModel.group.visible = diving;
+    speargun.setViewVisible(diving);
     if (!diving) clearBlackoutOverlay();
   }
 
@@ -542,6 +598,30 @@ export function initWorld(wrap: HTMLElement): World {
       prevState = stateBox.state;
       events.push(...fixedStep(DT));
       diverEvents.push(...diver.step(simTime, DT, stateBox.state.x, stateBox.state.z));
+      // entities/speargun/** ticks at this same fixed rate, right alongside the diver physics it
+      // reads from — sim/spear.ts's 25 m/s / SPEAR_RANGE maths assumes a steady small dt, the same
+      // reason fishing.update() above is driven from fixedStep rather than frame()'s variable dt.
+      if (diver.mode === 'diver' && diver.state) {
+        const ds = diver.state;
+        diverAim.position.x = ds.x; diverAim.position.y = ds.y; diverAim.position.z = ds.z;
+        // Derived straight from the look state (same formula entities/diver/camera.ts's
+        // `updateDiverCamera` uses), not `camera.getWorldDirection()` — the camera's transform is
+        // only refreshed once per rendered frame (below), so mid-substep it would be stale;
+        // `diver.cam.yaw/pitch` is current on every one of these fixed ticks.
+        const yaw = diver.cam.yaw, pitch = diver.cam.pitch;
+        diverAim.aimDir.x = -Math.sin(yaw) * Math.cos(pitch);
+        diverAim.aimDir.y = Math.sin(pitch);
+        diverAim.aimDir.z = -Math.cos(yaw) * Math.cos(pitch);
+        diverAim.breath = Math.max(0, Math.min(1, ds.air / AIR_MAX));
+        diverAim.blackedOut = ds.blackedOut;
+        diverAim.speed = Math.hypot(ds.vx, ds.vy, ds.vz);
+        speargun.update(DT, simTime, diverAim, sw, ch);
+      } else if (speargun.isActive()) {
+        // Climbed back aboard (or never dove) with a shaft out or a fish on the spear — drop it
+        // rather than let it sit frozen; mirrors the rod's own reelIn() on the *other* transition
+        // (toggleDive's `if (FishF.state!=='idle'...) fishing.reelIn();` just below).
+        speargun.reset();
+      }
       acc -= DT;
       steps++;
     }
@@ -701,8 +781,10 @@ export function initWorld(wrap: HTMLElement): World {
     profiler.sample(dt, renderer, quality.tier);
     // legacy `if(F.state==='caught') renderPortrait(time);` — an isolated off-screen render (see
     // game/catch/portrait.ts's header), run after the real frame so it never perturbs the
-    // profiler's per-frame draw-call count sampled just above.
-    if (FishF.state === 'caught') catchFlow.renderPortrait(simTime, renderer);
+    // profiler's per-frame draw-call count sampled just above. `catchFlow.current` (rather than
+    // `FishF.state==='caught'`) so a speared fish's underwater trophy card renders too — the rod
+    // state machine never leaves 'idle' for a dive catch (see entities/speargun's header).
+    if (catchFlow.current) catchFlow.renderPortrait(simTime, renderer);
   }
 
   function resize(): void {

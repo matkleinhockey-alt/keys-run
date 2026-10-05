@@ -53,20 +53,17 @@
  * wet-skin look) rather than mutating the cache in place — the cache is also used by the live
  * hooked-fish mesh, the jump animation and the grip-and-grin hang rig (`catch-flow.ts`'s
  * `setupPhoto`), none of which this task owns.
+ *
+ * The render-target/readback plumbing and the colour-pipeline fix (item 2) now live in
+ * render-pipeline.ts, shared with underwater-trophy.ts's dive-caught card — extracted verbatim,
+ * not rewritten, when that module needed the exact same machinery. See that file's header.
  */
 import * as THREE from 'three';
 import { makeFishMesh } from '../fishing/fish-mesh.js';
+import { buildOffscreenRig, readback, buildGradientEnv, type OffscreenRig } from './render-pipeline.js';
 
-interface PortraitRig {
-  scene: THREE.Scene;
-  camera: THREE.PerspectiveCamera;
+interface PortraitRig extends OffscreenRig {
   pivot: THREE.Group;
-  rt: THREE.WebGLRenderTarget;
-  w: number;
-  h: number;
-  ctx2d: CanvasRenderingContext2D;
-  img: ImageData;
-  buf: Uint8Array;
   mesh: THREE.Group | null;
   last: number;
 }
@@ -75,42 +72,6 @@ export interface Portrait {
   show(color: string, lenM: number, elongated?: boolean): void;
   render(renderer: THREE.WebGLRenderer, t: number): void;
   clear(): void;
-}
-
-// ---- colour pipeline (see header item 2) -----------------------------------------------------
-
-/** Precomputed linear -> sRGB LUT so the per-pixel tonemap pass below needs no `Math.pow` — this
- * runs on every portrait frame (throttled to ~8fps by `render`, but still inside a live frame). */
-const SRGB_LUT_N = 1024;
-const SRGB_LUT = new Uint8ClampedArray(SRGB_LUT_N + 1);
-for (let i = 0; i <= SRGB_LUT_N; i++) {
-  const v = i / SRGB_LUT_N;
-  SRGB_LUT[i] = Math.round(255 * (v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055));
-}
-function encodeSRGB(v: number): number {
-  if (v <= 0) return SRGB_LUT[0];
-  if (v >= 1) return SRGB_LUT[SRGB_LUT_N];
-  return SRGB_LUT[(v * SRGB_LUT_N + 0.5) | 0];
-}
-
-/** Three.js's `ACESFilmicToneMapping` GLSL (tonemapping_pars_fragment), ported to run once per
- * pixel on the CPU — same `RRTAndODTFit` + input/output matrices, same `exposure / 0.6` scale. */
-function toLDR(r: number, g: number, b: number, exposure: number, out: Float64Array): void {
-  const s = exposure / 0.6;
-  r *= s; g *= s; b *= s;
-  const ar = 0.59719 * r + 0.35458 * g + 0.04823 * b;
-  const ag = 0.07600 * r + 0.90834 * g + 0.01566 * b;
-  const ab = 0.02840 * r + 0.13383 * g + 0.83777 * b;
-  const fr = (ar * (ar + 0.0245786) - 0.000090537) / (ar * (0.983729 * ar + 0.4329510) + 0.238081);
-  const fg = (ag * (ag + 0.0245786) - 0.000090537) / (ag * (0.983729 * ag + 0.4329510) + 0.238081);
-  const fb = (ab * (ab + 0.0245786) - 0.000090537) / (ab * (0.983729 * ab + 0.4329510) + 0.238081);
-  let or_ = 1.60475 * fr - 0.53108 * fg - 0.07367 * fb;
-  let og = -0.10208 * fr + 1.10813 * fg - 0.00605 * fb;
-  let ob = -0.00327 * fr - 0.07276 * fg + 1.07602 * fb;
-  if (or_ < 0) or_ = 0; else if (or_ > 1) or_ = 1;
-  if (og < 0) og = 0; else if (og > 1) og = 1;
-  if (ob < 0) ob = 0; else if (ob > 1) ob = 1;
-  out[0] = or_; out[1] = og; out[2] = ob;
 }
 
 // ---- environment (see header item 1) ---------------------------------------------------------
@@ -122,42 +83,13 @@ function toLDR(r: number, g: number, b: number, exposure: number, out: Float64Ar
 let sharedEnv: THREE.Texture | null = null;
 function ensureEnv(renderer: THREE.WebGLRenderer): THREE.Texture {
   if (sharedEnv) return sharedEnv;
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  const envScene = new THREE.Scene();
-
-  const skyGeo = new THREE.SphereGeometry(40, 20, 14);
-  const posAttr = skyGeo.attributes.position;
-  const colors = new Float32Array(posAttr.count * 3);
-  const top = new THREE.Color(0xdcefec), horizon = new THREE.Color(0x1f6f73), deep = new THREE.Color(0x041824);
-  const c = new THREE.Color();
-  for (let i = 0; i < posAttr.count; i++) {
-    const t = THREE.MathUtils.clamp(posAttr.getY(i) / 40, -1, 1);
-    if (t >= 0) c.copy(horizon).lerp(top, t); else c.copy(horizon).lerp(deep, -t);
-    colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
-  }
-  skyGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  const skyMat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, toneMapped: false });
-  const sky = new THREE.Mesh(skyGeo, skyMat);
-  envScene.add(sky);
-
-  // A bright "sun" patch gives the PMREM convolution something to turn into a soft specular
-  // highlight at low roughness; a cooler bounce patch opposite it stops one flank going flat.
-  const sunMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xfff2d9).multiplyScalar(5), toneMapped: false });
-  const sun = new THREE.Mesh(new THREE.SphereGeometry(3, 12, 8), sunMat);
-  sun.position.set(14, 22, -8);
-  envScene.add(sun);
-  const bounceMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x2f8aa8).multiplyScalar(1.6), toneMapped: false });
-  const bounce = new THREE.Mesh(new THREE.SphereGeometry(5, 12, 8), bounceMat);
-  bounce.position.set(-16, -4, 10);
-  envScene.add(bounce);
-
-  const rt = pmrem.fromScene(envScene, 0.035, 0.1, 100, { size: 128 });
-  pmrem.dispose();
-  skyGeo.dispose(); skyMat.dispose();
-  sun.geometry.dispose(); sunMat.dispose();
-  bounce.geometry.dispose(); bounceMat.dispose();
-
-  sharedEnv = rt.texture;
+  sharedEnv = buildGradientEnv(renderer, {
+    top: 0xdcefec, horizon: 0x1f6f73, deep: 0x041824,
+    // A bright "sun" patch gives the PMREM convolution something to turn into a soft specular
+    // highlight at low roughness; a cooler bounce patch opposite it stops one flank going flat.
+    accent: { color: 0xfff2d9, intensity: 5, pos: [14, 22, -8], radius: 3 },
+    bounce: { color: 0x2f8aa8, intensity: 1.6, pos: [-16, -4, 10], radius: 5 },
+  });
   return sharedEnv;
 }
 
@@ -234,8 +166,6 @@ export function createPortrait(canvasId: string): Portrait {
   function ensureRig(): PortraitRig | null {
     if (rig) return rig;
     const cv = document.getElementById(canvasId) as HTMLCanvasElement | null;
-    if (!cv) return null;
-    const W = cv.width || 640, H = cv.height || 300;
     const scene = new THREE.Scene();
     scene.background = buildBackdrop();
     // Weak ambient floor — the environment map (added lazily, first render) carries most of the
@@ -249,18 +179,12 @@ export function createPortrait(canvasId: string): Portrait {
     // Rim/kicker (brief item 3) — placed behind the subject from the camera's point of view so
     // it grazes the silhouette/dorsal edge instead of flooding the face the camera sees.
     const rim = new THREE.DirectionalLight(0xeaffff, 1.0); rim.position.set(-3, 3.2, -2.2); scene.add(rim);
-    const rt = new THREE.WebGLRenderTarget(W, H);
-    // Not sRGB: this target never gets three's automatic output-colourspace treatment regardless
-    // of what we tag it (see the header's item 2) — tagging it accurately as linear documents
-    // that `render()` below does the sRGB encode itself on readback, rather than implying the
-    // bytes already are sRGB.
-    rt.texture.colorSpace = THREE.LinearSRGBColorSpace;
-    const camera = new THREE.PerspectiveCamera(28, W / H, 0.01, 200);
+    const camera = new THREE.PerspectiveCamera(28, (cv?.width || 640) / (cv?.height || 300), 0.01, 200);
+    const base = buildOffscreenRig(canvasId, scene, camera);
+    if (!base) return null;
     const pivot = new THREE.Group();
     scene.add(pivot);
-    const ctx2d = cv.getContext('2d');
-    if (!ctx2d) return null;
-    rig = { scene, camera, pivot, rt, w: W, h: H, ctx2d, img: ctx2d.createImageData(W, H), buf: new Uint8Array(W * H * 4), mesh: null, last: -1 };
+    rig = { ...base, pivot, mesh: null, last: -1 };
     return rig;
   }
 
@@ -306,38 +230,7 @@ export function createPortrait(canvasId: string): Portrait {
     r.last = t;
     if (!r.scene.environment) r.scene.environment = ensureEnv(renderer);
     r.pivot.rotation.set(Math.sin(t * 1.3) * 0.05, Math.sin(t * 0.7) * 0.45, Math.sin(t * 1.1) * 0.06);
-    const prevCol = renderer.getClearColor(new THREE.Color()), prevA = renderer.getClearAlpha();
-    const prevT = renderer.getRenderTarget(), prevAuto = renderer.autoClear, prevSh = renderer.shadowMap.enabled;
-    const exposure = renderer.toneMappingExposure; // read live — matches core/scene.ts without duplicating its value
-    renderer.setRenderTarget(r.rt);
-    renderer.setClearColor(0x000000, 0);
-    renderer.autoClear = true;
-    renderer.clear();
-    renderer.render(r.scene, r.camera);
-    renderer.readRenderTargetPixels(r.rt, 0, 0, r.w, r.h, r.buf);
-    renderer.setRenderTarget(prevT);
-    renderer.setClearColor(prevCol, prevA);
-    renderer.autoClear = prevAuto;
-    renderer.shadowMap.enabled = prevSh;
-    const { w: W, h: H, buf: src } = r;
-    const dst = r.img.data;
-    const ldr = new Float64Array(3);
-    const inv255 = 1 / 255;
-    // Flip rows (GL reads bottom-up) and, per pixel, run the same ACES filmic curve + sRGB
-    // gamma three's own output pipeline would have applied if it ran for render targets (see the
-    // header's item 2 for why it doesn't) — src is still raw linear light values at this point.
-    for (let y = 0; y < H; y++) {
-      const srcRow = (H - 1 - y) * W * 4, dstRow = y * W * 4;
-      for (let x = 0; x < W; x++) {
-        const si = srcRow + x * 4, di = dstRow + x * 4;
-        toLDR(src[si] * inv255, src[si + 1] * inv255, src[si + 2] * inv255, exposure, ldr);
-        dst[di] = encodeSRGB(ldr[0]);
-        dst[di + 1] = encodeSRGB(ldr[1]);
-        dst[di + 2] = encodeSRGB(ldr[2]);
-        dst[di + 3] = 255; // scene.background is always opaque now — no transparency to preserve
-      }
-    }
-    r.ctx2d.putImageData(r.img, 0, 0);
+    readback(renderer, r);
   }
 
   function clear(): void {
