@@ -45,7 +45,7 @@
       <div class="tbar"><i id="fT"></i></div>
       <div class="frow"><span>Line out <b id="fLine">0 m</b></span><span>Fish energy</span></div>
       <div class="stam"><i id="fStam"></i></div>
-      <div class="frow"><span>Drag <span class="dragpips" id="fDrag"></span></span><span id="fDragHint">T tightens · Shift+T loosens</span></div>
+      <div class="frow" id="fDragRow"><span>Drag <span class="dragpips" id="fDrag"></span></span><span id="fDragHint">T tightens · Shift+T loosens</span></div>
     </div>
     <div id="castbar" class="panel hidden"><div class="cb-row"><span>Cast power</span><b id="castDist">12 m</b></div><div class="tbar2"><i id="castFill"></i></div></div>
     <div id="hint"></div>
@@ -87,11 +87,14 @@
     <button class="tbtn" id="tdAsc" aria-label="Ascend">⬆</button>
     <button class="tbtn" id="tdDesc" aria-label="Descend">⬇</button>
     <button class="tbtn" id="tdSprint" aria-label="Sprint">⚡</button>
+    <button class="tbtn" id="tdFire" aria-label="Fire the speargun">🔱</button>
+    <button class="tbtn" id="tdHaul" aria-label="Haul in a speared fish">🪢</button>
   </div>
 
   <div id="card" class="overlay photo hidden">
     <div class="catch panel">
       <canvas id="fishCanvas" width="640" height="300" aria-label="Your catch"></canvas>
+      <div class="cbadge" id="cBadge"></div>
       <div class="where" id="cZone"></div>
       <h2 id="cName"></h2>
       <div class="cstats"><div><span>Weight</span><b id="cWeight"></b><span>lb</span></div><div><span>Length</span><b id="cLen"></b><span>in</span></div><div><span>Sex</span><b id="cSex"></b><span>&nbsp;</span></div></div>

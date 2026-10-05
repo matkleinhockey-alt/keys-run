@@ -31,6 +31,9 @@ import {
 } from '@keysrun/shared/sim/spear';
 import { createGunViewModel } from './gun-viewmodel.js';
 import { createShaftVisual, createFloatLineVisual } from './shaft.js';
+import { createSpearFightUI } from './fight-ui.js';
+import { toast } from '../../ui/toast.js';
+import { SPECIES } from '@keysrun/shared/content/species';
 import type { CaughtFishInfo } from '../../game/catch/catch-flow.js';
 
 /** A fish candidate for this shot — the pure `CapsuleTarget` sim/spear.ts hit-tests against,
@@ -48,6 +51,15 @@ export interface DiverAimInput {
    * client-side `chooseFish` roll (see sim/fight.ts's header): a later phase's server envelope
    * check is the real authority. */
   breath: number;
+  /** True exactly while `DiverState.blackedOut` (packages/shared/src/sim/diver.ts) — checked
+   * separately from `breath<=0` because a shallow-water blackout can fire with `breath` still a
+   * few seconds from empty. Gates `tryFire` and force-resolves an in-progress fight the instant
+   * it flips true (see `update`'s header note on the breath/fight interaction). Optional only so
+   * apps/client/test/spear-harness.ts's existing literal (predating this field) keeps compiling. */
+  blackedOut?: boolean;
+  /** Diver swim speed, m/s (`Math.hypot(vx,vy,vz)`) — purely cosmetic, sizes the view model's
+   * idle sway (gun-viewmodel.ts). Optional for the same reason as `blackedOut`. */
+  speed?: number;
 }
 
 export interface SpeargunDeps {
@@ -71,6 +83,25 @@ export interface Speargun {
    * for a tension/stamina HUD, same role as game/fishing's directly-readable `F` singleton
    * (`F.fight.tension`/`.stam`). */
   getFightState(): SpearFightState | null;
+  /** Unconditional cleanup for a mode exit (diver climbing back aboard) — mirrors
+   * game/fishing/index.ts's `reelIn()` being called the moment the diver jumps in, the other
+   * direction: hides every visual and drops any in-flight shot/speared fish without resolving it
+   * through `landed`/`tornFree`. Safe to call when nothing is active. */
+  reset(): void;
+  /** VERIFICATION-ONLY: zeroes the reload timer. Real play never needs this (the 2.5 s reload is
+   * the point) — it exists because this sandbox's fixed-dt accumulator clamps to 0.05 s of
+   * simulated time per *rendered* frame (game/world.ts's `frame()`), and this sandbox's measured
+   * ~2-4 fps means simulated time crawls at roughly a fifth to a tenth of real wall-clock time —
+   * a Playwright script's `waitForTimeout(3000)` was observed not being enough real time for a
+   * 2.5 s *simulated* reload to actually clear. Bypassing it here is simpler and more honest than
+   * padding every verification script with multi-minute real-time waits to chase simulated time
+   * that will never run at real speed in this environment anyway. */
+  debugForceReloadReady(): void;
+  /** Unlike game/fishing/rod-viewmodel.ts (which toggles between a first-person rod and a
+   * boat-mounted one — see that file's header), there is no boat-mounted speargun: it's either
+   * visible (diving) or not shown at all (aboard). `game/world.ts`'s `setDiveUI` calls this on
+   * every dive-mode transition, the same place it toggles `diverModel.group.visible`. */
+  setViewVisible(v: boolean): void;
   dispose(): void;
 }
 
@@ -82,10 +113,22 @@ interface Speared {
   fight: SpearFightState;
 }
 
+/** Same shape as game/fishing/update.ts's `setHook` opening line, scaled off the species' own
+ * min/max rather than a second, independent "how big is big" table. */
+function fightLabelFor(key: string, weight: number): string {
+  const S = SPECIES[key];
+  const sizeT = S ? clampSizeT((weight - S.min) / (S.max - S.min)) : 0.5;
+  return sizeT > 0.7 ? 'Something heavy is on the spear' : sizeT > 0.35 ? 'Solid fish on the spear' : 'Fish on the spear';
+}
+function clampSizeT(v: number): number { return v < 0 ? 0 : v > 1 ? 1 : v; }
+
+const tmpMuzzle = new THREE.Vector3();
+
 export function createSpeargun(deps: SpeargunDeps): Speargun {
   const gunVM = createGunViewModel(deps.camera);
   const shaftVisual = createShaftVisual(deps.scene);
   const floatLine = createFloatLineVisual(deps.scene);
+  const fightUI = createSpearFightUI();
 
   let gun: GunState = createGun();
   let shot: ShotState | null = null;
@@ -95,8 +138,13 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
   function tryFire(diver: DiverAimInput): boolean {
     if (shot || speared) return false; // one shaft out at a time — see this module's header
     if (!canFire(gun)) return false;
-    if (diver.breath <= 0) return false;
-    shot = fire(diver.position, diver.aimDir);
+    if (diver.breath <= 0 || diver.blackedOut) return false;
+    // The shot's visual origin is the view model's actual muzzle, not the diver's body position
+    // (`diver.position` is still what the fight env below ties the tether to) — same convention
+    // as game/fishing/update.ts's `cast()` reading `rodVM.tip`'s world position for `F.from`
+    // rather than the boat's own origin.
+    gunVM.muzzle.getWorldPosition(tmpMuzzle);
+    shot = fire({ x: tmpMuzzle.x, y: tmpMuzzle.y, z: tmpMuzzle.z }, diver.aimDir);
     gun = startReload(SPEAR_RELOAD);
     shaftVisual.setVisible(true);
     shaftVisual.update(shot);
@@ -115,6 +163,12 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
     shaftVisual.setVisible(false);
   }
 
+  function endFight(): void {
+    speared = null;
+    floatLine.setVisible(false);
+    fightUI.hide();
+  }
+
   function update(dt: number, t: number, diver: DiverAimInput, sw: number, ch: number): void {
     gun = stepReload(gun, dt);
     if (shot) {
@@ -129,6 +183,7 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
           const params = spearFightParamsFor(target.key, target.weight);
           speared = { target, params, fight: startSpearFight(hit.point.x, hit.point.z) };
           floatLine.setVisible(true);
+          fightUI.show(fightLabelFor(target.key, target.weight));
         }
       } else if (!shot.alive) {
         resolveShotMiss();
@@ -138,22 +193,44 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
     }
 
     if (speared) {
-      const next = stepSpearFight(speared.fight, { hauling }, speared.params, { diverX: diver.position.x, diverZ: diver.position.z }, clientRng, dt);
-      speared.fight = next;
-      floatLine.update({ x: next.x, y: diver.position.y, z: next.z }, t, sw, ch);
-      if (next.outcome === 'landed') {
-        deps.onLanded({ key: speared.target.key, weight: speared.target.weight, x: next.x, z: next.z, zone: zoneAt(next.x, next.z) });
-        speared = null;
-        floatLine.setVisible(false);
-      } else if (next.outcome === 'tornFree') {
-        speared = null;
-        floatLine.setVisible(false);
+      // Breath is a second clock on this fight, and the brief wants that interaction deliberate
+      // rather than left to fall out by accident: a blackout (airOut or shallow-water, either
+      // way — see DiverAimInput.blackedOut's doc comment) ends the fight right here, same as
+      // dropping the rod would. Surfacing *without* blacking out is deliberately left alone — the
+      // tether only ever reads the diver's x/z (see `env` below), never depth, so ascending with
+      // a fish still on the spear (a real, valid way to buy air mid-fight) just works: floatLine's
+      // own line-to-the-surface visual already reads correctly regardless of the diver's depth.
+      if (diver.blackedOut) {
+        toast("Blacked out — the shaft tears free. You lose the fish, and the gear's lucky to float back to you.");
+        endFight();
+      } else {
+        const next = stepSpearFight(speared.fight, { hauling }, speared.params, { diverX: diver.position.x, diverZ: diver.position.z }, clientRng, dt);
+        speared.fight = next;
+        floatLine.update({ x: next.x, y: diver.position.y, z: next.z }, t, sw, ch);
+        fightUI.update(next, diver.breath);
+        if (next.outcome === 'landed') {
+          deps.onLanded({ key: speared.target.key, weight: speared.target.weight, x: next.x, z: next.z, zone: zoneAt(next.x, next.z), source: 'spear' });
+          endFight();
+        } else if (next.outcome === 'tornFree') {
+          toast('The shaft tears free — it got away.');
+          endFight();
+        }
       }
     }
 
     const reloadFrac = Math.min(1, 1 - gun.reloadT / SPEAR_RELOAD);
-    gunVM.update(dt, reloadFrac, !!speared);
+    gunVM.update(dt, reloadFrac, !!speared, diver.speed ?? 0);
   }
+
+  function reset(): void {
+    shot = null;
+    shaftVisual.setVisible(false);
+    if (speared) endFight();
+  }
+
+  function setViewVisible(v: boolean): void { gunVM.group.visible = v; }
+
+  function debugForceReloadReady(): void { gun = createGun(); }
 
   function dispose(): void {
     gunVM.dispose();
@@ -161,5 +238,5 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
     floatLine.dispose();
   }
 
-  return { update, tryFire, setHauling, isActive, getFightState, dispose };
+  return { update, tryFire, setHauling, isActive, getFightState, reset, debugForceReloadReady, setViewVisible, dispose };
 }

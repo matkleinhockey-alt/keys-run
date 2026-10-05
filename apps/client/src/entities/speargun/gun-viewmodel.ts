@@ -13,7 +13,10 @@ export interface GunViewModel {
   /** World-space muzzle, used as the shot's visual origin so the flying shaft starts exactly
    * where the model's barrel is, same convention as the rod's `tip`. */
   muzzle: THREE.Object3D;
-  update(dt: number, reloadFrac: number, speared: boolean): void;
+  /** `speed` (diver swim speed, m/s — index.ts passes `Math.hypot(diver's vx,vy,vz)`) sizes the
+   * idle sway: a small breathing/treading-water drift at rest, more pronounced while swimming,
+   * same "weapon isn't welded to the camera" idea as a held weapon in any first-person game. */
+  update(dt: number, reloadFrac: number, speared: boolean, speed?: number): void;
   kick(): void;
   dispose(): void;
 }
@@ -25,9 +28,11 @@ export function createGunViewModel(camera: THREE.Camera): GunViewModel {
   const group = new THREE.Group();
   // Unlike the rod (game/fishing/rod-viewmodel.ts), which toggles visible only in first-person
   // fishing mode while otherwise showing the boat-mounted third-person rod instead, there is no
-  // third-person "speargun on a model" — spearfishing is inherently the diver's own first-person
-  // view, so this view model is visible whenever it exists.
-  group.visible = true;
+  // third-person "speargun on a model" at all — it's either the diver's own first-person view or
+  // nothing. Starts hidden (there's no dive in progress at boot): `Speargun.setViewVisible`
+  // (index.ts) is the one thing that ever flips this, called by game/world.ts's `setDiveUI` on
+  // every dive-mode transition, the same place `diverModel.group.visible` gets toggled.
+  group.visible = false;
   camera.add(group);
 
   const base = new THREE.Group();
@@ -35,9 +40,16 @@ export function createGunViewModel(camera: THREE.Camera): GunViewModel {
   base.rotation.set(-0.04, 0.03, 0, 'YXZ');
   group.add(base);
 
-  const dark = new THREE.MeshStandardMaterial({ color: 0x15181c, roughness: 0.4, metalness: 0.5 });
-  const steel = new THREE.MeshStandardMaterial({ color: 0xb9c0c6, roughness: 0.25, metalness: 0.85 });
-  const rubber = new THREE.MeshStandardMaterial({ color: 0x0b0b0b, roughness: 0.8 });
+  // Lighter than a real gunmetal/rubber black on purpose — this view model is lit by whatever the
+  // *main scene's* lighting is (unlike the trophy card's own dedicated rig in underwater-
+  // trophy.ts), and that dims hard with depth (the real underwater extinction model, which this
+  // task does not own/touch). A near-black held object measured as essentially invisible by ~8 m
+  // depth in testing — exactly the "at rest" shot this is for. A held tool staying legible
+  // regardless of ambient light is a standard first-person convention (most games cheat their
+  // view-model lighting for this reason), not a claim that gear doesn't darken underwater.
+  const dark = new THREE.MeshStandardMaterial({ color: 0x3c4a54, roughness: 0.4, metalness: 0.5 });
+  const steel = new THREE.MeshStandardMaterial({ color: 0xc7ced4, roughness: 0.25, metalness: 0.85 });
+  const rubber = new THREE.MeshStandardMaterial({ color: 0x262b2f, roughness: 0.8 });
 
   const BARREL_LEN = 0.78;
   const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.02, BARREL_LEN, 10).rotateX(Math.PI / 2), dark);
@@ -75,8 +87,13 @@ export function createGunViewModel(camera: THREE.Camera): GunViewModel {
   base.add(muzzle);
 
   let kickT = 0;
+  let swayT = 0;
+  // `group` carries the kick/reload transforms (base's own position/rotation, above); sway is
+  // applied one level up on `group` itself so it never fights with the kick's base.position.z
+  // write — the two compose cleanly as separate transforms on separate nodes.
+  const swaySway = new THREE.Vector3();
 
-  function update(dt: number, reloadFrac: number, speared: boolean): void {
+  function update(dt: number, reloadFrac: number, speared: boolean, speed = 0): void {
     const frac = clamp(reloadFrac, 0, 1);
     loadedShaft.visible = !speared;
     // fully loaded: tip sits just past the muzzle ring; fully empty: tip withdrawn to the muzzle.
@@ -90,6 +107,15 @@ export function createGunViewModel(camera: THREE.Camera): GunViewModel {
       base.position.z = lerp(base.position.z, -0.62, Math.min(1, dt * 10));
       base.rotation.x = lerp(base.rotation.x, -0.04, Math.min(1, dt * 10));
     }
+
+    // Idle sway: a slow fin-kick-paced bob at rest (treading water), widening and quickening with
+    // swim speed — capped so sprinting doesn't fling the gun out of frame.
+    swayT += dt * (1 + Math.min(1, speed / 2) * 1.6);
+    const amt = 0.012 + Math.min(1, speed / 2.2) * 0.02;
+    swaySway.set(Math.sin(swayT * 1.1) * amt, Math.sin(swayT * 1.7 + 1.3) * amt * 0.7, 0);
+    group.position.lerp(swaySway, Math.min(1, dt * 8));
+    group.rotation.z = Math.sin(swayT * 1.1) * amt * 0.6;
+    group.rotation.x = Math.sin(swayT * 1.7 + 1.3) * amt * 0.4;
   }
 
   function kick(): void { kickT = 1; }

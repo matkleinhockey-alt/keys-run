@@ -66,6 +66,10 @@ const speargun = createSpeargun({
   getTargets: () => (targetAlive ? [target] : []),
   onLanded(fish) { landed = fish; targetAlive = false; fishMesh.visible = false; },
 });
+// The view model now starts hidden by default (game/world.ts's `setDiveUI` is the one thing that
+// shows it in the real game, on dive-entry) — this standalone harness has no dive mode at all, so
+// it just shows it unconditionally, same as this file's previous always-visible behaviour.
+speargun.setViewVisible(true);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);

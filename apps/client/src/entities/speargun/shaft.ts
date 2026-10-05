@@ -1,9 +1,11 @@
 /**
- * Visuals for the two things sim/spear.ts's pure integrator produces: the flying shaft
- * (`ShotState`, while `alive`) and, once it lands, the float-line running from the speared fish
- * up to a small surface float — a common real-spearfishing rig (a breakaway/float line keeps a
- * hard-fighting fish from towing the diver into the reef) and this port's visual distinguisher
- * from rod fishing's bobber-on-a-rod-tip line.
+ * Visuals for the three things sim/spear.ts's pure integrator produces: the flying shaft
+ * (`ShotState`, while `alive`), the retrieval tether running from the muzzle back to that shaft
+ * the whole time it's away (a real speargun shaft stays tied to the gun by its own line — this
+ * is what reads on screen as "the shaft didn't just vanish from the gun"), and, once a fish is
+ * landed on the spear, the float-line running from it up to a small surface float — a common
+ * real-spearfishing rig (a breakaway/float line keeps a hard-fighting fish from towing the diver
+ * into the reef) and this port's visual distinguisher from rod fishing's bobber-on-a-rod-tip line.
  */
 import * as THREE from 'three';
 import { waveHBase } from '@keysrun/shared/waves';
@@ -11,7 +13,7 @@ import type { ShotState } from '@keysrun/shared/sim/spear';
 import type { Vec3 } from '@keysrun/shared/sim/spear';
 
 export interface ShaftVisual {
-  mesh: THREE.Mesh;
+  group: THREE.Group;
   setVisible(v: boolean): void;
   update(shot: ShotState): void;
   dispose(): void;
@@ -20,14 +22,26 @@ export interface ShaftVisual {
 const SHAFT_LEN = 0.6;
 
 export function createShaftVisual(scene: THREE.Scene): ShaftVisual {
+  const group = new THREE.Group();
+  group.visible = false;
+  scene.add(group);
+
   const mesh = new THREE.Mesh(
     new THREE.CylinderGeometry(0.006, 0.006, SHAFT_LEN, 6).rotateX(Math.PI / 2),
     new THREE.MeshStandardMaterial({ color: 0xc9ced3, metalness: 0.8, roughness: 0.3 }),
   );
-  mesh.visible = false;
-  scene.add(mesh);
+  group.add(mesh);
 
-  function setVisible(v: boolean): void { mesh.visible = v; }
+  // The tether: muzzle -> shaft tail. A thin, slightly slack-looking line rather than the shaft
+  // mesh's own rigid cylinder — real spear line has visible catenary sag even over 11 m.
+  const tetherGeo = new THREE.BufferGeometry();
+  const TSEG = 8;
+  tetherGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array((TSEG + 1) * 3), 3));
+  const tether = new THREE.Line(tetherGeo, new THREE.LineBasicMaterial({ color: 0xe9eef2, transparent: true, opacity: 0.55 }));
+  tether.frustumCulled = false;
+  group.add(tether);
+
+  function setVisible(v: boolean): void { group.visible = v; }
 
   function update(shot: ShotState): void {
     // The shaft's *tail* trails `SHAFT_LEN` behind its leading point (`shot.dist`) rather than
@@ -37,11 +51,24 @@ export function createShaftVisual(scene: THREE.Scene): ShaftVisual {
     const midDist = (tipDist + tailDist) / 2;
     mesh.position.set(shot.ox + shot.dx * midDist, shot.oy + shot.dy * midDist, shot.oz + shot.dz * midDist);
     mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(shot.dx, shot.dy, shot.dz));
+
+    const tailX = shot.ox + shot.dx * tailDist, tailY = shot.oy + shot.dy * tailDist, tailZ = shot.oz + shot.dz * tailDist;
+    const arr = tetherGeo.attributes.position.array as Float32Array;
+    for (let i = 0; i <= TSEG; i++) {
+      const u = i / TSEG;
+      // A little gravity sag at the midpoint, same sine-bow trick game/fishing/visuals.ts's cast
+      // line uses — just enough to read as line, not a laser.
+      const sag = Math.sin(u * Math.PI) * Math.min(0.12, tailDist * 0.03);
+      arr[i * 3] = shot.ox + (tailX - shot.ox) * u;
+      arr[i * 3 + 1] = shot.oy + (tailY - shot.oy) * u - sag;
+      arr[i * 3 + 2] = shot.oz + (tailZ - shot.oz) * u;
+    }
+    tetherGeo.attributes.position.needsUpdate = true;
   }
 
-  function dispose(): void { scene.remove(mesh); mesh.geometry.dispose(); }
+  function dispose(): void { scene.remove(group); mesh.geometry.dispose(); tetherGeo.dispose(); }
 
-  return { mesh, setVisible, update, dispose };
+  return { group, setVisible, update, dispose };
 }
 
 export interface FloatLineVisual {
