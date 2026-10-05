@@ -685,6 +685,12 @@ export function initWorld(wrap: HTMLElement): World {
     shadows.updateFrustums();
   }
 
+  // DEV/VERIFICATION HOOK ONLY — exposes the live, already-constructed `THREE.WebGLRenderer` so
+  // game/catch/catch-flow.ts's `__catchPortraitDebug.renderFrame` (its own doc comment) can drive
+  // the catch portrait's render loop from a script without playing out a real catch — a script
+  // can't pass a live renderer instance across `page.evaluate`'s serialization boundary, so it
+  // has to be found here instead. No normal code path reads `window.__renderer`.
+  (window as unknown as { __renderer?: THREE.WebGLRenderer }).__renderer = renderer;
   // DEV/VERIFICATION HOOK ONLY (see the __fishDebugDiver comment above frame()'s fishWorld.update
   // call) — lets test/capture-fish-screenshots.mjs find a deterministic resident of a given
   // species and teleport the boat there, instead of guessing world coordinates blind. No normal
