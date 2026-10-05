@@ -1,0 +1,36 @@
+# Static file server for the built client (apps/client/Dockerfile's runtime stage).
+#
+# Railway terminates TLS at its edge and hands the container plain HTTP on
+# $PORT, so auto_https is off — Caddy trying to provision its own certificate
+# here would both fail and hold the port.
+
+{
+	admin off
+	auto_https off
+}
+
+:{$PORT:8080} {
+	root * /srv
+	encode gzip zstd
+
+	# Mirrors apps/client/public/_headers, which only Cloudflare/Netlify read.
+	# Keep the three rules below in sync with that file.
+
+	# Vite emits content-hashed filenames (index-Cd4eO_zb.js), so the bytes at a
+	# given URL can never change.
+	@hashed path /assets/*
+	header @hashed Cache-Control "public, max-age=31536000, immutable"
+
+	# Model filenames are NOT content-hashed — entities/crew loads
+	# crew-01.lod0.glb by stable path, so a re-export reuses the URL. `immutable`
+	# would strand clients on a superseded mesh with no way to bust the cache.
+	@models path /models/*
+	header @models Cache-Control "public, max-age=86400, must-revalidate"
+
+	# The HTML entry point names the current hashed asset files, so a stale copy
+	# pins the browser to a dead build.
+	@html path / /index.html
+	header @html Cache-Control "public, max-age=0, must-revalidate"
+
+	file_server
+}
