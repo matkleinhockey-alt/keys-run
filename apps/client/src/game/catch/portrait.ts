@@ -60,6 +60,7 @@
  */
 import * as THREE from 'three';
 import { makeFishMesh } from '../fishing/fish-mesh.js';
+import { makeWetFishMaterial } from '../fishing/fish-skin.js';
 import { buildOffscreenRig, readback, buildGradientEnv, type OffscreenRig } from './render-pipeline.js';
 
 interface PortraitRig extends OffscreenRig {
@@ -140,21 +141,17 @@ function disposeMesh(mesh: THREE.Group): void {
  * `MeshPhysicalMaterial` clone: smooth shading (the shared material forces `flatShading`) plus a
  * little clearcoat + iridescence for the wet-skin look (brief item 6). Never touches the cached
  * original. */
-function applyPortraitMaterial(mesh: THREE.Group): void {
+function applyPortraitMaterial(mesh: THREE.Group, lenM: number): void {
   mesh.traverse((obj) => {
     const m = obj as THREE.Mesh;
     if (!m.isMesh) return;
     const src = m.material as THREE.MeshStandardMaterial;
-    m.material = new THREE.MeshPhysicalMaterial({
-      color: src.color.clone(),
-      roughness: 0.34,
-      metalness: 0.06,
-      clearcoat: 0.65,
-      clearcoatRoughness: 0.2,
-      iridescence: 0.22,
-      iridescenceIOR: 1.3,
-      envMapIntensity: 1.15,
-    });
+    // `vertexColors` MUST be carried over. entities/fish/body.ts's `bodyColor` bakes
+    // countershading (dark dorsal, pale belly), shark banding and species patterning into the
+    // geometry's colour attribute, and the shared fish-mesh.ts material enables it. Omitting it
+    // here silently discarded all of that and rendered every fish as one flat species colour —
+    // a mahi came out a uniform neon-green blank with none of its gradient or spotting.
+    m.material = makeWetFishMaterial(src.color.clone(), { lengthM: lenM });
   });
 }
 
@@ -193,7 +190,7 @@ export function createPortrait(canvasId: string): Portrait {
     if (!r) return;
     if (r.mesh) { r.pivot.remove(r.mesh); disposeMesh(r.mesh); }
     const mesh = makeFishMesh(color, lenM);
-    applyPortraitMaterial(mesh);
+    applyPortraitMaterial(mesh, lenM);
     r.pivot.add(mesh);
     r.mesh = mesh;
     const cam = r.camera;

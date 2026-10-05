@@ -39,6 +39,11 @@ page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
 
 await page.goto(BASE, { waitUntil: 'load' });
 await page.waitForTimeout(600);
+// The login gate (ui/auth/gate.ts) renders over the start screen and swallows pointer events, so
+// `#btnGo` is unclickable until it is dismissed. "Play offline" is the no-account path and needs
+// no network, which is what a screenshot run wants anyway.
+const offline = await page.$('button:has-text("Play offline")');
+if (offline) { await offline.click(); await page.waitForTimeout(1200); }
 await page.click('#btnGo');
 await page.waitForTimeout(600);
 
