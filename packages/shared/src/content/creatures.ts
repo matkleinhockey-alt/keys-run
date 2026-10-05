@@ -164,7 +164,7 @@ export const ZONE_LIFE: Record<string, Array<[string, number]>> = {
   // concentrates bottom fish and jacks well out in otherwise-open water. Marathon's actual humps
   // are a known pilot-whale spot — a tiny weight here makes that a learnable, place-based rarity
   // (docs/ARCHITECTURE.md's resident-school note) rather than a per-frame dice roll.
-  'Humps':[['amberjack',4],['grouper',2.5],['gag',1.5],['redgrouper',1.5],['cobia',2],['mutton',2],['yellowtail',2],['kingfish',1.5],['barracuda',1.5],['goliath',.5],['bullshark',.4],['nurse',1],['pilotwhale',.4],['humpback',.08]]
+  'Humps':[['amberjack',4],['grouper',2.5],['gag',1.5],['redgrouper',1.5],['cobia',2],['mutton',2],['yellowtail',2],['kingfish',1.5],['barracuda',1.5],['goliath',.5],['bullshark',.4],['nurse',1],['pilotwhale',2.6],['humpback',.08]]
 };
 
 /** [startU, endU, heightScale, finStyle] along the body, used by finEdge/buildFishGeo. */

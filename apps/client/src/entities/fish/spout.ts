@@ -12,8 +12,8 @@
 import * as THREE from 'three';
 
 const BLOW_CAPACITY = 12;
-const BLOW_LIFETIME_S = 1.6;
-const BLOW_RISE_M = 3.2;
+const BLOW_LIFETIME_S = 1.8;
+const BLOW_RISE_M = 7;
 
 interface ActiveBlow {
   slot: number;
@@ -34,10 +34,15 @@ export interface SpoutSystem {
 }
 
 export function createSpoutSystem(group: THREE.Group): SpoutSystem {
-  const geo = new THREE.ConeGeometry(0.35, 1, 8, 1, true);
+  const geo = new THREE.ConeGeometry(0.9, 1, 8, 1, true);
   geo.translate(0, 0.5, 0); // base at the origin so scaling the Y axis grows it upward from the water
+  // A near-white plume disappears against this game's pale, hazy sky (confirmed against an actual
+  // screenshot) — a slightly darker, more saturated grey-blue reads against both sky and water.
+  // Sized generously (a humpback is seen from tens of meters out) — a blow is the one tell meant
+  // to read "whale" before the animal itself is even clearly resolved, so it should be unmissable,
+  // not a polite wisp.
   const mat = new THREE.MeshBasicMaterial({
-    color: 0xe9eff2, transparent: true, opacity: 0.6, depthWrite: false, fog: true,
+    color: 0x9fb0b8, transparent: true, opacity: 0.88, depthWrite: false, fog: true,
   });
   const mesh = new THREE.InstancedMesh(geo, mat, BLOW_CAPACITY);
   mesh.frustumCulled = false;

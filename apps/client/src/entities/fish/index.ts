@@ -55,6 +55,10 @@ export interface FishWorld {
   /** Verification-only: per-species-pool draw-call/triangle accounting, isolated from the rest of
    * the scene. */
   debugPoolStats(): Array<{ type: string; triPerInstance: number; meshCount: number; inUse: number; capacity: number }>;
+  /** Verification-only: running count of 'blow' SchoolEvents consumed since world creation — lets
+   * a screenshot script (test/capture-mammals-screenshots.mjs) confirm a whale has actually blown
+   * at least once instead of guessing from a screenshot whether it just hasn't happened yet. */
+  debugBlowCount(): number;
 }
 
 interface DormantEntry {
@@ -83,6 +87,8 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
   // reconstructed here from the boat's own frame-to-frame displacement — cheap, and exactly
   // equivalent for a planing hull that doesn't instantaneously strafe sideways.
   let lastBoatX: number | null = null, lastBoatZ: number | null = null, lastBoatHeading = 0;
+
+  let blowCount = 0;
 
   let throttle = 0;
 
@@ -195,7 +201,7 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
       const pool = pools.get(state.type);
       if (!pool) continue;
       const events = stepSchool(state, pool.V, ctx);
-      for (const ev of events) if (ev.type === 'blow') spoutSystem.spawn(ev.x, ev.y, ev.z);
+      for (const ev of events) if (ev.type === 'blow') { spoutSystem.spawn(ev.x, ev.y, ev.z); blowCount++; }
       renderSchool(state, pool);
       touched.add(pool);
       fishCount += state.members.length;
@@ -204,7 +210,7 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
       const pool = pools.get(state.type);
       if (!pool) continue;
       const events = stepSchool(state, pool.V, ctx);
-      for (const ev of events) if (ev.type === 'blow') spoutSystem.spawn(ev.x, ev.y, ev.z);
+      for (const ev of events) if (ev.type === 'blow') { spoutSystem.spawn(ev.x, ev.y, ev.z); blowCount++; }
       renderSchool(state, pool);
       touched.add(pool);
       fishCount += state.members.length;
@@ -255,5 +261,7 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
     return best;
   }
 
-  return { group, update, stats, findResidentNear, waterColumnAt, debugActiveSchools, debugPoolStats };
+  function debugBlowCount(): number { return blowCount; }
+
+  return { group, update, stats, findResidentNear, waterColumnAt, debugActiveSchools, debugPoolStats, debugBlowCount };
 }
