@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import type { SpeciesDef } from './species.js';
 import { polypNormalTex, grooveNormalTex, lacyAlphaTex, fanAlphaTex, bladeAlphaTex } from './textures.js';
+import { uFlow, uSurgeAxis, uSurgePhase, uSurgeAmp } from './flow.js';
 
 export type MaterialStyle = 'solid' | 'card';
 
@@ -46,6 +47,10 @@ export function materialFor(species: SpeciesDef, style: MaterialStyle): THREE.Me
       side: THREE.DoubleSide,
       roughness: 0.9,
     });
+    // Rigid species reaching this branch are elkhorn/staghorn's *far* impostor cards
+    // (chunk-manager.ts's FAR_SWITCHES_TO_CARD) — a stony coral must not sway just because its
+    // distant stand-in happens to be a quad, so the shader is only compiled in above zero.
+    if (species.flexibility > 0) attachSway(mat, species.flexibility);
   } else if (species.id === 'brain' || species.id === 'star') {
     // Smooth-shaded (not flatShading) — a faceted low-poly boulder reads as a cut gemstone/rock;
     // these two specifically need to read as a soft, living, grooved mass (see this module's
@@ -73,4 +78,58 @@ export function materialFor(species: SpeciesDef, style: MaterialStyle): THREE.Me
   }
   _cache.set(key, mat);
   return mat;
+}
+
+/**
+ * Current-driven sway for the flexible card species (seagrass, sea plumes, sea fans).
+ *
+ * Two superposed motions, which is what separates water from wind:
+ *
+ *  - A **steady lean** into the Florida Current / tide (`uFlow`). Weeds in a real current do not
+ *    oscillate about vertical; they sit over, permanently, pointing downstream, and only the
+ *    amount changes as the tide turns. This is the part that makes the Gulf Stream legible from
+ *    inside the water — out on the wall the grass is pinned flat, inshore at slack it stands up.
+ *  - A **surge oscillation** across the reef line (`uSurgeAxis`/`uSurgePhase`/`uSurgeAmp`), the
+ *    back-and-forth of wave orbital motion. Its phase is offset per instance by the instance's own
+ *    world position projected on the surge axis, so a bed rocks as a wave rolls over it instead of
+ *    twitching in lockstep — the same travelling-wave term `surgeAt` carries on the CPU side.
+ *
+ * Both scale by the `flex` attribute baked into the card geometry (geometry.ts): `t*t` up the
+ * blade, so the base stays rooted and the tip does the travelling. The vertical shortening term
+ * conserves apparent length — a blade bent 60 degrees over is not as tall as an upright one, and
+ * without it the whole bed visibly grows as the current picks up.
+ */
+function attachSway(mat: THREE.MeshStandardMaterial, flexibility: number): void {
+  const uniforms = {
+    uFlow, uSurgeAxis, uSurgePhase, uSurgeAmp,
+    uFlex: { value: flexibility },
+  };
+  mat.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, uniforms);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', `#include <common>
+attribute float flex;
+uniform vec2 uFlow; uniform vec2 uSurgeAxis; uniform float uSurgePhase; uniform float uSurgeAmp;
+uniform float uFlex;`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+{
+  #ifdef USE_INSTANCING
+    vec3 wRoot = instanceMatrix[3].xyz;
+  #else
+    vec3 wRoot = vec3(0.0);
+  #endif
+  // Travelling-wave phase: 34 m wavelength along the cross-shore axis, matching surgeAt.
+  float sPh = uSurgePhase - dot(wRoot.xz, uSurgeAxis) * ${(Math.PI * 2 / 34).toFixed(8)};
+  vec2 surge = uSurgeAxis * (sin(sPh) * uSurgeAmp);
+  // Steady lean saturates — past about a knot a blade is already flat and cannot lie down
+  // further, so an unbounded term would shear it through the seafloor.
+  vec2 lean = uFlow / (1.0 + length(uFlow) * 0.75);
+  vec2 bend = (lean + surge) * uFlex * flex;
+  transformed.xz += bend;
+  // Shorten vertically as it leans over, so apparent blade length is conserved.
+  transformed.y -= length(bend) * flex * 0.45;
+}`);
+  };
+  mat.customProgramCacheKey = (): string => `reefSway:${flexibility}`;
+  mat.needsUpdate = true;
 }

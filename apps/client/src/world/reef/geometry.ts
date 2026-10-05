@@ -190,17 +190,27 @@ function encrustingGeo(detail: 0 | 1): THREE.BufferGeometry {
 // ---------------------------------------------------------------------------
 
 /** A single quad, pivoted at its bottom edge (so an instance's origin is its base on the
- * seafloor), optionally bent forward partway up for a soft droop (used by seagrass blades). */
+ * seafloor), optionally bent forward partway up for a soft droop (used by seagrass blades).
+ *
+ * Also writes the `flex` attribute the current-driven sway in materials.ts reads: `t*t`, where
+ * `t` is height up the blade, 0 at the rooted base and 1 at the free tip. Squaring it makes the
+ * deflection a cantilever whip (the tip travels far, the base does not move at all) rather than a
+ * rigid rock about the origin, which is what separates "plant bending in water" from "signpost
+ * tipping over". Baked here rather than derived in the shader because the shader has no way to
+ * know a given card's height once the instance matrix has scaled it. */
 function cardGeo(width: number, height: number, bendSegments = 1, bend = 0): THREE.BufferGeometry {
   const g = new THREE.PlaneGeometry(width, height, 1, bendSegments);
   const pos = g.attributes.position as THREE.BufferAttribute;
+  const flex = new Float32Array(pos.count);
   for (let i = 0; i < pos.count; i++) {
     const y = pos.getY(i) + height / 2; // 0 at base .. height at tip
     const t = height > 0 ? y / height : 0;
     pos.setZ(i, pos.getZ(i) + bend * t * t);
+    flex[i] = t * t;
   }
   g.translate(0, height / 2, 0);
   pos.needsUpdate = true;
+  g.setAttribute('flex', new THREE.BufferAttribute(flex, 1));
   g.computeVertexNormals();
   return g;
 }

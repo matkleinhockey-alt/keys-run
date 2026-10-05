@@ -783,6 +783,10 @@ export function initWorld(wrap: HTMLElement): World {
     // Reef chunk residency follows the (now up-to-date) camera position — a no-op unless the
     // viewer crossed into a new 50 m chunk this frame; never a per-frame rebuild.
     reef.update(camera.position.x, camera.position.z);
+    // Ocean current (@keysrun/shared/world/current) sampled at the camera and republished as the
+    // uniforms every flexible weed sways against — see world/reef/flow.ts. Driven off the camera
+    // for the same reason reef.update is: it should follow whatever is actually being rendered.
+    reef.updateFlow(camera.position.x, camera.position.z, simTime);
     // Needs the final camera position to know the viewer's depth, and must run before anything
     // renders so the extinction/fog state is right for this frame.
     underwater.update(clamped);

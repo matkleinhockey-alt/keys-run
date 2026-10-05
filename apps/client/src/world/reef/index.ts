@@ -7,6 +7,7 @@
  */
 import * as THREE from 'three';
 import { createReefChunkManager, type ReefChunkManager } from './chunk-manager.js';
+import { updateFlowUniforms } from './flow.js';
 
 export interface Reef {
   group: THREE.Group;
@@ -15,6 +16,10 @@ export interface Reef {
    * reef should build/free around whatever is actually being rendered (free-dive/diver camera,
    * once that lands, included) — see chunk-manager.ts's header. */
   update(x: number, z: number): void;
+  /** Republishes the current/surge uniforms every swaying weed reads (flow.ts). Call every frame
+   * with the camera position and the sim clock — unlike `update`, this is not a no-op between
+   * chunk crossings: it is what actually animates the weeds. */
+  updateFlow(x: number, z: number, t: number): void;
   dispose(): void;
   debugCounts: ReefChunkManager['debugCounts'];
 }
@@ -24,6 +29,7 @@ export function createReef(): Reef {
   return {
     group: manager.group,
     update: manager.update,
+    updateFlow: updateFlowUniforms,
     dispose: manager.dispose,
     debugCounts: manager.debugCounts,
   };
