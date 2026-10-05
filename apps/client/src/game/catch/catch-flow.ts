@@ -12,7 +12,7 @@
 import * as THREE from 'three';
 import type { BoatModel } from '../../entities/boat/model.js';
 import type { BoatState } from '@keysrun/shared/sim/boat';
-import { SPECIES } from '@keysrun/shared/content/species';
+import { SPECIES, BILLFISH } from '@keysrun/shared/content/species';
 import { SPEED_SCALE } from '@keysrun/shared/content/boats';
 import { VIS } from '@keysrun/shared/content/creatures';
 import { scaledLenM } from '@keysrun/shared/sim/fight';
@@ -68,6 +68,11 @@ function fishStats(key: string, weight: number): { inches: number; sex: string }
   if (key === 'mahi') sex = female ? 'Cow' : 'Bull';
   return { inches: Math.round(Lm * 39.37), sex };
 }
+
+/** Species whose body reads better near-profile than at the portrait's default three-quarter
+ * angle (game/catch/portrait.ts's `show` elongated param) — billfish plus a couple of other
+ * long/thin-bodied species the brief called out by name. */
+const ELONGATED_SPECIES = new Set<string>([...BILLFISH, 'barracuda', 'wahoo']);
 
 function nearestName(x: number, z: number): string {
   const s = shoreInfo(x, z);
@@ -188,7 +193,7 @@ export function createCatchFlow(deps: CatchFlowDeps) {
 
     model.station = 0;
     model.fishSpot.copy(model.stations[0].spot);
-    try { photo = setupPhoto(model, fish.key, fish.weight); portrait.show(S.color, scaledLenM(fish.key, fish.weight)); } catch (e) { console.error('photo setup', e); photo = null; }
+    try { photo = setupPhoto(model, fish.key, fish.weight); portrait.show(S.color, scaledLenM(fish.key, fish.weight), ELONGATED_SPECIES.has(fish.key)); } catch (e) { console.error('photo setup', e); photo = null; }
 
     const choice = cooler.prepareKeepChoice(boatSpec.id, fish.key, fish.weight);
     const keepBtn = $('btnKeep') as HTMLButtonElement | null;
@@ -301,6 +306,22 @@ export function createCatchFlow(deps: CatchFlowDeps) {
     const canDock = !!nearMarina(boat.x, boat.z) && cooler.cooler.length > 0 && kn < 5;
     el.classList.toggle('hidden', !canDock);
   }
+
+  // DEV/VERIFICATION HOOK ONLY (game/catch/portrait.ts's iteration note, same spirit as game/
+  // world.ts's __fishDebug/__diverDebug) — lands an arbitrary species/weight instantly and lets
+  // a script step the portrait's own render loop directly, so a screenshot script can iterate on
+  // the catch-card photo across many species without playing out a real multi-minute cast ->
+  // fight -> land at this sandbox's software-WebGL frame rate. Reads game/world.ts's
+  // `window.__renderer` rather than taking a renderer param — a script can't pass a live
+  // `THREE.WebGLRenderer` instance across `page.evaluate`'s serialization boundary. No normal
+  // code path reads `window.__catchPortraitDebug`.
+  (window as unknown as { __catchPortraitDebug?: unknown }).__catchPortraitDebug = {
+    land(key: string, weight: number): void { landFish({ key, weight, x: 0, z: 0, zone: 'Reef' }); },
+    renderFrame(t: number): void {
+      const renderer = (window as unknown as { __renderer?: THREE.WebGLRenderer }).__renderer;
+      if (renderer) portrait.render(renderer, t);
+    },
+  };
 
   return {
     session, cooler, landFish, finishCatch, keepFish, releaseFish, updateReleased, renderPortrait, updateScore,
