@@ -14,6 +14,10 @@
       "types": "./dist/world/depth.d.ts",
       "default": "./dist/world/depth.js"
     },
+    "./world/current": {
+      "types": "./dist/world/current.d.ts",
+      "default": "./dist/world/current.js"
+    },
     "./waves": {
       "types": "./dist/waves/index.d.ts",
       "default": "./dist/waves/index.js"
