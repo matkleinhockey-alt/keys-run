@@ -703,12 +703,18 @@ export function initWorld(wrap: HTMLElement): World {
     activeSchools: fishWorld.debugActiveSchools,
     poolStats: fishWorld.debugPoolStats,
     stats: () => fishWorld.stats,
+    blowCount: fishWorld.debugBlowCount,
     teleport(x: number, z: number, h?: number): void {
       stateBox.state = { ...stateBox.state, x, z, h: h ?? stateBox.state.h, speed: 0 };
       curState = stateBox.state;
       model.group.position.set(x, stateBox.state.y, z);
       model.group.rotation.y = stateBox.state.h;
     },
+    /** Verification-only: the boat's live x/z/heading/speed, so a screenshot script can position
+     * a camera relative to a *moving* boat (e.g. entities/fish's dolphin bow-riding, which needs
+     * real throttle input to demonstrate — teleport() above always zeroes speed) instead of
+     * guessing where it ended up. No normal code path reads this. */
+    boatState: () => ({ x: curState.x, z: curState.z, h: curState.h, speed: curState.speed }),
   };
 
   // DEV/VERIFICATION HOOK ONLY — same spirit as __fishDebug/__uwDebug above: this sandbox's

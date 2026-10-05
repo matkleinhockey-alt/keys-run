@@ -46,7 +46,7 @@ const SWIM_ANG_BASE = 7.5;
 export function computeSwimProfile(geo: THREE.BufferGeometry, key: string, V: CreatureVis): SwimProfile {
   const p = geo.attributes.position, n = p.count, L = V.len;
   const lat = V.kind === 'fish' || V.kind === 'tuna' || V.kind === 'shark';
-  const vert = V.kind === 'dolphin' || V.kind === 'manatee';
+  const vert = V.kind === 'dolphin' || V.kind === 'manatee' || V.kind === 'whale';
   const amp = V.kind === 'tuna' ? 0.05 : V.kind === 'shark' ? 0.08 : 0.1;
 
   const wig = new Float32Array(n), wy = new Float32Array(n), wph = new Float32Array(n);

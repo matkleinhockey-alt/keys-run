@@ -40,6 +40,9 @@ function pbrParamsFor(key: string, V: CreatureVis): PbrParams {
   if (V.kind === 'ray' || V.kind === 'turtle' || V.kind === 'manatee') return { roughness: 0.75, metalness: 0.02, iridescence: 0, iridescenceIOR: 1.3 };
   if (V.kind === 'shark') return { roughness: 0.55, metalness: 0.08, iridescence: 0.08, iridescenceIOR: 1.4 };
   if (V.kind === 'dolphin') return { roughness: 0.3, metalness: 0.05, iridescence: 0.1, iridescenceIOR: 1.4 };
+  // Whales: big, wet, matte-ish skin (scarring/barnacles on a humpback, satin-smooth on a pilot
+  // whale) — less glossy than a dolphin's rubbery sheen, no iridescence at all.
+  if (V.kind === 'whale') return { roughness: 0.42, metalness: 0.03, iridescence: 0, iridescenceIOR: 1.3 };
   if (MATTE.has(key)) return { roughness: 0.68, metalness: 0.05, iridescence: 0.02, iridescenceIOR: 1.3 };
   if (SHINY.has(key) || V.kind === 'tuna') return { roughness: 0.22, metalness: 0.35, iridescence: 0.55, iridescenceIOR: 1.45 };
   return { roughness: 0.35, metalness: 0.22, iridescence: 0.18, iridescenceIOR: 1.35 };

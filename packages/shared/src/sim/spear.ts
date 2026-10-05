@@ -16,6 +16,7 @@
  */
 
 import { SPECIES } from '../content/species.js';
+import { isCatchable } from '../content/creatures.js';
 import { clamp } from '../internal/math.js';
 import type { Rng } from '../rng/index.js';
 
@@ -87,6 +88,28 @@ export interface CapsuleTarget {
   ax: number; ay: number; az: number;
   bx: number; by: number; bz: number;
   radius: number;
+  /**
+   * `false` means this target must never be hit — docs/ARCHITECTURE.md "Fish ownership — three
+   * tiers": a species with `catchable: false` (marine mammals; content/creatures.ts) "has no
+   * server representation at all". `stepSpear` below drops any such target from the hit test
+   * entirely (it isn't merely "hit but then rejected" — the shaft behaves exactly as if the
+   * target weren't there). Absent/`true` is an ordinary spearable fish. This module stays
+   * domain-agnostic about *why* (see this file's header) — `capsuleFromSpecies` is the one place
+   * that derives the flag from a species key, so callers don't need their own
+   * `species === 'dolphin'` branch.
+   */
+  catchable?: boolean;
+}
+
+/** Builds a `CapsuleTarget` whose `catchable` flag is derived from the creature's own
+ * `content/creatures.ts` VIS entry, so a caller assembling spear targets from real fish data
+ * never has to special-case a species by name — see `CapsuleTarget.catchable`'s doc comment and
+ * `isCatchable`. */
+export function capsuleFromSpecies(
+  id: string | number, key: string,
+  ax: number, ay: number, az: number, bx: number, by: number, bz: number, radius: number,
+): CapsuleTarget {
+  return { id, ax, ay, az, bx, by, bz, radius, catchable: isCatchable(key) };
 }
 
 export interface SpearHit {
@@ -171,6 +194,10 @@ export function stepSpear(
 
   let best: { target: CapsuleTarget; s: number } | null = null;
   for (const target of targets) {
+    // `catchable: false` targets (marine mammals — see `CapsuleTarget.catchable`'s doc comment)
+    // are excluded here, structurally, rather than hit-tested and then rejected: the shaft simply
+    // cannot register a hit on one. See test/catchable.test.ts.
+    if (target.catchable === false) continue;
     const { hit, s } = segmentHitsCapsule(p1, p2, target);
     if (hit && (!best || s < best.s)) best = { target, s };
   }

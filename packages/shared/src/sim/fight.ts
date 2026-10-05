@@ -25,7 +25,7 @@
  */
 
 import { SPECIES, SOUNDERS, BILLFISH, ZONE_TABLE } from '../content/species.js';
-import { VIS } from '../content/creatures.js';
+import { VIS, isCatchable } from '../content/creatures.js';
 import { offshoreF, depthAt, landH, type Zone, type Hump } from '../world/depth.js';
 import { weightedPick, type Rng } from '../rng/index.js';
 import { clamp, lerp } from '../internal/math.js';
@@ -61,7 +61,12 @@ export function pickSpecies(zone: Zone | (string & {}), bob: { x: number; z: num
   const tbl = ZONE_TABLE[zone] ?? [];
   const f = zone === 'Offshore' ? offshoreF(bob.x, bob.z) : 0;
   const BIG: Record<string, number> = { marlin: 1, swordfish: 1, bluefin: 1, yellowfin: 0.6, wahoo: 0.5, sailfish: 0.3 };
-  const weighted: Array<[string, number]> = tbl.map(([k, v]) => {
+  // `isCatchable` filters defensively (docs/ARCHITECTURE.md "Fish ownership — three tiers": a
+  // species with `catchable: false` — marine mammals today — "has no server representation at
+  // all"): ZONE_TABLE should never contain one in the first place, but this is the one place the
+  // roll actually happens, so it's also the one place that must refuse to produce one even if a
+  // future edit mistakenly adds one to a zone table. See test/catchable.test.ts.
+  const weighted: Array<[string, number]> = tbl.filter(([k]) => isCatchable(k)).map(([k, v]) => {
     let x = opts.hotspot && v < 2.5 ? v * 2.5 : v;
     x *= BIG[k] ? 1 + 4 * f * BIG[k] : 1 - 0.45 * f;
     if (opts.hump && (k === 'amberjack' || k === 'blackfin' || k === 'kingfish')) x *= 4;
