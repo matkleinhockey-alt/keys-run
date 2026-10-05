@@ -274,14 +274,24 @@ export function createPortrait(canvasId: string): Portrait {
     r.mesh = mesh;
     const cam = r.camera;
     const hf = 2 * Math.atan(Math.tan(cam.fov * Math.PI / 360) * cam.aspect);
-    const len = lenM, d = (len * 1.18 / 2) / Math.tan(hf / 2) + lenM * 0.1;
-    const dv = Math.max(d, (lenM * 0.4 * 1.4 / 2) / Math.tan(cam.fov * Math.PI / 360));
+    // Padding bumped from the legacy-ported 1.18/1.4 (brief item 5's "frame with a little
+    // headroom" — the original padding left the nose/tail/dorsal line touching the canvas edge
+    // with zero margin; this was already true before any change in this file, not a regression
+    // introduced by the lighting/material work above).
+    const len = lenM, d = (len * 1.6 / 2) / Math.tan(hf / 2) + lenM * 0.1;
+    const dv = Math.max(d, (lenM * 0.4 * 1.9 / 2) / Math.tan(cam.fov * Math.PI / 360));
     cam.near = dv / 100; cam.far = Math.max(dv * 10, 40);
     // A slight three-quarter angle reads more like a photo than a dead-on profile (brief item
     // 5); long/billfish-shaped species foreshorten noticeably at that angle, so they stay close
-    // to profile instead.
+    // to profile instead. `dv` above is calibrated for a broadside/profile view, where every
+    // point along the fish's length is equidistant from the camera; orbiting the camera around
+    // the subject at that same *radius* instead pulls it closer to the near tip (this length is
+    // comparable to the camera distance, so that parallax is large, not a rounding error — it
+    // was clipping the nose/tail badly in testing). Side-stepping instead — keeping the camera's
+    // perpendicular (x) distance at the safe `dv` and only offsetting it sideways — gives the
+    // same viewing angle without that extra closeness.
     const azimuth = elongated ? 0.12 : 0.40;
-    cam.position.set(dv * Math.cos(azimuth), lenM * 0.1, dv * Math.sin(azimuth));
+    cam.position.set(dv, lenM * 0.1, dv * Math.tan(azimuth));
     // Aim a little above the fish's centre so it sits slightly low in frame (headroom) instead
     // of dead-centre.
     cam.lookAt(0, lenM * 0.18, 0);
