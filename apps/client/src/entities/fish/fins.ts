@@ -34,6 +34,23 @@
  * `buildTail`'s `S.tail === 'flukes'` branch (dolphin) is untouched on purpose — marine mammals
  * are another agent's scope (see this task's brief); that one case is copied verbatim rather than
  * run through `finGeo`, so dolphin's rendered shape doesn't shift out from under that work.
+ *
+ * ## Single-sided culling (the second bug this task's verification caught)
+ *
+ * A fin built by `finGeo` is a single layer of triangles — fine under a `DoubleSide` material
+ * (entities/fish/materials.ts's school material already sets this), but every real fin is thin
+ * enough that it's only ever lit/rasterized from *one* face under the default `THREE.FrontSide`
+ * three.js materials use unless told otherwise. game/fishing/fish-mesh.ts's own material and
+ * game/catch/portrait.ts's portrait-local material clone (frozen, out of this task's scope) are
+ * both plain `FrontSide` — before this task fish-mesh.ts never had real fins to expose this, so it
+ * was never a problem there. Rather than depend on every current *and future* consumer's material
+ * remembering `side: DoubleSide`, `'high'`-detail fins (the single, non-instanced meshes — see
+ * body.ts's header) get a true second, reverse-wound, normal-flipped copy baked into the geometry
+ * itself (`mirrorDouble`): whichever layer faces the camera survives normal front-face culling, the
+ * other is discarded pre-rasterization, so there's no z-fighting risk the way there would be
+ * stacking this under an *already* `DoubleSide` material. `'low'`-detail (school) fins stay a
+ * single layer — materials.ts's `DoubleSide` already handles them cheaply, so doubling there would
+ * only add triangles for nothing.
  */
 import * as THREE from 'three';
 import type { CreatureVis, FishShape } from '@keysrun/shared/content/creatures';
@@ -42,11 +59,22 @@ import { TM, type GeoPart, type BodyProfile, type FishDetail } from './body.js';
 
 type Pt = [number, number];
 
-/** legacy `finEdge(style,u)` (index.html:2349-2361) — unchanged. */
+/** legacy `finEdge(style,u)` (index.html:2349-2361) — one deliberate fix, everything else
+ * unchanged: `'sickle'` at exactly `u=1` computed `Math.pow(tiny-negative, 2.3)` — floating-point
+ * rounding of `1-(u-0.18)/0.82` lands a hair below 0 instead of exactly 0 — which is `NaN` in JS
+ * (`Math.pow` of a negative base at a non-integer exponent). That `NaN` was always latent in every
+ * sickle-style dorsal/anal/tail (jacks, tuna, billfish, sharks, dolphin...), silently producing one
+ * degenerate vertex; it never surfaced because the school `InstancedMesh` sets
+ * `frustumCulled = false` (pool.ts), so three.js never calls `computeBoundingSphere` on it. The
+ * new plain `THREE.Mesh` in game/fishing/fish-mesh.ts (this task) defaults to
+ * `frustumCulled = true`, which does call it — surfacing the bug as a real "fish disappears"
+ * failure instead of one invisible vertex. `Math.max(0, ...)` clamps the base to what the formula
+ * always intended (0 at u=1), same output everywhere else (verified against all 9 styles x two
+ * sample densities — see this task's scratch verification). */
 export function finEdge(style: string, u: number): number {
   switch (style) {
     case 'tri': return u < 0.28 ? u / 0.28 : 1 - (u - 0.28) / 0.72 * 0.88;
-    case 'sickle': return u < 0.18 ? u / 0.18 : Math.pow(1 - (u - 0.18) / 0.82, 2.3) * 0.95 + 0.05;
+    case 'sickle': return u < 0.18 ? u / 0.18 : Math.pow(Math.max(0, 1 - (u - 0.18) / 0.82), 2.3) * 0.95 + 0.05;
     case 'long': return (u < 0.08 ? u / 0.08 : 1) * (0.75 + 0.25 * Math.sin(Math.PI * u)) * (u > 0.92 ? (1 - u) / 0.08 : 1);
     case 'sail': return Math.pow(Math.sin(Math.PI * Math.min(1, u * 1.15)), 0.55) * (1 - 0.35 * u);
     case 'spiny': return (u < 0.15 ? u / 0.15 : 1 - (u - 0.15) * 0.5) * (Math.floor(u * 14) % 2 ? 0.82 : 1);
@@ -57,23 +85,52 @@ export function finEdge(style: string, u: number): number {
   }
 }
 
+/** See this file's "Single-sided culling" header section: appends a reverse-wound, normal-negated
+ * copy of every triangle so the surface survives front-face culling from either side, under any
+ * material regardless of its `side` setting. */
+function mirrorDouble(g: THREE.BufferGeometry): THREE.BufferGeometry {
+  const src = g.index ? g.toNonIndexed() : g;
+  const pos = src.attributes.position, nor = src.attributes.normal;
+  const n = pos.count;
+  const pos2 = new Float32Array(n * 2 * 3), nor2 = new Float32Array(n * 2 * 3);
+  (pos2 as Float32Array).set(pos.array as Float32Array, 0);
+  (nor2 as Float32Array).set(nor.array as Float32Array, 0);
+  for (let tri = 0; tri < n; tri += 3) {
+    // (a,b,c) -> (a,c,b): reverses winding (flips which face culls front-vs-back) without
+    // altering the triangle's footprint; normals are negated to match.
+    const order = [tri, tri + 2, tri + 1];
+    for (let k = 0; k < 3; k++) {
+      const si = order[k], di = n + tri + k;
+      pos2[di * 3] = pos.getX(si); pos2[di * 3 + 1] = pos.getY(si); pos2[di * 3 + 2] = pos.getZ(si);
+      nor2[di * 3] = -nor.getX(si); nor2[di * 3 + 1] = -nor.getY(si); nor2[di * 3 + 2] = -nor.getZ(si);
+    }
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos2, 3));
+  out.setAttribute('normal', new THREE.Float32BufferAttribute(nor2, 3));
+  return out;
+}
+
 /** See this file's header: builds a flat silhouette, bows it out of plane by `bowZ[i]` per
  * vertex (same index as `pts[i]`), then recomputes normals so the curvature actually shades.
  * `pts`/`bowZ` are in the fin's local (alongBody, height) plane, same convention legacy's
  * `sideFin` used — rotated into the body's sagittal plane the same way (`rotateY(-PI/2)`), just
  * after the bow is applied instead of before (order matters: the bow is a local-Z push, and the
- * rotation is what turns local Z into body-space X — bowing after flattens it back out). */
-function finGeo(pts: readonly Pt[], bowZ: readonly number[]): THREE.BufferGeometry {
+ * rotation is what turns local Z into body-space X — bowing after flattens it back out).
+ * `double` (true at `'high'` detail only — see this file's header) bakes in a second,
+ * reverse-wound layer so the fin survives single-sided (`FrontSide`) materials. */
+function finGeo(pts: readonly Pt[], bowZ: readonly number[], double: boolean): THREE.BufferGeometry {
   const s = new THREE.Shape();
   s.moveTo(pts[0][0], pts[0][1]);
   for (let i = 1; i < pts.length; i++) s.lineTo(pts[i][0], pts[i][1]);
-  const g = new THREE.ShapeGeometry(s);
+  let g: THREE.BufferGeometry = new THREE.ShapeGeometry(s);
   const pos = g.attributes.position;
   for (let i = 0; i < pts.length && i < pos.count; i++) pos.setZ(i, bowZ[i] ?? 0);
   pos.needsUpdate = true;
   g.deleteAttribute('normal');
   g.rotateY(-Math.PI / 2);
   g.computeVertexNormals();
+  if (double) g = mirrorDouble(g);
   return g;
 }
 
@@ -87,7 +144,7 @@ const BOW_FRAC = 0.16;
  * edge row, tapering to zero at both leading/trailing tips) instead of flattened.
  * `steps` is the one thing `detail` varies here (14 at `'low'`, matching legacy exactly; higher
  * at `'high'` for the portrait-only mesh — see body.ts's header). */
-function buildMidFin(spec: readonly [number, number, number, string], top: boolean, L: number, profile: BodyProfile, fin: THREE.Color, steps: number): GeoPart {
+function buildMidFin(spec: readonly [number, number, number, string], top: boolean, L: number, profile: BodyProfile, fin: THREE.Color, steps: number, double: boolean): GeoPart {
   const [t0, t1, hgt, style] = spec;
   const pts: Pt[] = [], bowZ: number[] = [];
   const maxH = hgt * profile.Hh;
@@ -103,14 +160,15 @@ function buildMidFin(spec: readonly [number, number, number, string], top: boole
     pts.push([z + e * 0.35, yb + (top ? e : -e)]);
     bowZ.push(BOW_FRAC * maxH * Math.sin(Math.PI * u));
   }
-  return { g: finGeo(pts, bowZ), m: new THREE.Matrix4(), c: fin };
+  return { g: finGeo(pts, bowZ, double), m: new THREE.Matrix4(), c: fin };
 }
 
 export function buildMidFins(S: FishShape, L: number, profile: BodyProfile, fin: THREE.Color, detail: FishDetail): GeoPart[] {
   const steps = detail === 'high' ? 20 : 14;
+  const double = detail === 'high';
   const parts: GeoPart[] = [];
-  (S.dor || []).forEach((s) => parts.push(buildMidFin(s, true, L, profile, fin, steps)));
-  (S.anal || []).forEach((s) => parts.push(buildMidFin(s, false, L, profile, fin, steps)));
+  (S.dor || []).forEach((s) => parts.push(buildMidFin(s, true, L, profile, fin, steps, double)));
+  (S.anal || []).forEach((s) => parts.push(buildMidFin(s, false, L, profile, fin, steps, double)));
   return parts;
 }
 
@@ -125,11 +183,12 @@ export function buildMidFins(S: FishShape, L: number, profile: BodyProfile, fin:
  * at the shared inner notch for two-lobed tails — a notch is a pinch point, not free margin;
  * peaking at 1 at the outermost tip of each lobe). `'flukes'` (dolphin) is untouched — see this
  * file's header. */
-export function buildTail(S: FishShape, Hh: number, W: number, L: number, fin: THREE.Color, back: THREE.Color): GeoPart[] {
+export function buildTail(S: FishShape, Hh: number, W: number, L: number, fin: THREE.Color, back: THREE.Color, detail: FishDetail): GeoPart[] {
   const z0 = L / 2 - 0.01, p = Hh / 2 * S.ped, tl = L * S.tl, th = Hh / 2 * S.th * 1.6;
   const bow = Math.min(th * 0.3, L * 0.05);
+  const double = detail === 'high';
   const place = (pts: readonly Pt[], w: readonly number[]): GeoPart => ({
-    g: finGeo(pts.map(([a, b]): Pt => [z0 + a, b]), w.map((x) => x * bow)),
+    g: finGeo(pts.map(([a, b]): Pt => [z0 + a, b]), w.map((x) => x * bow), double),
     m: new THREE.Matrix4(),
     c: fin,
   });
@@ -193,15 +252,16 @@ export function buildTail(S: FishShape, Hh: number, W: number, L: number, fin: T
 /** legacy finlets/keel (tunas, wahoo) — unchanged; each finlet is a 3-point triangle, too small
  * for a bow to read as anything but noise (a single triangle has exactly one normal no matter
  * what), so these stay flat exactly as before. */
-export function buildFinlets(S: FishShape, V: CreatureVis, L: number, profile: BodyProfile, back: THREE.Color): GeoPart[] {
+export function buildFinlets(S: FishShape, V: CreatureVis, L: number, profile: BodyProfile, back: THREE.Color, detail: FishDetail): GeoPart[] {
   if (!S.finlets) return [];
+  const double = detail === 'high';
   const { Hh } = profile;
   const parts: GeoPart[] = [];
   const fl = new THREE.Color(V.finlet || V.fin);
   for (let i = 0; i < 7; i++) {
     const t = 0.68 + i * 0.042, z = -L / 2 + t * L, yt = profile.topY(t), yb = profile.botY(t), s = Hh * 0.07;
-    parts.push({ g: finGeo([[z, yt - 0.003], [z + s * 0.9, yt + s * 0.8], [z + s * 1.1, yt - 0.003]], [0, 0, 0]), m: new THREE.Matrix4(), c: fl });
-    parts.push({ g: finGeo([[z, yb + 0.003], [z + s * 0.9, yb - s * 0.8], [z + s * 1.1, yb + 0.003]], [0, 0, 0]), m: new THREE.Matrix4(), c: fl });
+    parts.push({ g: finGeo([[z, yt - 0.003], [z + s * 0.9, yt + s * 0.8], [z + s * 1.1, yt - 0.003]], [0, 0, 0], double), m: new THREE.Matrix4(), c: fl });
+    parts.push({ g: finGeo([[z, yb + 0.003], [z + s * 0.9, yb - s * 0.8], [z + s * 1.1, yb + 0.003]], [0, 0, 0], double), m: new THREE.Matrix4(), c: fl });
   }
   parts.push({ g: new THREE.BoxGeometry(profile.W * 0.42, 0.012, L * 0.09), m: TM(0, 0, L * 0.45, 0, 0, 0, 1, 1, 1), c: back });
   return parts;
@@ -224,14 +284,14 @@ function quadPts(p0: Pt, p1: Pt, p2: Pt, steps: number): Pt[] {
 /** legacy `pfin(len,wid)` — same two-quadratic paddle silhouette, sampled to a point list and
  * bowed (zero at the two points nearest the body attachment, peaking mid-length) instead of a
  * flat `ShapeGeometry`. */
-function buildPairedFinGeo(len: number, wid: number, steps: number): THREE.BufferGeometry {
+function buildPairedFinGeo(len: number, wid: number, steps: number, double: boolean): THREE.BufferGeometry {
   const c1 = quadPts([0, 0], [len * 0.4, wid * 0.9], [len, wid * 0.15], steps);
   const c2 = quadPts([len, wid * 0.15], [len * 0.8, -wid * 0.3], [len * 0.25, -wid * 0.35], steps);
   const pts: Pt[] = [...c1, ...c2.slice(1), [0, 0]];
   const n = pts.length;
   const bowZ = pts.map(([x]): number => BOW_FRAC * wid * Math.sin(Math.PI * clamp(x / len, 0, 1)));
   bowZ[0] = 0; bowZ[n - 1] = 0;
-  return finGeo(pts, bowZ);
+  return finGeo(pts, bowZ, double);
 }
 
 /** legacy's pectoral+pelvic fin placement loop (index.html:2362-2424's paired-fin block) — same
@@ -239,17 +299,18 @@ function buildPairedFinGeo(len: number, wid: number, steps: number): THREE.Buffe
  * changed. `steps` follows `detail` the same way buildMidFins' does. */
 export function buildPairedFins(S: FishShape, key: string, L: number, profile: BodyProfile, fin: THREE.Color, back: THREE.Color, detail: FishDetail): GeoPart[] {
   const steps = detail === 'high' ? 10 : 6;
+  const double = detail === 'high';
   const { Hh, W, prof, botY } = profile;
   const parts: GeoPart[] = [];
   const pl = L * S.pec, tP = 0.22;
   for (const sx of [-1, 1]) {
-    const g1 = buildPairedFinGeo(pl, pl * (S.wings ? 0.55 : 0.38), steps);
+    const g1 = buildPairedFinGeo(pl, pl * (S.wings ? 0.55 : 0.38), steps, double);
     const th2 = Math.atan2(-0.88, sx * 0.48);
     g1.rotateY(th2);
     g1.rotateZ(sx * (S.shark ? -0.35 : -0.15));
     parts.push({ g: g1, m: TM(sx * W / 2 * prof(tP) * 0.82, -Hh * 0.12, -L / 2 + tP * L, 0, 0, 0, 1, 1, 1), c: S.shark ? back : fin });
     if (!S.shark && key !== 'dolphin') {
-      const g2 = buildPairedFinGeo(pl * 0.55, pl * 0.25, steps);
+      const g2 = buildPairedFinGeo(pl * 0.55, pl * 0.25, steps, double);
       g2.rotateY(Math.atan2(-0.95, sx * 0.3));
       parts.push({ g: g2, m: TM(sx * W * 0.12, botY(0.36) + 0.01, -L / 2 + 0.36 * L, 0, 0, 0, 1, 1, 1), c: fin });
     }
