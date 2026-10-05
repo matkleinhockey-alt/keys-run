@@ -87,12 +87,18 @@ export interface SchoolState {
 }
 
 /** A moving thing fish may flee from (legacy only ever had the boat; this is deliberately an
- * array so a diver can be added later — see behavior.ts — without changing stepSchool's shape). */
+ * array so a diver can be added later — see behavior.ts — without changing stepSchool's shape).
+ * `'spear'` (game/world.ts's `getSpearTargets`/near-miss detection) is a transient, one-shot-ish
+ * entry placed at the exact point a missed shaft passed close to a real fish — "a near-miss
+ * should be a real, visible consequence" (task brief). It carries no real speed/heading (a shaft
+ * is a near-instant event, not a standing threat), so `nearestTrigger` (behavior.ts) gives it its
+ * own dedicated radius instead of reusing the boat's speed-scaled one. */
 export interface Threat {
   x: number;
   z: number;
-  kind: 'boat' | 'diver';
-  /** Absolute speed, m/s — legacy's `Math.abs(boat.speed)` gate (faster boat spooks fish sooner). */
+  kind: 'boat' | 'diver' | 'spear';
+  /** Absolute speed, m/s — legacy's `Math.abs(boat.speed)` gate (faster boat spooks fish sooner).
+   * Meaningless for `kind: 'spear'`; pass 0. */
   speed: number;
   /** World heading, radians, same convention as `sim/boat.ts`'s `state.h`
    * (`fx=-sin(h), fz=-cos(h)` is forward) — optional because only a `kind:'boat'` threat ever
