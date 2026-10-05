@@ -37,11 +37,18 @@ import * as THREE from 'three';
 import { SPECIES } from '@keysrun/shared/content/species';
 import { VIS } from '@keysrun/shared/content/creatures';
 import { buildCreatureGeo } from '../../entities/fish/geometry.js';
+import { makeWetFishMaterial } from './fish-skin.js';
 
-const matCache = new Map<string, THREE.MeshStandardMaterial>();
-function matFor(color: string): THREE.MeshStandardMaterial {
-  let m = matCache.get(color);
-  if (!m) { m = new THREE.MeshStandardMaterial({ color, vertexColors: true, metalness: 0.3, roughness: 0.4 }); matCache.set(color, m); }
+/** Keyed by `color|lengthBucket`: the scale shader's frequency is baked per material (it is a
+ * uniform set in onBeforeCompile), so two very differently-sized fish of the same species colour
+ * must not share one. Bucketed to the nearest 0.25 m so this stays a handful of materials rather
+ * than one per catch. */
+const matCache = new Map<string, THREE.MeshPhysicalMaterial>();
+function matFor(color: string, lenM: number): THREE.MeshPhysicalMaterial {
+  const bucket = Math.max(0.25, Math.round(lenM * 4) / 4);
+  const ck = `${color}|${bucket}`;
+  let m = matCache.get(ck);
+  if (!m) { m = makeWetFishMaterial(color, { lengthM: bucket }); matCache.set(ck, m); }
   return m;
 }
 
@@ -85,7 +92,7 @@ export function makeFishMesh(color: string, lenM = 1): THREE.Group {
 
   const g = new THREE.Group();
   const geo = buildCreatureGeo(key, V, 'high');
-  const mesh = new THREE.Mesh(geo, matFor(color));
+  const mesh = new THREE.Mesh(geo, matFor(color, lenM));
   g.add(mesh);
   // buildCreatureGeo bakes the species' real proportions at V.len meters nose-to-peduncle
   // (nose at local z=-V.len/2, same convention the old generic body used) — rescale to the
