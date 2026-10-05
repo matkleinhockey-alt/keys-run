@@ -1,0 +1,29 @@
+{
+  "perWaypoint": {
+    "humped-span": {
+      "calls": 47,
+      "triangles": 889422
+    },
+    "piers-water-level": {
+      "calls": 37,
+      "triangles": 896472
+    },
+    "old-and-new": {
+      "calls": 65,
+      "triangles": 1001796
+    },
+    "pigeon-key": {
+      "calls": 66,
+      "triangles": 1002156
+    },
+    "old-bridge-arches": {
+      "calls": 98,
+      "triangles": 1070218
+    }
+  },
+  "worst": {
+    "name": "old-bridge-arches",
+    "calls": 98,
+    "triangles": 1070218
+  }
+}
