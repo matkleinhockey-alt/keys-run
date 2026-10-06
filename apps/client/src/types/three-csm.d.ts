@@ -39,3 +39,7 @@ declare module 'three/addons/csm/CSM.js' {
     dispose(): void;
   }
 }
+
+declare module 'three/addons/csm/CSMShader.js' {
+  export const CSMShader: { lights_fragment_begin: string; lights_pars_begin: string };
+}
