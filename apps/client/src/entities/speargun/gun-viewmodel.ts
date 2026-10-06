@@ -40,13 +40,31 @@ export function createGunViewModel(camera: THREE.Camera): GunViewModel {
   base.rotation.set(-0.04, 0.03, 0, 'YXZ');
   group.add(base);
 
+  // A small fixed-to-camera fill light — the "most games cheat their view-model lighting" move
+  // this module's own header already called out as the standard fix but didn't actually apply.
+  // Verification screenshots (this task's report) showed the gun reading as a flat black
+  // silhouette even at 1 m depth whenever the main scene's key light wasn't hitting it face-on
+  // (e.g. looking toward open water with the sun behind it). A light riding along with the camera,
+  // rather than one fixed in world space, guarantees the gun stays readable from every look
+  // direction without touching the real underwater extinction model (out of this task's scope).
+  // Parented to `group` (not `camera` directly) specifically so it only exists while the gun is
+  // actually shown — three.js skips an invisible object's light contribution the same way it
+  // skips its mesh, so `setViewVisible(false)` (aboard the boat) turns this off for free rather
+  // than leaving a stray light glowing in camera space with nothing attached to it. Negative z
+  // (camera looks down -Z) — level with and just above the barrel, the same side of the camera
+  // the gun actually sits on.
+  const viewFill = new THREE.PointLight(0xbfe6ea, 2.5, 2.2, 2);
+  viewFill.position.set(0.15, 0.05, -0.35);
+  group.add(viewFill);
+
   // Lighter than a real gunmetal/rubber black on purpose — this view model is lit by whatever the
   // *main scene's* lighting is (unlike the trophy card's own dedicated rig in underwater-
   // trophy.ts), and that dims hard with depth (the real underwater extinction model, which this
-  // task does not own/touch). A near-black held object measured as essentially invisible by ~8 m
-  // depth in testing — exactly the "at rest" shot this is for. A held tool staying legible
-  // regardless of ambient light is a standard first-person convention (most games cheat their
-  // view-model lighting for this reason), not a claim that gear doesn't darken underwater.
+  // task does not own/touch), on top of which `viewFill` above now rides along with the camera.
+  // A near-black held object measured as essentially invisible by ~8 m depth in testing — exactly
+  // the "at rest" shot this is for. A held tool staying legible regardless of ambient light is a
+  // standard first-person convention (most games cheat their view-model lighting for this
+  // reason), not a claim that gear doesn't darken underwater.
   const dark = new THREE.MeshStandardMaterial({ color: 0x3c4a54, roughness: 0.4, metalness: 0.5 });
   const steel = new THREE.MeshStandardMaterial({ color: 0xc7ced4, roughness: 0.25, metalness: 0.85 });
   const rubber = new THREE.MeshStandardMaterial({ color: 0x262b2f, roughness: 0.8 });
@@ -68,7 +86,11 @@ export function createGunViewModel(camera: THREE.Camera): GunViewModel {
   const bands: THREE.Mesh[] = [];
   for (const side of [-1, 1]) {
     const band = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 6).rotateX(Math.PI / 2), rubber);
-    band.position.set(side * 0.025, 0.012, BAND_ANCHOR_Z);
+    // Offset far enough past the barrel's own ~0.02 radius to read as a separate element rather
+    // than overlapping it in silhouette (an earlier, tighter 0.025 offset — barely past the
+    // barrel's radius at all — measured as visually indistinguishable from the barrel in this
+    // task's verification screenshots).
+    band.position.set(side * 0.042, 0.012, BAND_ANCHOR_Z);
     base.add(band);
     bands.push(band);
   }
@@ -106,7 +128,7 @@ export function createGunViewModel(camera: THREE.Camera): GunViewModel {
   // (frac=0): band relaxed short and fat, bunched up near its muzzle anchor. See the bands'
   // construction comment above for why the anchor end is fixed and the tail end is what moves.
   const BAND_SHORT = 0.26, BAND_LONG = 0.6;
-  const BAND_RADIUS_RELAXED = 0.011, BAND_RADIUS_DRAWN = 0.0065;
+  const BAND_RADIUS_RELAXED = 0.015, BAND_RADIUS_DRAWN = 0.008;
 
   function update(dt: number, reloadFrac: number, speared: boolean, speed = 0): void {
     const frac = clamp(reloadFrac, 0, 1);
