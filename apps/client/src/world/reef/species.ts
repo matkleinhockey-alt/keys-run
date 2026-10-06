@@ -131,10 +131,13 @@ export const SPECIES: Record<SpeciesId, SpeciesDef> = {
   },
   // Thalassia testudinum turtle-grass flats — explicitly not reef-associated.
   seagrass: {
-    // Extended down from 4.9 m: Thalassia testudinum grows to ~10 m in water this clear, and the
-    // old ceiling stopped the beds dead at the inshore edge of Hawk Channel — i.e. exactly where a
-    // diver actually swims. Now grass carries from the shallow flats out to the channel floor.
-    id: 'seagrass', reefAssociated: false, depth: [0.5, 1.2, 6.5, 9.5],
+    // Depth range is a *gameplay* boundary as much as a biological one. Thalassia really does
+    // reach ~10 m in water this clear, and an earlier pass extended it there — which put dense
+    // grass across the whole floor of Hawk Channel at 8 m. From the helm that reads as dark
+    // scratchy streaks over water that is otherwise the best-looking thing in the game, and it
+    // buries the fish you are supposed to be spotting. The channel is where you *drive*; the
+    // flats are where you dive. Grass stops before the channel floor starts.
+    id: 'seagrass', reefAssociated: false, depth: [0.5, 1.0, 3.4, 5.2],
     colorLo: 0x2f7a3a, colorHi: 0x5cae52, scale: [0.7, 1.4], footprint: 0.5,
     // Unlignified ribbon blades — the most mobile thing on the seafloor, and the reference
     // point this whole scale is normalised against.
