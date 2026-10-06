@@ -30,10 +30,13 @@
  * kind of structure a resident school *can* belong to, so a chunk within `HUMP_RADIUS` of one gets
  * `ZONE_LIFE.Humps` residents regardless of the zone underneath it.
  *
- * `lifeTableFor` also splits the Reef zone by depth (`REEF_WALL_DEPTH`): the shallow crest keeps
- * `ZONE_LIFE.Reef`, the wall/ledge drop gets the bigger-bodied `ZONE_LIFE.ReefWall`. Both
- * `ReefWall` and `Humps` are habitat refinements layered on top of `zoneAt`'s seven real zones,
- * not zones themselves — see creatures.ts's `ZONE_LIFE` doc comment.
+ * `lifeTableFor` also splits the Reef zone by depth twice: `REEF_WALL_DEPTH` hands the shallow
+ * crest (`ZONE_LIFE.Reef`) off to the wall/ledge table (`ZONE_LIFE.ReefWall`,
+ * docs/ARCHITECTURE.md bands 3-4), and `DEEP_WALL_DEPTH` hands that off again to the deep-wall/
+ * wreck table (`ZONE_LIFE.DeepWall`, band 5) so the reef doesn't collapse into one table from 12 m
+ * all the way to 45 m — "deep bands should feel different from the shallows, not just emptier"
+ * (task brief). `ReefWall`, `DeepWall` and `Humps` are habitat refinements layered on top of
+ * `zoneAt`'s seven real zones, not zones themselves — see creatures.ts's `ZONE_LIFE` doc comment.
  */
 import { hashCell, weightedPick } from '@keysrun/shared/rng';
 import { VIS, ZONE_LIFE, type CreatureVis } from '@keysrun/shared/content/creatures';
@@ -61,8 +64,16 @@ const SALT = {
  * `residentsForChunk` gates directly on it; `tryRoamCell` gates on it scaled by
  * `ROAM_DENSITY_FACTOR` (roamers are the sparser layer *on top of* residents, not a second copy of
  * the same density — see this file's header). Keyed by `ZONE_LIFE`'s habitat keys, which include
- * the two non-`Zone` refinements `ReefWall` and `Humps` (see creatures.ts's `ZONE_LIFE` doc
- * comment) alongside the seven real `Zone` strings.
+ * the three non-`Zone` refinements `ReefWall`, `DeepWall` and `Humps` (see creatures.ts's
+ * `ZONE_LIFE` doc comment) alongside the seven real `Zone` strings.
+ *
+ * Raised across the board from this module's original values (task brief: "underwater life is
+ * too sparse... raise fish density meaningfully") — draw calls stay bounded regardless (one
+ * `InstancedMesh` per *species*, not per fish/school; docs/ARCHITECTURE.md's "< 300 draw calls
+ * underwater" is a function of how many distinct species are active at once, not how many
+ * individual fish are in their pools — see pool.ts's header), so this is cheap density, exactly
+ * the knob docs/ARCHITECTURE.md's "Resident schools"/"Fish at realism and density" sections call
+ * for tuning.
  *
  * `Offshore`'s entry only reaches roamers in practice — `lifeTableFor` always returns null for
  * residents in open Offshore water (residents need structure to "belong to"; see `instantiateResident`'s
@@ -70,8 +81,8 @@ const SALT = {
  * value here because roamers *are* the pelagic layer offshore.
  */
 const HABITAT_DENSITY: Record<string, number> = {
-  Creek: 0.34, Flats: 0.36, Backcountry: 0.3, Bridge: 0.56, 'Hawk Channel': 0.46,
-  Reef: 0.68, ReefWall: 0.52, Offshore: 0.5, Humps: 0.62,
+  Creek: 0.48, Flats: 0.5, Backcountry: 0.44, Bridge: 0.72, 'Hawk Channel': 0.62,
+  Reef: 0.84, ReefWall: 0.68, DeepWall: 0.58, Offshore: 0.6, Humps: 0.74,
 };
 /** Roamers sit on top of residents as a sparser, moving layer — see this file's header. */
 const ROAM_DENSITY_FACTOR = 0.5;
@@ -80,6 +91,11 @@ const ROAM_DENSITY_FACTOR = 0.5;
  * 3/4 (10-20 m, reef wall top / ledges): the wall itself only spans dz 1460-1650, dropping
  * 3.4 m -> 45.4 m over 190 m, so this is a depth threshold, not a position threshold. */
 const REEF_WALL_DEPTH = 12;
+/** Depth (m) past which the wall/ledge table (`ZONE_LIFE.ReefWall`) hands off again to the deep
+ * wall/wreck table (`ZONE_LIFE.DeepWall`) — docs/ARCHITECTURE.md band 4 (15-20 m, ledges/
+ * overhangs/swim-throughs) vs. band 5 (20 m+, deep wall/wrecks/the Humps, "torch required,
+ * blackout risk"). Same depth-not-position reasoning as `REEF_WALL_DEPTH`. */
+const DEEP_WALL_DEPTH = 20;
 /** Radius (m) within which a named, non-patch Hump's relief visibly concentrates fish — large
  * enough to read as "busier than the open water around it" without swallowing the whole Offshore
  * zone. The two `patch: true` HUMPS entries (Coffins Patch, Delta Shoal) are shallow enough that
@@ -118,7 +134,8 @@ function lifeTableFor(x: number, z: number, zone: Zone, d: number, allowOffshore
     if (table && table.length > 0) return { table, density: HABITAT_DENSITY.Humps };
   }
   if (zone === 'Offshore' && !allowOffshore) return null;
-  const key: string = zone === 'Reef' && d >= REEF_WALL_DEPTH ? 'ReefWall' : zone;
+  const key: string = zone === 'Reef' && d >= DEEP_WALL_DEPTH ? 'DeepWall'
+    : zone === 'Reef' && d >= REEF_WALL_DEPTH ? 'ReefWall' : zone;
   const table = ZONE_LIFE[key];
   if (!table || table.length === 0) return null;
   return { table, density: HABITAT_DENSITY[key] ?? 0.2 };
@@ -224,8 +241,11 @@ export const ROAM_MIN_R = 50;
  * roughly tripling the area that can host a roamer relative to the old [50,190] annulus. */
 export const ROAM_MAX_R = 320;
 /** Scaled up from the roamer radius increase (see `ROAM_MAX_R`), but sub-linearly — the point is
- * a lower-density *penumbra* beyond the resident radius, not uniformly re-flooding a 3x area. */
-export const ROAM_TARGET = 36;
+ * a lower-density *penumbra* beyond the resident radius, not uniformly re-flooding a 3x area.
+ * Raised alongside `HABITAT_DENSITY` (task brief: "underwater life is too sparse") — still cheap:
+ * roamers reuse the same per-species `InstancedMesh` pools residents do, so more of them costs
+ * instances/triangles, not draw calls (pool.ts's header). */
+export const ROAM_TARGET = 52;
 export const DORMANT_TTL_S = 90;
 
 export interface RoamSpawn {

@@ -106,26 +106,42 @@ function buildDiverFigure(): DiverFigure {
   const group = new THREE.Group();
   const geos: THREE.BufferGeometry[] = [];
   const mats: THREE.Material[] = [];
-  const unitCyl = (r0: number, r1: number, seg = 10): THREE.CylinderGeometry => {
+  // 14 radial segments (was 10) — a cheap, direct fix for the "boxy limbs" note in this task's
+  // brief: at 10 segments a smooth-shaded cylinder still reads as faceted at this card's close
+  // framing, and this geometry is built once per catch (human-interaction frequency, not
+  // per-frame — see fish-mesh.ts's header for the same reasoning), so the extra triangles cost
+  // nothing that matters.
+  const unitCyl = (r0: number, r1: number, seg = 14): THREE.CylinderGeometry => {
     const g = new THREE.CylinderGeometry(r1, r0, 1, seg);
     geos.push(g);
     return g;
   };
 
+  // `flatShading: true` (the first pass's choice, everywhere) was the other big contributor to
+  // "boxy": it forces per-face normals even on these already-round primitives, so every cylinder
+  // segment and sphere facet reads as a distinct flat plane instead of a continuous curved
+  // surface. Smooth-shaded (the default) here throughout.
+  //
   // Lighter than a real neoprene black on purpose — a literal near-black wetsuit against this
   // scene's dark blue-green backdrop measured as nearly invisible in the first render pass (see
   // this task's report): "wetsuit-dark-teal" reads as a wetsuit while actually catching the key
   // light enough to silhouette against the water behind it.
-  const wetsuit = new THREE.MeshStandardMaterial({ color: 0x2d4f58, roughness: 0.4, metalness: 0.1, flatShading: true });
-  const glove = new THREE.MeshStandardMaterial({ color: 0x23282d, roughness: 0.5, flatShading: true });
-  const skin = new THREE.MeshStandardMaterial({ color: 0xc9916b, roughness: 0.55, flatShading: true });
+  //
+  // Wetsuit/skin are `MeshPhysicalMaterial` with a light clearcoat — the same "wet" treatment
+  // underwater-trophy.ts already gives the fish itself (`applyWetFishMaterial`, below), so the
+  // diver's skin/neoprene reads as genuinely wet rather than the fish being the only surface in
+  // frame with any sheen. Noticeably less clearcoat than the fish's 0.45 — neoprene isn't as
+  // glossy as wet fish skin, and over-doing it here made the wetsuit look like plastic.
+  const wetsuit = new THREE.MeshPhysicalMaterial({ color: 0x2d4f58, roughness: 0.45, metalness: 0.1, clearcoat: 0.25, clearcoatRoughness: 0.4 });
+  const glove = new THREE.MeshStandardMaterial({ color: 0x23282d, roughness: 0.55 });
+  const skin = new THREE.MeshPhysicalMaterial({ color: 0xc9916b, roughness: 0.5, clearcoat: 0.2, clearcoatRoughness: 0.45 });
   const maskGlass = new THREE.MeshStandardMaterial({ color: 0x0a0e12, roughness: 0.08, metalness: 0.3 });
-  const maskFrame = new THREE.MeshStandardMaterial({ color: 0x2b3238, roughness: 0.5, flatShading: true });
+  const maskFrame = new THREE.MeshStandardMaterial({ color: 0x2b3238, roughness: 0.5 });
   // Dark rubber, not a bright accent colour — the first pass made the snorkel the single most
   // visually dominant thing in frame by giving it the only saturated colour anywhere on the
   // figure. A small bright purge-valve accent (near the mouthpiece) is plenty.
-  const snorkelMat = new THREE.MeshStandardMaterial({ color: 0x24292e, roughness: 0.5, flatShading: true });
-  const accentMat = new THREE.MeshStandardMaterial({ color: 0xf2c14e, roughness: 0.4, flatShading: true });
+  const snorkelMat = new THREE.MeshStandardMaterial({ color: 0x24292e, roughness: 0.5 });
+  const accentMat = new THREE.MeshStandardMaterial({ color: 0xf2c14e, roughness: 0.4 });
   mats.push(wetsuit, glove, skin, maskGlass, maskFrame, snorkelMat, accentMat);
 
   const shoulderY = 0.12, chestZ = -0.03;
@@ -135,7 +151,7 @@ function buildDiverFigure(): DiverFigure {
   // Keeping it short also keeps the auto-fit camera (see show()'s bounding-box framing) from
   // zooming out to fit a tall, mostly-empty lower torso the shot was never meant to show.
   const TORSO_BOTTOM_Y = -0.22, TORSO_TOP_Y = shoulderY + 0.03;
-  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.155, 0.185, TORSO_TOP_Y - TORSO_BOTTOM_Y, 12), wetsuit);
+  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.155, 0.185, TORSO_TOP_Y - TORSO_BOTTOM_Y, 18), wetsuit);
   torso.position.set(0, (TORSO_TOP_Y + TORSO_BOTTOM_Y) / 2, chestZ);
   group.add(torso);
 
@@ -147,22 +163,28 @@ function buildDiverFigure(): DiverFigure {
 
   // shoulders (small caps where the arms root — helps the arm/torso joint read as one body).
   for (const sx of [-1, 1] as const) {
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.095, 10, 8), wetsuit);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.095, 14, 10), wetsuit);
     cap.position.set(sx * 0.19, shoulderY - 0.02, chestZ);
     group.add(cap);
   }
 
   // neck + head + mask + snorkel.
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.058, 0.1, 10), skin);
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.058, 0.1, 14), skin);
   neck.position.set(0, shoulderY + 0.1, chestZ + 0.01);
   group.add(neck);
 
   const headY = shoulderY + 0.28;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.135, 14, 10), skin);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.135, 18, 14), skin);
   head.position.set(0, headY, chestZ + 0.02);
   group.add(head);
 
-  const mask = new THREE.Mesh(new THREE.BoxGeometry(0.21, 0.1, 0.05), maskGlass);
+  // A flattened sphere ("lens" shape) rather than the first pass's flat BoxGeometry — a box's
+  // corner vertices can't share smooth normals across perpendicular faces no matter the shading
+  // mode, so it stayed visibly boxy even after the flatShading fix above; a sphere is smooth by
+  // construction and scales down to the same rounded-rectangle silhouette a real dive mask lens
+  // has.
+  const mask = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), maskGlass);
+  mask.scale.set(0.105, 0.05, 0.025);
   mask.position.set(0, headY - 0.01, chestZ + 0.02 + 0.105);
   group.add(mask);
   const maskRim = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.016, 6, 16), maskFrame);
@@ -199,10 +221,17 @@ function buildDiverFigure(): DiverFigure {
   // arms, built in a neutral pose — poseArms() re-solves them per catch.
   const buildArm = (sx: -1 | 1): Arm => {
     const shoulder = new THREE.Vector3(sx * 0.19, shoulderY - 0.02, chestZ);
-    const upper = new THREE.Mesh(unitCyl(0.052, 0.045, 10), wetsuit);
-    const fore = new THREE.Mesh(unitCyl(0.044, 0.036, 10), wetsuit);
-    const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.046, 10, 8), wetsuit);
-    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.062, 10, 8), glove);
+    const upper = new THREE.Mesh(unitCyl(0.052, 0.045), wetsuit);
+    const fore = new THREE.Mesh(unitCyl(0.044, 0.036), wetsuit);
+    const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.046, 14, 10), wetsuit);
+    // A short capsule (rotated so its long axis is Z, matching the grip-direction quaternion
+    // below — same "build pre-rotated, orient with setFromUnitVectors" convention `unitCyl`/
+    // `setLimb` use for the limbs) rather than a plain sphere — it reads as a loosely-closed fist
+    // wrapped around the fish instead of a ball balanced against it, while the IK math below
+    // (`poseArms`) still only ever positions and orients this mesh, never reshapes it.
+    // Not pushed to `geos` (disposed in bulk below) — `dispose()` already frees each arm's own
+    // `hand.geometry` individually, same as it already does for `elbow`'s.
+    const hand = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.028, 4, 12).rotateX(Math.PI / 2), glove);
     group.add(upper, fore, elbow, hand);
     return { sx, shoulder, upper, fore, elbow, hand };
   };

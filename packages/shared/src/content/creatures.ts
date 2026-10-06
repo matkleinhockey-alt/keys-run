@@ -52,13 +52,13 @@ export const VIS: Record<string, CreatureVis> = {
   bonefish:{kind:'fish',len:.65,h:.15,w:.11,back:'#6f8a82',belly:'#e3ebe8',fin:'#9fb1aa',level:'mid',speed:1.4,school:[3,7],spread:2.4,dMin:.35,dMax:4,act:'tail'},
   permit:{kind:'fish',len:.75,h:.42,w:.1,back:'#5e6f78',belly:'#d9e1e4',fin:'#22282d',level:'mid',speed:1.3,school:[2,4],spread:2.6,dMin:.5,dMax:6,act:'tail'},
   tarpon:{kind:'fish',len:1.8,h:.42,w:.22,back:'#46626f',belly:'#eef3f5',fin:'#57707c',level:'mid',speed:1.2,school:[3,7],spread:4.5,dMin:1.5,dMax:14,act:'roll'},
-  barracuda:{kind:'fish',len:1.3,h:.16,w:.13,back:'#4f5f66',belly:'#e4eaec',fin:'#2b3338',pattern:'spots',level:'surface',speed:.6,school:[1,1],spread:0,dMin:.6,dMax:20},
+  barracuda:{kind:'fish',len:1.3,h:.16,w:.13,back:'#4f5f66',belly:'#e4eaec',fin:'#2b3338',pattern:'blotch',level:'surface',speed:.6,school:[1,1],spread:0,dMin:.6,dMax:20},
   snook:{kind:'fish',len:.85,h:.19,w:.13,back:'#8a8461',belly:'#ecebdf',fin:'#c9b860',pattern:'line',level:'mid',speed:1.1,school:[2,4],spread:2.2,dMin:.8,dMax:9},
   redfish:{kind:'fish',len:.8,h:.22,w:.14,back:'#a8653a',belly:'#efd9c4',fin:'#8c4f2c',pattern:'spot',level:'mid',speed:1,school:[2,4],spread:2.2,dMin:.4,dMax:5,act:'tail'},
   trout:{kind:'fish',len:.55,h:.13,w:.09,back:'#6d7a6a',belly:'#e8ece4',fin:'#8a8f78',pattern:'spots',level:'mid',speed:1.2,school:[3,6],spread:2.2,dMin:.6,dMax:6},
   mangrove:{kind:'fish',len:.42,h:.14,w:.08,back:'#7b4b40',belly:'#d9b3a7',fin:'#a2584a',level:'mid',speed:1.1,school:[6,12],spread:2.8,dMin:1.5,dMax:20},
   yellowtail:{kind:'fish',len:.42,h:.12,w:.07,back:'#5f7aa0',belly:'#e8eef4',fin:'#f2cc2f',pattern:'yline',level:'mid',speed:1.5,school:[8,14],spread:3.2,dMin:2,dMax:40},
-  mutton:{kind:'fish',len:.65,h:.22,w:.11,back:'#7a6b4e',belly:'#efcfc4',fin:'#d3684f',level:'bottom',speed:.9,school:[1,3],spread:2,dMin:2,dMax:40},
+  mutton:{kind:'fish',len:.65,h:.22,w:.11,back:'#7a6b4e',belly:'#efcfc4',fin:'#d3684f',pattern:'spot',level:'bottom',speed:.9,school:[1,3],spread:2,dMin:2,dMax:40},
   hogfish:{kind:'fish',len:.6,h:.27,w:.11,back:'#d68f73',belly:'#f5ddd2',fin:'#b25e45',level:'bottom',speed:.8,school:[1,2],spread:2,dMin:2.5,dMax:40},
   grouper:{kind:'fish',len:1.15,h:.38,w:.3,back:'#4c4a43',belly:'#8c8778',fin:'#3a3833',pattern:'mottle',level:'bottom',speed:.5,school:[1,1],spread:0,dMin:3,dMax:60},
   parrotfish:{kind:'fish',len:.55,h:.2,w:.12,back:'#2f8f8a',belly:'#7fd3c3',fin:'#d26aa0',pattern:'mottle',level:'bottom',speed:.9,school:[2,5],spread:2.5,dMin:2,dMax:30},
@@ -74,14 +74,14 @@ export const VIS: Record<string, CreatureVis> = {
   amberjack:{kind:'fish',len:1.3,h:.34,w:.2,back:'#6d6a52',belly:'#dfe3e2',fin:'#c9b25a',level:'mid',speed:1.6,school:[3,7],spread:4,dMin:15,dMax:1e5},
   kingfish:{kind:'fish',len:1.4,h:.2,w:.15,back:'#3d5a7a',belly:'#e8eef2',fin:'#334d68',level:'surface',speed:3,school:[2,5],spread:5,dMin:12,dMax:1e5},
   cero:{kind:'fish',len:.7,h:.14,w:.09,back:'#3f6286',belly:'#eef2f5',fin:'#c9b25a',pattern:'gspots',level:'surface',speed:2.2,school:[3,6],spread:3,dMin:4,dMax:60},
-  jackcrevalle:{kind:'fish',len:.85,h:.32,w:.14,back:'#4f6a6e',belly:'#e6e4c6',fin:'#d9bd4a',level:'mid',speed:2,school:[4,9],spread:4,dMin:1,dMax:40},
+  jackcrevalle:{kind:'fish',len:.85,h:.32,w:.14,back:'#4f6a6e',belly:'#e6e4c6',fin:'#d9bd4a',pattern:'gillspot',level:'mid',speed:2,school:[4,9],spread:4,dMin:1,dMax:40},
   ladyfish:{kind:'fish',len:.6,h:.12,w:.08,back:'#7f9aa0',belly:'#eef3f4',fin:'#a8b8bd',level:'surface',speed:1.8,school:[4,10],spread:4,dMin:.5,dMax:7},
   sheepshead:{kind:'fish',len:.55,h:.3,w:.1,back:'#c9c9c0',belly:'#eeeeea',fin:'#3a3a38',pattern:'bars',level:'bottom',speed:.8,school:[2,6],spread:2.5,dMin:2,dMax:20},
   pompano:{kind:'fish',len:.42,h:.2,w:.07,back:'#9aa9ad',belly:'#f1e9b0',fin:'#e5c84a',level:'mid',speed:1.6,school:[3,7],spread:3,dMin:.8,dMax:8},
   tripletail:{kind:'fish',len:.65,h:.32,w:.12,back:'#4e4434',belly:'#6b5e47',fin:'#3b3226',pattern:'mottle',level:'surface',speed:.3,school:[1,1],spread:0,dMin:2,dMax:1e5},
   lionfish:{kind:'fish',len:.35,h:.2,w:.1,back:'#a5432e',belly:'#f2e3d6',fin:'#c25a40',pattern:'wbars',level:'bottom',speed:.4,school:[1,2],spread:1.5,dMin:3,dMax:60},
   goliath:{kind:'fish',len:2.2,h:.8,w:.62,back:'#6b5c3e',belly:'#9a8a64',fin:'#5a4d33',pattern:'mottle',level:'bottom',speed:.3,school:[1,1],spread:0,dMin:4,dMax:60},
-  graytrigger:{kind:'fish',len:.45,h:.26,w:.08,back:'#6f6f68',belly:'#a8a79d',fin:'#5d5d56',level:'mid',speed:.7,school:[1,3],spread:2,dMin:3,dMax:1e5},
+  graytrigger:{kind:'fish',len:.45,h:.26,w:.08,back:'#6f6f68',belly:'#a8a79d',fin:'#5d5d56',pattern:'mottle',level:'mid',speed:.7,school:[1,3],spread:2,dMin:3,dMax:1e5},
   bullshark:{kind:'shark',len:2.3,h:.46,w:.46,back:'#6b6f68',belly:'#eceeea',fin:'#5f635c',level:'mid',speed:1.3,school:[1,1],spread:0,dMin:1.5,dMax:40},
   lemonshark:{kind:'shark',len:2.3,h:.38,w:.38,back:'#a6976b',belly:'#e8e2c6',fin:'#9a8a5f',level:'mid',speed:1.2,school:[1,2],spread:4,dMin:.8,dMax:20},
   hammerhead:{kind:'shark',len:3.3,h:.5,w:.5,back:'#6e7a80',belly:'#eef0f1',fin:'#5e6a70',level:'mid',speed:1.4,school:[1,1],spread:0,dMin:6,dMax:1e5},
@@ -166,13 +166,15 @@ export function isCatchable(key: string): boolean {
 
 /**
  * Per-habitat ambient-life tables, keyed primarily by `Zone` (@keysrun/shared/world/depth) but
- * with two extra keys — `ReefWall` and `Humps` — that are *not* zone names. `zoneAt` only ever
- * returns the seven `Zone` strings; `ReefWall`/`Humps` are a finer habitat split that
- * apps/client/src/entities/fish/spawn.ts layers on top of `zoneAt` using depth (the reef crest vs.
- * the 3.4->45.4 m wall drop) and proximity to a named `HUMPS` structure, so this table can tell
- * "shallow patch reef" apart from "ledge/drop" and "real offshore structure" apart from "open
- * water" without changing `zoneAt`'s return type or touching `packages/shared/src/world` at all.
- * See docs/ARCHITECTURE.md's depth-band table and "The Humps" in the task brief.
+ * with three extra keys — `ReefWall`, `DeepWall` and `Humps` — that are *not* zone names. `zoneAt`
+ * only ever returns the seven `Zone` strings; `ReefWall`/`DeepWall`/`Humps` are a finer habitat
+ * split that apps/client/src/entities/fish/spawn.ts layers on top of `zoneAt` using depth (the
+ * reef crest vs. the wall top/ledges vs. the deep wall, over the 3.4->45.4 m drop) and proximity
+ * to a named `HUMPS` structure, so this table can tell "shallow patch reef" apart from "wall top/
+ * ledge" apart from "deep wall/wreck" apart from "real offshore structure" apart from "open water"
+ * without changing `zoneAt`'s return type or touching `packages/shared/src/world` at all. See
+ * docs/ARCHITECTURE.md's depth-band table (five bands: 0-5/5-10/10-15/15-20/20+ m) and "The Humps"
+ * in the task brief.
  */
 export const ZONE_LIFE: Record<string, Array<[string, number]>> = {
   // Mangrove creek channels — juveniles sheltering along the edges.
@@ -192,9 +194,18 @@ export const ZONE_LIFE: Record<string, Array<[string, number]>> = {
   // Patch reef / Sombrero crest — the existing shallow reef life (depthAt < REEF_WALL_DEPTH).
   // Dolphins work the reef line hunting bait off the coral too.
   'Reef':[['yellowtail',5],['parrotfish',3],['angelfish',2],['hogfish',2],['grouper',2],['gag',1.2],['redgrouper',1.2],['nurse',1],['turtle',1.5],['barracuda',1.5],['mutton',2],['lionfish',1.5],['graytrigger',2],['cero',2],['goliath',.4],['dolphin',1],['schoolmaster',4.5],['lanesnapper',3.5],['bluerunner',4],['vermilion',2],['spanishmack',2]],
-  // The reef wall's ledges and drop-off (depthAt >= REEF_WALL_DEPTH, spawn.ts) — grouper holding on
-  // ledges, bigger snapper/jack schools working the drop, dolphins cruising the wall edge.
+  // The reef wall's top and ledges (depthAt in [REEF_WALL_DEPTH, DEEP_WALL_DEPTH), spawn.ts) —
+  // docs/ARCHITECTURE.md bands 3-4 (reef wall top / elkhorn-staghorn, ledges and overhangs):
+  // grouper holding on ledges, bigger snapper/jack schools working the drop, dolphins cruising
+  // the wall edge. `DeepWall` below (band 5, >= DEEP_WALL_DEPTH) used to be the same table all the
+  // way to 45 m — split out so the deep wall/wreck band actually feels different, not just emptier.
   'ReefWall':[['grouper',3],['gag',2],['redgrouper',2],['yellowtail',4],['mutton',2.5],['amberjack',2],['kingfish',1.5],['cero',1.5],['nurse',1],['goliath',.6],['graytrigger',1.2],['lionfish',1],['hammerhead',.3],['cobia',1],['dolphin',1.3],['vermilion',5],['bluerunner',3],['schoolmaster',2]],
+  // The deep wall and wrecks (depthAt >= DEEP_WALL_DEPTH, spawn.ts) — docs/ARCHITECTURE.md band 5
+  // (20 m+, "deep wall, wrecks, the Humps... torch required, blackout risk"). Bigger-bodied
+  // structure-holders and more apex presence than the wall top, less of the small schooling
+  // yellowtail/mutton clutter that reads as "shallow reef" — this is what makes the deep band feel
+  // like a different place rather than the same reef with the lights turned down.
+  'DeepWall':[['grouper',3.5],['gag',2.5],['redgrouper',2],['amberjack',3],['kingfish',2],['cobia',1.5],['goliath',1.3],['nurse',1.5],['hammerhead',.7],['bullshark',.5],['mutton',1.4],['yellowtail',1],['cero',1],['dolphin',1],['vermilion',3.5],['bluerunner',1.5]],
   // Gulf Stream / open offshore — pelagics (roaming layer only; see spawn.ts). Dolphin pods are a
   // common sight riding the current lines; pilot whales/humpbacks are a genuine *rare* event out
   // here — tiny weights are deliberate (see the task brief's "Encounter rarity").

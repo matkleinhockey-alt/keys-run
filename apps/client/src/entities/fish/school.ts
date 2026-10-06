@@ -36,11 +36,22 @@ import {
 } from './behavior.js';
 import type { SchoolCtx, SchoolState, FishMember } from './types.js';
 
-/** legacy `floorY` (apps/client/src/world/seafloor.ts, out of this task's ownership) — duplicated
- * as the one-line pure formula it is rather than importing a file that also drags in three.js,
- * per this module's "no three.js" header note. docs/ARCHITECTURE.md already tracks floorY's own
- * hazard/call-site count; this is call site #7, now documented here too. */
-const floorY = (d: number): number => -(0.25 + Math.min(d, 14) * 0.55);
+/** Sea-floor world-Y for a depth — the identity (negation), matching `world/seafloor.ts`'s
+ * `floorY`. 1 world unit = 1 metre, so a 34 m depth puts the floor at y = -34.
+ *
+ * ⚠ This was a *stale copy* of legacy's clamped formula, `-(0.25 + min(d,14) * 0.55)`, duplicated
+ * here (rather than imported) to keep this module free of three.js, and then never updated when
+ * seafloor.ts's own `floorY` became the identity. The clamp saturates at y ≈ -7.95 for any depth
+ * past 14 m, so while the *terrain* rendered the real reef wall dropping to 34-45 m and the Gulf
+ * Stream past 100 m, every fish school was still being placed against a floor 8 m down. Fish could
+ * not exist below ~8 m anywhere in the world: depth bands 4 and 5 (15-20 m and 20 m+) were empty by
+ * construction, and the deep-water species tables had nowhere to put anything.
+ *
+ * Kept as a named one-liner rather than inlining `-d` at both call sites so the relationship to
+ * seafloor.ts's `floorY` stays greppable — but note that a duplicated constant is exactly what
+ * caused this, so if either definition ever becomes non-trivial, move it into @keysrun/shared
+ * (pure, no three.js) instead of copying it a third time. */
+const floorY = (d: number): number => -d;
 
 /** The seafloor/surface world-Y pair at a point — the same two numbers `stepMember` uses to place
  * every member's `y` (`level==='bottom'|'surface'|'mid'`, see below). Exported so a caller that

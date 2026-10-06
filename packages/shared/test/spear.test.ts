@@ -4,6 +4,7 @@ import {
   SPEAR_SPEED, SPEAR_RANGE, SPEAR_RELOAD, SPEAR_RELOAD_FLOOR,
   createGun, canFire, stepReload, startReload,
   fire, stepSpear, closestDistSqSegmentSegment, segmentHitsCapsule,
+  distAtFlightTime, shaftSpeedAtDist, holdChance,
   spearFightParamsFor, startSpearFight, stepSpearFight,
   type CapsuleTarget, type ShotState, type SpearFightState,
 } from '../src/sim/spear.js';
@@ -112,7 +113,13 @@ describe('segmentHitsCapsule / stepSpear (ray/capsule hit tests)', () => {
     const { shot: next, hit } = stepSpear(shot, [], DT);
     expect(hit).toBeNull();
     expect(next.alive).toBe(true);
-    expect(next.dist).toBeCloseTo(SPEAR_SPEED * DT, 9);
+    // Under water drag the shaft no longer covers exactly SPEAR_SPEED*DT in one step — it covers
+    // whatever the closed-form distAtFlightTime(DT) says (see SPEAR_DRAG_K's doc comment) — but it
+    // must still be *close* to the undecayed value after one 1/30 s step (drag is a mild effect).
+    expect(next.dist).toBeCloseTo(distAtFlightTime(DT), 9);
+    expect(next.dist).toBeLessThan(SPEAR_SPEED * DT);
+    expect(next.dist).toBeGreaterThan(SPEAR_SPEED * DT * 0.9);
+    expect(next.t).toBeCloseTo(DT, 9);
   });
 
   it('normalizes a non-unit direction', () => {
@@ -123,14 +130,14 @@ describe('segmentHitsCapsule / stepSpear (ray/capsule hit tests)', () => {
 });
 
 describe('trajectory (zero divergence across step size)', () => {
-  // The shaft is unaccelerated straight-line motion at a constant SPEAR_SPEED — there is no
-  // curvature or velocity-dependent term anywhere in stepSpear, so summing many small steps must
-  // land on exactly the same position as one big step (mirroring the server's later need to
-  // rewind and re-integrate a shot from an arbitrary rewound origin at whatever tick rate it
-  // runs, per docs/ARCHITECTURE.md's spearfishing section, and get the identical answer the
-  // client predicted).
+  // Despite water drag, `dist` is always derived from cumulative flight time via the closed-form
+  // distAtFlightTime (see SPEAR_DRAG_K's doc comment) rather than accumulated step-by-step, so
+  // summing many small steps must still land on exactly the same position as one big step
+  // (mirroring the server's later need to rewind and re-integrate a shot from an arbitrary
+  // rewound origin at whatever tick rate it runs, per docs/ARCHITECTURE.md's spearfishing
+  // section, and get the identical answer the client predicted).
   it('many small steps sum to the same distance/position as one big step, short of the range clamp', () => {
-    const totalT = 0.3; // well under SPEAR_RANGE/SPEAR_SPEED (~0.44 s) — no clamping involved
+    const totalT = 0.3; // comfortably under the (now longer, under drag) time to reach SPEAR_RANGE — no clamping involved
     const origin = { x: 1, y: -5, z: 2 };
     const dir = { x: 0.6, y: 0.1, z: -0.8 };
 
@@ -171,6 +178,87 @@ describe('trajectory (zero divergence across step size)', () => {
     // flight was sliced into steps — the one coarse step that registers the hit can only overshoot
     // the true (fine-grained) crossing by at most that step's own travel distance.
     expect(Math.abs(coarse.hit!.point.z - fineHit!.point.z)).toBeLessThan(SPEAR_SPEED * DT);
+  });
+});
+
+describe('water drag (range and power falloff)', () => {
+  it('shaft speed decays linearly with distance and never exceeds muzzle speed', () => {
+    expect(shaftSpeedAtDist(0)).toBeCloseTo(SPEAR_SPEED, 9);
+    expect(shaftSpeedAtDist(SPEAR_RANGE)).toBeLessThan(SPEAR_SPEED);
+    expect(shaftSpeedAtDist(SPEAR_RANGE)).toBeGreaterThan(SPEAR_SPEED * 0.5); // mild drag, not a stall
+    // linear in distance: halfway to SPEAR_RANGE loses half as much speed as the full distance.
+    const lossAtRange = SPEAR_SPEED - shaftSpeedAtDist(SPEAR_RANGE);
+    const lossAtHalf = SPEAR_SPEED - shaftSpeedAtDist(SPEAR_RANGE / 2);
+    expect(lossAtHalf).toBeCloseTo(lossAtRange / 2, 9);
+  });
+
+  it('distAtFlightTime is monotonically increasing and matches v0 at t=0', () => {
+    expect(distAtFlightTime(0)).toBe(0);
+    let prev = 0;
+    for (let t = DT; t < 2; t += DT) {
+      const d = distAtFlightTime(t);
+      expect(d).toBeGreaterThan(prev);
+      prev = d;
+    }
+  });
+
+  it('a shot that travels the full SPEAR_RANGE arrives measurably slower than it left', () => {
+    const shot = fire({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 });
+    const { shot: final } = runShot(shot, []);
+    expect(final.dist).toBeCloseTo(SPEAR_RANGE, 6);
+    expect(shaftSpeedAtDist(final.dist)).toBeLessThan(SPEAR_SPEED);
+  });
+
+  it('holdChance rises from ~0 near the edge of a drag-slowed range to a near-certain cap at muzzle speed', () => {
+    expect(holdChance(0)).toBe(0);
+    expect(holdChance(SPEAR_SPEED * 0.2)).toBe(0); // well below the no-hold floor
+    expect(holdChance(SPEAR_SPEED)).toBeCloseTo(0.95, 9); // capped, never a guaranteed hold
+    // monotonically non-decreasing in impact speed
+    let prev = 0;
+    for (let frac = 0; frac <= 1; frac += 0.05) {
+      const c = holdChance(SPEAR_SPEED * frac);
+      expect(c).toBeGreaterThanOrEqual(prev - 1e-9);
+      prev = c;
+    }
+    // a hit right at SPEAR_RANGE (slowed by drag) holds less reliably than a point-blank hit.
+    expect(holdChance(shaftSpeedAtDist(SPEAR_RANGE))).toBeLessThan(holdChance(SPEAR_SPEED));
+  });
+
+  it('stepSpear without an rng always reports held=true (back-compat for existing callers)', () => {
+    const target: CapsuleTarget = { id: 'fish', ax: 0, ay: 0, az: SPEAR_RANGE - 0.3, bx: 0, by: 0, bz: SPEAR_RANGE + 0.3, radius: 0.5 };
+    const { hit } = runShot(fire({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 }), [target]);
+    expect(hit).not.toBeNull();
+    expect(hit!.held).toBe(true);
+    expect(hit!.impactSpeed).toBeGreaterThan(0);
+    expect(hit!.impactSpeed).toBeLessThan(SPEAR_SPEED);
+  });
+
+  it('stepSpear with an rng can report held=false on a weak edge-of-range hit, and held=true is still possible at point-blank', () => {
+    const farTarget: CapsuleTarget = { id: 'far', ax: 0, ay: 0, az: SPEAR_RANGE - 0.3, bx: 0, by: 0, bz: SPEAR_RANGE + 0.3, radius: 0.5 };
+    // An rng that always returns just-under-1 fails every roll below the holdChance cap — a weak,
+    // near-max-range hit (well under the 0.95 cap) must come back unheld.
+    const alwaysFailsRoll = () => 0.999;
+    let s = fire({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 });
+    let hit = null;
+    for (let i = 0; i < 200 && s.alive && !hit; i++) {
+      const r = stepSpear(s, [farTarget], DT, alwaysFailsRoll);
+      s = r.shot; hit = r.hit;
+    }
+    expect(hit).not.toBeNull();
+    expect(hit!.held).toBe(false);
+
+    // An rng that always returns 0 passes every roll (as long as holdChance > 0) — a point-blank
+    // hit (near-muzzle speed, holdChance near its 0.95 cap) comes back held.
+    const closeTarget: CapsuleTarget = { id: 'close', ax: 0, ay: 0, az: 0.8, bx: 0, by: 0, bz: 1.2, radius: 0.5 };
+    const alwaysPassesRoll = () => 0;
+    let s2 = fire({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 });
+    let hit2 = null;
+    for (let i = 0; i < 200 && s2.alive && !hit2; i++) {
+      const r = stepSpear(s2, [closeTarget], DT, alwaysPassesRoll);
+      s2 = r.shot; hit2 = r.hit;
+    }
+    expect(hit2).not.toBeNull();
+    expect(hit2!.held).toBe(true);
   });
 });
 

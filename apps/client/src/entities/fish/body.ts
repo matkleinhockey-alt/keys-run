@@ -104,6 +104,20 @@ export function bodyColor(V: CreatureVis, v: THREE.Vector3): THREE.Color {
     case 'gspots': if (hsh > 0.78 && v.y > -0.3 && v.y < 0.4) c.lerp(new THREE.Color(0xd8b84a), 0.6); break;
     case 'wbars': if (Math.sin(v.z * 22) > 0.2) c.lerp(new THREE.Color(0xf4ece4), 0.65); break;
     case 'dots': if (hsh > 0.8 && v.y > 0) c.set(0xf2f2f2); break;
+    // Crevalle jack's signature black blotch on the gill cover, plus the matching one at the base
+    // of the pectoral — the two markings the Florida ID chart (docs/reference/
+    // florida-saltwater-species.jpg) leads with for separating it from the other jacks. Placed
+    // forward (negative z is the snout end, per buildBodyLoft's convention), unlike 'spot', which
+    // is the rear-flank marking mutton snapper carries.
+    case 'gillspot': if (v.z > -0.78 && v.z < -0.58 && v.y > -0.18 && v.y < 0.3) c.lerp(new THREE.Color(0x15181a), 0.78); break;
+    // Great barracuda's irregular dark blotches. Unlike 'spots' (small, scattered, upper body),
+    // these sit on the LOWER half of the REAR flank and are large and ragged — see the chart's
+    // barracuda photo. Two octaves of the hash make the edges irregular rather than round.
+    case 'blotch': {
+      const h2 = hash2(v.z * 4.1 - v.y * 2.7, v.z * 1.9 + 11.3);
+      if (v.z > 0.05 && v.y < 0.12 && hsh * 0.6 + h2 * 0.4 > 0.62) c.lerp(new THREE.Color(0x23292c), 0.72);
+      break;
+    }
     default: break;
   }
   return c;

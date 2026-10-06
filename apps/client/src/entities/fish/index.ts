@@ -11,7 +11,8 @@
  * behavior.ts), and deterministic placement (spawn.ts).
  */
 import * as THREE from 'three';
-import { VIS } from '@keysrun/shared/content/creatures';
+import { VIS, isCatchable } from '@keysrun/shared/content/creatures';
+import { SPECIES } from '@keysrun/shared/content/species';
 import { createSpeciesPool, beginPoolFrame, endPoolFrame, type SpeciesPool } from './pool.js';
 import { stepSchool, waterColumnAt } from './school.js';
 import { renderSchool, beginRenderStats, renderStats, type RenderView } from './render.js';
@@ -25,9 +26,33 @@ import { swimClock } from './swim-clock.js';
 import type { SchoolState, Threat } from './types.js';
 import { WORLD_SEED } from '../../state/constants.js';
 
+/** Reused by `setAllPassFrustum` — a plane normal needs *a* direction; which one is irrelevant
+ * when the constant is Infinity. */
+const _UP = new THREE.Vector3(0, 1, 0);
+
 const RESIDENT_RADIUS = 220;
 const SPAWN_THROTTLE_S = 0.4; // legacy `popT` cadence (index.html:2542)
 const ROAM_RETIRE_R = ROAM_MAX_R + 40; // legacy's `POP_R+40` free radius
+
+/**
+ * One real, individual spearable fish — the tier-3 tracked-fish registry docs/ARCHITECTURE.md's
+ * "Fish ownership — three tiers" anticipates, scoped to what this single-player/no-server branch
+ * needs: a real per-member capsule (not a per-school stand-in), a stable per-fish weight, and
+ * `catchable` wired from `isCatchable` (never a species-name branch — see that field's own doc
+ * comment). Deliberately shaped identically to `@keysrun/shared/sim/spear`'s `CapsuleTarget`
+ * plus the `key`/`weight` fields `entities/speargun/index.ts`'s own `SpearTarget` adds on top
+ * (`CapsuleTarget & { key: string; weight: number }`), so `game/world.ts`'s `getSpearTargets` can
+ * hand these straight through with no remapping and nothing on the speargun side needs to change.
+ */
+export interface SpearTargetLite {
+  id: string;
+  key: string;
+  weight: number;
+  ax: number; ay: number; az: number;
+  bx: number; by: number; bz: number;
+  radius: number;
+  catchable: boolean;
+}
 
 export interface FishWorld {
   group: THREE.Group;
@@ -40,10 +65,10 @@ export interface FishWorld {
    * side and the population focus has moved to the diver (see world.ts's call site).
    */
   update(dt: number, t: number, focus: { x: number; z: number }, boat: Threat, extraThreats?: Threat[]): void;
-  /** The camera every LOD/cull decision is made against (render.ts). Separate from `focus`
-   * (which is the *population* centre — the diver or the boat) because the two genuinely differ:
-   * in the chase camera the eye sits metres behind the hull, and while diving the camera is at
-   * eye height rather than at the diver's own origin. Call once per frame before `update`. */
+  /** The camera every LOD/cull decision is made against (render.ts). Separate from `focus` (the
+   * *population* centre — the diver or the boat) because the two genuinely differ: in the chase
+   * camera the eye sits metres behind the hull, and while diving the camera is at eye height
+   * rather than at the diver's own origin. Call once per frame before `update`. */
   setCamera(camera: THREE.Camera): void;
   readonly stats: {
     schools: number; fish: number; draws: number;
@@ -55,10 +80,17 @@ export interface FishWorld {
      * should be mostly 'impostor'/'coarse', with only what you are close to in 'low'. */
     byTier: Readonly<Record<string, number>>;
     triangles: number;
-    /** World position the LOD/cull decision was evaluated from this frame. Permanently useful:
-     * if this ever diverges from where the viewer actually is, every fish culls at once. */
+    /** World position the LOD/cull decision was evaluated from this frame. Permanently useful: if
+     * this ever diverges from where the viewer actually is, every fish culls at once. */
     camX: number; camY: number; camZ: number;
   };
+  /** Individual spearable fish within `radius` of `(x,y,z)`, as real per-fish capsules built from
+   * each member's own *live, already-rendered* `wx/wy/wz/yaw/pitch/roll/worldScale` transform
+   * (the same numbers `render.ts` just wrote into the InstancedMesh this frame) — never
+   * recomputed independently, so the capsule cannot drift from what is actually drawn. Culls by
+   * school centroid first, then per-member, so this is cheap enough to call every frame while
+   * diving — see `game/world.ts`'s `getSpearTargets`, the only real (non-test) caller. */
+  spearTargetsNear(x: number, y: number, z: number, radius: number): SpearTargetLite[];
   /** Scans resident chunks (via the same pure `residentsForChunk` activation uses — no game
    * state touched) outward from `(originX, originZ)` out to `maxRadius` for the first species
    * matching `wantType`. Verification-only (Playwright screenshot targeting — see
@@ -69,8 +101,13 @@ export interface FishWorld {
    * `waterColumnAt`, used by test/capture-fish-screenshots.mjs to place a camera at a sensible
    * height in the water column instead of guessing a world Y blind. */
   waterColumnAt(x: number, z: number, t: number): { floor: number; surf: number };
-  /** Verification-only: every currently active school's centroid/type/member-count. */
-  debugActiveSchools(): Array<{ id: string; type: string; cx: number; cz: number; heading: number; count: number; resident: boolean }>;
+  /** Verification-only: every currently active school's centroid/type/member-count, plus its
+   * live `flee` countdown (school.ts's `stepSchool` sets this to 1.5 the instant `nearestTrigger`
+   * finds a threat, including a Problem-2 `'spear'` near-miss threat, then ticks it down to 0) —
+   * `>0` is a direct, no-guessing signal that a school is actively spooked right now, used by
+   * test/capture-spearable-fish.mjs to confirm a missed shot's flee response actually fired
+   * instead of inferring it from position deltas. */
+  debugActiveSchools(): Array<{ id: string; type: string; cx: number; cz: number; heading: number; count: number; resident: boolean; flee: number }>;
   /** Verification-only: per-species-pool draw-call/triangle accounting, isolated from the rest of
    * the scene. */
   debugPoolStats(): Array<{ type: string; lod: string; triPerInstance: number; instances: number; capacity: number }>;
@@ -84,6 +121,22 @@ interface DormantEntry {
   state: SchoolState;
   since: number;
 }
+
+/** Deterministic string -> [0,1) (FNV-1a) — same family of hash `game/world.ts`'s now-removed
+ * per-school stand-in used, kept local here rather than shared: it is five lines and the only two
+ * places that ever needed "stable string -> unit float" are this file (per-fish weight) and that
+ * one (which now just calls `spearTargetsNear` below), so a shared module would be pure ceremony. */
+function hashUnit(id: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) { h ^= id.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h >>> 0) / 4294967295;
+}
+
+/** How far outside a fish's own species-length a school's members can realistically sit (legacy
+ * `spread`'s widest value is 10 for the biggest offshore pods, plus ~half the longest catchable
+ * body — swordfish/blackmarlin ~3.6 m); used only to pre-cull whole schools by centroid distance
+ * before `spearTargetsNear` touches their members — see that function. */
+const SCHOOL_QUERY_MARGIN = 20;
 
 export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
   const group = new THREE.Group();
@@ -200,14 +253,14 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
   const stats = {
     schools: 0, fish: 0, draws: 0,
     drawnFish: 0, culledDistance: 0, culledFrustum: 0,
-    byTier: { impostor: 0, coarse: 0, low: 0, high: 0 } as Record<string, number>, triangles: 0,
-    camX: 0, camY: 0, camZ: 0,
+    byTier: { impostor: 0, coarse: 0, low: 0, high: 0 } as Record<string, number>,
+    triangles: 0, camX: 0, camY: 0, camZ: 0,
   };
 
   // The camera LOD/culling is evaluated against — see `setCamera`'s doc comment on the interface
-  // for why this is not the same point as the population `focus`. Until the caller supplies one,
-  // the view falls back to the focus point with an all-pass frustum, so a headless/test caller
-  // that never calls setCamera still gets every fish submitted rather than none.
+  // for why this is not the same point as the population `focus`. Until a caller supplies one the
+  // view falls back to the focus point with an all-pass frustum, so a headless/test caller that
+  // never calls setCamera still gets every fish submitted rather than none.
   let camera: THREE.Camera | null = null;
   const _frustum = new THREE.Frustum();
   const _viewProj = new THREE.Matrix4();
@@ -216,10 +269,9 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
 
   function setCamera(c: THREE.Camera): void { camera = c; }
 
-  /** All-pass frustum: six planes pointing outward from a point at infinity, so
-   * `intersectsSphere` is always true. Used when no camera has been supplied. */
+  /** All-pass frustum: planes at infinity, so `intersectsSphere` is always true. */
   function setAllPassFrustum(): void {
-    for (const p of _frustum.planes) p.set(new THREE.Vector3(0, 1, 0), Infinity);
+    for (const p of _frustum.planes) p.set(_UP, Infinity);
   }
 
   function updateView(focus: { x: number; z: number }): void {
@@ -228,11 +280,9 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
       camera.getWorldPosition(_camPos);
       view.camX = _camPos.x; view.camY = _camPos.y; view.camZ = _camPos.z;
       const cam = camera as THREE.PerspectiveCamera;
-      if (cam.projectionMatrix && cam.matrixWorldInverse) {
-        _viewProj.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
-        _frustum.setFromProjectionMatrix(_viewProj);
-        return;
-      }
+      _viewProj.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+      _frustum.setFromProjectionMatrix(_viewProj);
+      return;
     }
     view.camX = focus.x; view.camY = 0; view.camZ = focus.z;
     setAllPassFrustum();
@@ -259,10 +309,10 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
     }
     lastBoatX = boat.x; lastBoatZ = boat.z;
 
-    updateView(focus);
-
     const threats: Threat[] = [boatWithHeading, ...extraThreats];
     const ctx = { t, dt, threats };
+
+    updateView(focus);
 
     let fishCount = 0;
     const touched = new Set<SpeciesPool>();
@@ -304,10 +354,11 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
   }
 
   /** Verification-only: the fish system's own draw-call/triangle contribution in isolation from
-   * the rest of the scene, now broken out per LOD level — this is the number that shows the LOD
-   * system working (a reef full of fish should be mostly `lod:2`/`lod:1` instances with only the
-   * handful you are actually looking at closely in `lod:0`). `instances` is what was submitted on
-   * the last completed frame, which is also exactly what the GPU drew. */
+   * the rest of the (still fully topside-rendered, in this branch) scene — see pool.ts's
+   * `mesh.count` high-water-mark doc comment for why `meshCount` (not `capacity`) is what actually
+   * gets submitted to the GPU. */
+  /** Verification-only: per-(species, LOD tier) draw/triangle accounting. This is the number that
+   * shows the LOD system working — a busy reef should be mostly 'impostor'/'coarse'. */
   function debugPoolStats(): Array<{ type: string; lod: string; triPerInstance: number; instances: number; capacity: number }> {
     const out: Array<{ type: string; lod: string; triPerInstance: number; instances: number; capacity: number }> = [];
     for (const pool of pools.values()) {
@@ -319,11 +370,11 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
     return out;
   }
 
-  function debugActiveSchools(): Array<{ id: string; type: string; cx: number; cz: number; heading: number; count: number; resident: boolean }> {
-    const out: Array<{ id: string; type: string; cx: number; cz: number; heading: number; count: number; resident: boolean }> = [];
-    for (const s of residents.values()) out.push({ id: s.id, type: s.type, cx: s.cx, cz: s.cz, heading: s.heading, count: s.members.length, resident: true });
-    for (const s of nearField.values()) out.push({ id: s.id, type: s.type, cx: s.cx, cz: s.cz, heading: s.heading, count: s.members.length, resident: true });
-    for (const s of roamers.values()) out.push({ id: s.id, type: s.type, cx: s.cx, cz: s.cz, heading: s.heading, count: s.members.length, resident: false });
+  function debugActiveSchools(): Array<{ id: string; type: string; cx: number; cz: number; heading: number; count: number; resident: boolean; flee: number }> {
+    const out: Array<{ id: string; type: string; cx: number; cz: number; heading: number; count: number; resident: boolean; flee: number }> = [];
+    for (const s of residents.values()) out.push({ id: s.id, type: s.type, cx: s.cx, cz: s.cz, heading: s.heading, count: s.members.length, resident: true, flee: s.flee });
+    for (const s of nearField.values()) out.push({ id: s.id, type: s.type, cx: s.cx, cz: s.cz, heading: s.heading, count: s.members.length, resident: true, flee: s.flee });
+    for (const s of roamers.values()) out.push({ id: s.id, type: s.type, cx: s.cx, cz: s.cz, heading: s.heading, count: s.members.length, resident: false, flee: s.flee });
     return out;
   }
 
@@ -344,6 +395,73 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
 
   function debugBlowCount(): number { return blowCount; }
 
+  /** Appends one `SpearTargetLite` per live member of `state` within `radius` of
+   * `(originX,originY,originZ)` to `out` — the per-member half of `spearTargetsNear` below.
+   * Skips species with no `SPECIES` weight/fight-table entry (ambient-only — e.g. angelfish;
+   * mirrors the exact gate the old per-school stand-in in `game/world.ts` used) before touching
+   * any member, so a school of a non-spearable species costs one map lookup, not N. */
+  function pushSchoolTargets(
+    state: SchoolState, originX: number, originY: number, originZ: number, radius: number, out: SpearTargetLite[],
+  ): void {
+    const S = SPECIES[state.type];
+    if (!S) return;
+    const V = VIS[state.type];
+    if (!V) return;
+    const catchable = isCatchable(state.type);
+    const r2 = radius * radius;
+    const Hh = V.h || V.len * 0.17, W = V.w || V.len * 0.16;
+    const girthRadius = Math.max(0.08, Math.max(Hh, W) / 2);
+    for (let i = 0; i < state.members.length; i++) {
+      const m = state.members[i];
+      if (m.slot < 0) continue; // not currently allocated to a render slot
+      const dx = m.wx - originX, dy = m.wy - originY, dz = m.wz - originZ;
+      if (dx * dx + dy * dy + dz * dz > r2) continue;
+      // Body-axis capsule from this member's *own* live render transform (render.ts writes
+      // exactly these fields onto the InstancedMesh this same frame — see this file's header on
+      // `FishMember` and `spearTargetsNear`'s own doc comment): local -Z is the nose end
+      // (body.ts's loft runs t=0 (head) at z=-L/2 to t=1 (tail) at z=+L/2), and for a 'YXZ' Euler
+      // (pitch,yaw,roll) the world-space nose direction is the same forward-vector formula
+      // `game/world.ts`'s diver aim/camera code already uses for the identical Euler order.
+      const fwdX = -Math.sin(m.yaw) * Math.cos(m.pitch);
+      const fwdY = Math.sin(m.pitch);
+      const fwdZ = -Math.cos(m.yaw) * Math.cos(m.pitch);
+      const half = (V.len * m.worldScale) / 2;
+      const id = `${state.id}#${i}`;
+      out.push({
+        id, key: state.type,
+        // Stable for this fish's whole lifetime: derived from its identity (school id + member
+        // index), never from anything that changes frame to frame — "a weight cannot change
+        // mid-flight" (task brief). Resident schools' ids are chunk-derived (spawn.ts) so this is
+        // also stable across sessions; roamer ids are a per-process counter (spawn.ts's
+        // `roamCounter`), stable only within one running client, same pre-existing limitation the
+        // old per-school stand-in had.
+        weight: S.min + (S.max - S.min) * hashUnit(id),
+        ax: m.wx + fwdX * half, ay: m.wy + fwdY * half, az: m.wz + fwdZ * half,
+        bx: m.wx - fwdX * half, by: m.wy - fwdY * half, bz: m.wz - fwdZ * half,
+        radius: girthRadius * m.worldScale,
+        catchable,
+      });
+    }
+  }
 
-  return { group, update, setCamera, stats, findResidentNear, waterColumnAt, debugActiveSchools, debugPoolStats, debugBlowCount };
+  function spearTargetsNear(x: number, y: number, z: number, radius: number): SpearTargetLite[] {
+    const out: SpearTargetLite[] = [];
+    const schoolR2 = (radius + SCHOOL_QUERY_MARGIN) * (radius + SCHOOL_QUERY_MARGIN);
+    for (const state of residents.values()) {
+      const dx = state.cx - x, dz = state.cz - z;
+      if (dx * dx + dz * dz > schoolR2) continue;
+      pushSchoolTargets(state, x, y, z, radius, out);
+    }
+    for (const state of roamers.values()) {
+      const dx = state.cx - x, dz = state.cz - z;
+      if (dx * dx + dz * dz > schoolR2) continue;
+      pushSchoolTargets(state, x, y, z, radius, out);
+    }
+    return out;
+  }
+
+  return {
+    group, update, setCamera, stats, spearTargetsNear,
+    findResidentNear, waterColumnAt, debugActiveSchools, debugPoolStats, debugBlowCount,
+  };
 }
