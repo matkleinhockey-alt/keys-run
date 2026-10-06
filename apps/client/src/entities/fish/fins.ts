@@ -55,7 +55,7 @@
 import * as THREE from 'three';
 import type { CreatureVis, FishShape } from '@keysrun/shared/content/creatures';
 import { lerp, clamp } from '../../core/math.js';
-import { TM, CETACEAN_KEYS, type GeoPart, type BodyProfile, type FishDetail } from './body.js';
+import { TM, CETACEAN_KEYS, type GeoPart, type BodyProfile, type FishDetail, DETAIL_PARAMS } from './body.js';
 
 type Pt = [number, number];
 
@@ -164,8 +164,7 @@ function buildMidFin(spec: readonly [number, number, number, string], top: boole
 }
 
 export function buildMidFins(S: FishShape, L: number, profile: BodyProfile, fin: THREE.Color, detail: FishDetail): GeoPart[] {
-  const steps = detail === 'high' ? 20 : 14;
-  const double = detail === 'high';
+  const { finSteps: steps, double } = DETAIL_PARAMS[detail];
   const parts: GeoPart[] = [];
   (S.dor || []).forEach((s) => parts.push(buildMidFin(s, true, L, profile, fin, steps, double)));
   (S.anal || []).forEach((s) => parts.push(buildMidFin(s, false, L, profile, fin, steps, double)));
@@ -186,7 +185,7 @@ export function buildMidFins(S: FishShape, L: number, profile: BodyProfile, fin:
 export function buildTail(S: FishShape, Hh: number, W: number, L: number, fin: THREE.Color, back: THREE.Color, detail: FishDetail): GeoPart[] {
   const z0 = L / 2 - 0.01, p = Hh / 2 * S.ped, tl = L * S.tl, th = Hh / 2 * S.th * 1.6;
   const bow = Math.min(th * 0.3, L * 0.05);
-  const double = detail === 'high';
+  const { double } = DETAIL_PARAMS[detail];
   const place = (pts: readonly Pt[], w: readonly number[]): GeoPart => ({
     g: finGeo(pts.map(([a, b]): Pt => [z0 + a, b]), w.map((x) => x * bow), double),
     m: new THREE.Matrix4(),
@@ -254,16 +253,20 @@ export function buildTail(S: FishShape, Hh: number, W: number, L: number, fin: T
  * what), so these stay flat exactly as before. */
 export function buildFinlets(S: FishShape, V: CreatureVis, L: number, profile: BodyProfile, back: THREE.Color, detail: FishDetail): GeoPart[] {
   if (!S.finlets) return [];
-  const double = detail === 'high';
+  const { double, finlets, keel } = { ...DETAIL_PARAMS[detail], keel: DETAIL_PARAMS[detail].finlets > 0 };
+  if (finlets === 0) return [];
   const { Hh } = profile;
   const parts: GeoPart[] = [];
   const fl = new THREE.Color(V.finlet || V.fin);
-  for (let i = 0; i < 7; i++) {
-    const t = 0.68 + i * 0.042, z = -L / 2 + t * L, yt = profile.topY(t), yb = profile.botY(t), s = Hh * 0.07;
+  // Spread a reduced count over the same span the full seven covered, so a coarse tier still
+  // reads as a finlet *row* rather than a shorter one.
+  const step = finlets > 1 ? (6 * 0.042) / (finlets - 1) : 0;
+  for (let i = 0; i < finlets; i++) {
+    const t = 0.68 + i * step, z = -L / 2 + t * L, yt = profile.topY(t), yb = profile.botY(t), s = Hh * 0.07;
     parts.push({ g: finGeo([[z, yt - 0.003], [z + s * 0.9, yt + s * 0.8], [z + s * 1.1, yt - 0.003]], [0, 0, 0], double), m: new THREE.Matrix4(), c: fl });
     parts.push({ g: finGeo([[z, yb + 0.003], [z + s * 0.9, yb - s * 0.8], [z + s * 1.1, yb + 0.003]], [0, 0, 0], double), m: new THREE.Matrix4(), c: fl });
   }
-  parts.push({ g: new THREE.BoxGeometry(profile.W * 0.42, 0.012, L * 0.09), m: TM(0, 0, L * 0.45, 0, 0, 0, 1, 1, 1), c: back });
+  if (keel) parts.push({ g: new THREE.BoxGeometry(profile.W * 0.42, 0.012, L * 0.09), m: TM(0, 0, L * 0.45, 0, 0, 0, 1, 1, 1), c: back });
   return parts;
 }
 
@@ -298,8 +301,7 @@ function buildPairedFinGeo(len: number, wid: number, steps: number, double: bool
  * per-side rotate/translate logic, only the geometry construction (`pfin` -> `buildPairedFinGeo`)
  * changed. `steps` follows `detail` the same way buildMidFins' does. */
 export function buildPairedFins(S: FishShape, key: string, L: number, profile: BodyProfile, fin: THREE.Color, back: THREE.Color, detail: FishDetail): GeoPart[] {
-  const steps = detail === 'high' ? 10 : 6;
-  const double = detail === 'high';
+  const { pairedSteps: steps, double, pelvicFins } = DETAIL_PARAMS[detail];
   const { Hh, W, prof, botY } = profile;
   const parts: GeoPart[] = [];
   const pl = L * S.pec, tP = 0.22;
@@ -309,7 +311,7 @@ export function buildPairedFins(S: FishShape, key: string, L: number, profile: B
     g1.rotateY(th2);
     g1.rotateZ(sx * (S.shark ? -0.35 : -0.15));
     parts.push({ g: g1, m: TM(sx * W / 2 * prof(tP) * 0.82, -Hh * 0.12, -L / 2 + tP * L, 0, 0, 0, 1, 1, 1), c: S.shark ? back : fin });
-    if (!S.shark && !CETACEAN_KEYS.has(key)) {
+    if (pelvicFins && !S.shark && !CETACEAN_KEYS.has(key)) {
       const g2 = buildPairedFinGeo(pl * 0.55, pl * 0.25, steps, double);
       g2.rotateY(Math.atan2(-0.95, sx * 0.3));
       parts.push({ g: g2, m: TM(sx * W * 0.12, botY(0.36) + 0.01, -L / 2 + 0.36 * L, 0, 0, 0, 1, 1, 1), c: fin });

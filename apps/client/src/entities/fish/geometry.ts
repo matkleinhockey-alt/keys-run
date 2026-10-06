@@ -30,7 +30,7 @@
 import * as THREE from 'three';
 import type { CreatureVis, FishShape } from '@keysrun/shared/content/creatures';
 import { SHAPE } from '@keysrun/shared/content/creatures';
-import { bodyColor, buildBodyLoft, buildHeadDetails, TM, type FishDetail, type GeoPart } from './body.js';
+import { bodyColor, buildBodyLoft, buildHeadDetails, TM, DETAIL_PARAMS, type FishDetail, type GeoPart } from './body.js';
 import { buildMidFins, buildTail, buildFinlets, buildPairedFins } from './fins.js';
 
 export { bodyColor };
@@ -96,38 +96,42 @@ const sph = (a?: number, b?: number): THREE.SphereGeometry => new THREE.SphereGe
  * fish/shark/dolphin/tuna primitive fallback body legacy kept alongside it, unused here since
  * every fish/shark/dolphin/tuna VIS entry has a SHAPE and goes through buildFishGeo instead —
  * see buildCreatureGeo's dispatch, which matches legacy's own `buildCreatureGeo` exactly). */
-export function buildCreatureGeoOld(V: CreatureVis): THREE.BufferGeometry {
+export function buildCreatureGeoOld(V: CreatureVis, detail: FishDetail = 'low'): THREE.BufferGeometry {
+  // Rays/turtles/manatees are primitive-built, so their LOD lever is the primitives' own segment
+  // counts rather than a body loft. `q` scales legacy's hardcoded counts by this tier's ratio to
+  // 'low', floored at 3 (below that a sphere is not closed).
+  const q = (base: number): number => Math.max(3, Math.round(base * (DETAIL_PARAMS[detail].ns / DETAIL_PARAMS.low.ns)));
   const L = V.len, P: GeoPart[] = [];
   const back = new THREE.Color(V.back);
   const body = () => (v: THREE.Vector3): THREE.Color => bodyColor(V, v);
   if (V.kind === 'ray') {
     P.push({
-      g: sph(18, 8), m: TM(0, 0, 0, 0, 0, 0, (V.wing ?? 1) / 2, L * 0.07, L / 2), col: body(),
+      g: sph(q(18), q(8)), m: TM(0, 0, 0, 0, 0, 0, (V.wing ?? 1) / 2, L * 0.07, L / 2), col: body(),
       deform: (v) => { v.z *= 1 - 0.35 * Math.abs(v.x); },
     });
     P.push({ g: new THREE.CylinderGeometry(0.012, 0.03, 1, 4), m: TM(0, 0, L / 2 + L * 0.6, Math.PI / 2, 0, 0, 1, L * 1.2, 1), c: back });
-    if (V.flap) P.push({ g: sph(8, 6), m: TM(0, 0, -L * 0.5, 0, 0, 0, L * 0.12, L * 0.08, L * 0.14), c: back });
+    if (V.flap) P.push({ g: sph(q(8), q(6)), m: TM(0, 0, -L * 0.5, 0, 0, 0, L * 0.12, L * 0.08, L * 0.14), c: back });
   } else if (V.kind === 'turtle') {
-    P.push({ g: sph(12, 8), m: TM(0, 0, 0, 0, 0, 0, L * 0.42, L * 0.18, L * 0.55), col: body() });
-    P.push({ g: sph(8, 6), m: TM(0, 0, -L * 0.62, 0, 0, 0, L * 0.12, L * 0.1, L * 0.15), c: new THREE.Color(V.belly) });
+    P.push({ g: sph(q(12), q(8)), m: TM(0, 0, 0, 0, 0, 0, L * 0.42, L * 0.18, L * 0.55), col: body() });
+    P.push({ g: sph(q(8), q(6)), m: TM(0, 0, -L * 0.62, 0, 0, 0, L * 0.12, L * 0.1, L * 0.15), c: new THREE.Color(V.belly) });
     for (const sx of [-1, 1]) {
       P.push({ g: new THREE.BoxGeometry(1, 1, 1), m: TM(sx * L * 0.45, -0.02, -L * 0.22, 0, -sx * 0.45, 0, L * 0.55, 0.035, L * 0.17), c: new THREE.Color(V.belly) });
       P.push({ g: new THREE.BoxGeometry(1, 1, 1), m: TM(sx * L * 0.25, -0.02, L * 0.45, 0, sx * 0.5, 0, L * 0.22, 0.03, L * 0.12), c: new THREE.Color(V.belly) });
     }
   } else if (V.kind === 'manatee') {
     P.push({
-      g: sph(), m: TM(0, 0, 0, 0, 0, 0, L * 0.32, L * 0.27, L * 0.5), col: body(),
+      g: sph(q(14), q(10)), m: TM(0, 0, 0, 0, 0, 0, L * 0.32, L * 0.27, L * 0.5), col: body(),
       deform: (v) => { const k = 1 - 0.35 * Math.max(0, v.z); v.x *= k; v.y *= k; },
     });
-    P.push({ g: sph(10, 6), m: TM(0, 0, L * 0.58, 0, 0, 0, L * 0.28, 0.04, L * 0.17), c: back });
-    P.push({ g: sph(8, 6), m: TM(0, -L * 0.03, -L * 0.52, 0, 0, 0, L * 0.13, L * 0.11, L * 0.1), c: back });
+    P.push({ g: sph(q(10), q(6)), m: TM(0, 0, L * 0.58, 0, 0, 0, L * 0.28, 0.04, L * 0.17), c: back });
+    P.push({ g: sph(q(8), q(6)), m: TM(0, -L * 0.03, -L * 0.52, 0, 0, 0, L * 0.13, L * 0.11, L * 0.1), c: back });
     for (const sx of [-1, 1]) P.push({ g: new THREE.BoxGeometry(1, 1, 1), m: TM(sx * L * 0.32, -L * 0.08, -L * 0.2, 0, 0, sx * 0.5, L * 0.2, 0.04, L * 0.09), c: back });
   } else {
     // legacy's generic fish/shark/dolphin primitive body — dead code there (every such VIS entry
     // has a SHAPE), kept only so this dispatcher never throws on an unexpected kind.
     const H = V.h || L * 0.17, W = V.w || L * 0.16, taper = V.kind === 'fish' ? 0.45 : 0.62;
     P.push({
-      g: sph(), m: TM(0, 0, 0, 0, 0, 0, W / 2, H / 2, L / 2), col: body(),
+      g: sph(q(14), q(10)), m: TM(0, 0, 0, 0, 0, 0, W / 2, H / 2, L / 2), col: body(),
       deform: (v) => { const k = 1 - taper * Math.max(0, v.z); v.x *= k; v.y *= k; },
     });
   }
@@ -155,12 +159,12 @@ export function buildFishGeo(key: string, V: CreatureVis, detail: FishDetail = '
   parts.push(...buildTail(S, profile.Hh, profile.W, V.len, fin, back, detail));
   parts.push(...buildFinlets(S, V, V.len, profile, back, detail));
   parts.push(...buildPairedFins(S, key, V.len, profile, fin, back, detail));
-  parts.push(...buildHeadDetails(key, V, S, profile));
+  parts.push(...buildHeadDetails(key, V, S, profile, detail));
 
   return mergeSmooth(parts);
 }
 
 /** legacy `buildCreatureGeo` dispatcher (index.html:2476). */
 export function buildCreatureGeo(key: string, V: CreatureVis, detail: FishDetail = 'low'): THREE.BufferGeometry {
-  return (V.kind === 'ray' || V.kind === 'turtle' || V.kind === 'manatee') ? buildCreatureGeoOld(V) : buildFishGeo(key, V, detail);
+  return (V.kind === 'ray' || V.kind === 'turtle' || V.kind === 'manatee') ? buildCreatureGeoOld(V, detail) : buildFishGeo(key, V, detail);
 }

@@ -18,7 +18,46 @@ import * as THREE from 'three';
 import type { CreatureVis, FishShape } from '@keysrun/shared/content/creatures';
 import { clamp, lerp } from '../../core/math.js';
 
-export type FishDetail = 'low' | 'high';
+/**
+ * Geometry detail tier, coarsest to finest.
+ *
+ * `'low'` and `'high'` keep exactly the meanings feat/fish-geometry gave them: `'high'` is the
+ * catch-portrait close-up (one fish, filling the screen) and `'low'` is a school fish seen from
+ * normal swimming range. The two coarser tiers below them are new, and exist because `'low'` was
+ * also what a fish 300 m away got — every creature in the world was ~1,800 triangles at every
+ * distance, with no distance cull and `frustumCulled` off. That is what capped fish density:
+ * 60 fish already cost ~150k triangles, so the density a reef needs to read as *alive* (hundreds
+ * of fish inside a 25 m visibility sphere) was arithmetically out of reach.
+ *
+ * `render.ts` picks the tier per fish per frame from apparent size — see `pool.ts`'s `lodFor`.
+ */
+export type FishDetail = 'impostor' | 'coarse' | 'low' | 'high';
+
+/** Per-tier tessellation knobs, so the `detail === 'high' ? a : b` ternaries that only ever
+ * supported two tiers become one table every builder reads. */
+export const DETAIL_PARAMS: Record<FishDetail, {
+  /** Body loft segments along the spine / around the cross-section. */
+  ns: number; nr: number;
+  /** Samples along a dorsal/anal fin outline. */
+  finSteps: number;
+  /** Samples along a pectoral/pelvic fin outline. */
+  pairedSteps: number;
+  /** Whether fins get their double-sided (thickened) treatment. */
+  double: boolean;
+  /** Tuna/wahoo finlet pairs; 0 drops the row entirely. */
+  finlets: number;
+  /** Small features that stop being resolvable past a few metres. */
+  pelvicFins: boolean; pupils: boolean; mouth: boolean;
+}> = {
+  // A few pixels of silhouette at the edge of visibility: outline and motion only.
+  impostor: { ns: 7, nr: 6, finSteps: 4, pairedSteps: 3, double: false, finlets: 0, pelvicFins: false, pupils: false, mouth: false },
+  // Mid-range: the body still reads as a body, the jewellery does not.
+  coarse: { ns: 14, nr: 10, finSteps: 7, pairedSteps: 4, double: false, finlets: 4, pelvicFins: true, pupils: false, mouth: true },
+  // Unchanged from feat/fish-geometry — the school fish you are swimming next to.
+  low: { ns: 30, nr: 20, finSteps: 14, pairedSteps: 6, double: false, finlets: 7, pelvicFins: true, pupils: true, mouth: true },
+  // Unchanged from feat/fish-geometry — the catch portrait.
+  high: { ns: 40, nr: 24, finSteps: 20, pairedSteps: 10, double: true, finlets: 7, pelvicFins: true, pupils: true, mouth: true },
+};
 
 /** Cetaceans (dolphin + the two whale species) share "no pelvic fin, dark whole eye" styling —
  * legacy only ever had `key === 'dolphin'` to check against; feat/marine-mammals generalised that
@@ -111,7 +150,8 @@ function eyeSpec(W: number, Hh: number, L: number, prof: (t: number) => number):
  * the same silhouette at different tessellation. */
 export function buildBodyLoft(V: CreatureVis, S: FishShape, detail: FishDetail): { part: GeoPart; profile: BodyProfile } {
   const L = V.len, Hh = V.h || L * 0.17, W = V.w || L * 0.16, n = 2.3;
-  const NS = detail === 'high' ? 40 : 30, NR = detail === 'high' ? 24 : 20;
+  const D = DETAIL_PARAMS[detail];
+  const NS = D.ns, NR = D.nr;
   const prof = (t: number): number => (t < S.peak ? Math.pow(Math.sin(Math.PI / 2 * t / S.peak), S.nose) : lerp(1, S.ped, Math.pow((t - S.peak) / (1 - S.peak), 1.25)));
   const hump = (t: number): number => 1 + (S.hump || 0) * Math.max(0, 1 - t / 0.35);
   const topY = (t: number): number => Hh / 2 * prof(t) * hump(t);
@@ -163,18 +203,21 @@ export function buildBodyLoft(V: CreatureVis, S: FishShape, detail: FishDetail):
  * verbatim from geometry.ts's old `buildFishGeo`, just parametrized off `BodyProfile` instead of
  * re-deriving `prof`/Hh/W locally. Not touched by the fin-geometry work beyond the move: these
  * were already real (if simple) geometry, not the "flat blade" problem the brief calls out. */
-export function buildHeadDetails(key: string, V: CreatureVis, S: FishShape, profile: BodyProfile): GeoPart[] {
+export function buildHeadDetails(key: string, V: CreatureVis, S: FishShape, profile: BodyProfile, detail: FishDetail = 'low'): GeoPart[] {
   const { L, Hh, W, prof } = profile;
+  const D = DETAIL_PARAMS[detail];
+  // Sphere segment counts scale with the tier, floored at 3 (below which a sphere is not closed).
+  const q = (base: number): number => Math.max(3, Math.round(base * (D.ns / DETAIL_PARAMS.low.ns)));
   const parts: GeoPart[] = [];
   const back = new THREE.Color(V.back);
   const eye = eyeSpec(W, Hh, L, prof);
   for (const sx of [-1, 1]) {
-    parts.push({ g: new THREE.SphereGeometry(eye.er, 10, 8), m: TM(sx * eye.ex, eye.ey, eye.ez, 0, 0, 0, 0.6, 1, 1), c: new THREE.Color(S.shark || CETACEAN_KEYS.has(key) ? 0x1a1a1a : 0xe8dca0) });
-    if (!S.shark && !CETACEAN_KEYS.has(key)) parts.push({ g: new THREE.SphereGeometry(eye.er * 0.6, 8, 6), m: TM(sx * (eye.ex + eye.er * 0.35), eye.ey, eye.ez, 0, 0, 0, 0.5, 1, 1), c: new THREE.Color(0x0a0a0c) });
+    parts.push({ g: new THREE.SphereGeometry(eye.er, q(10), q(8)), m: TM(sx * eye.ex, eye.ey, eye.ez, 0, 0, 0, 0.6, 1, 1), c: new THREE.Color(S.shark || CETACEAN_KEYS.has(key) ? 0x1a1a1a : 0xe8dca0) });
+    if (D.pupils && !S.shark && !CETACEAN_KEYS.has(key)) parts.push({ g: new THREE.SphereGeometry(eye.er * 0.6, q(8), q(6)), m: TM(sx * (eye.ex + eye.er * 0.35), eye.ey, eye.ez, 0, 0, 0, 0.5, 1, 1), c: new THREE.Color(0x0a0a0c) });
   }
-  parts.push({ g: new THREE.BoxGeometry(W * 0.38 * prof(0.04), 0.006, L * 0.035), m: TM(0, -Hh * 0.06 * prof(0.04), -L / 2 + L * 0.03, 0, 0, 0, 1, 1, 1), c: new THREE.Color(0x24201c) });
-  if (V.bill) parts.push({ g: new THREE.ConeGeometry(0.03, 1, 8), m: TM(0, Hh * 0.02, -L / 2 - L * V.bill / 2 + 0.04, -Math.PI / 2, 0, 0, 1, L * V.bill, 1), c: back });
-  if (key === 'dolphin') parts.push({ g: new THREE.ConeGeometry(0.045, 1, 10), m: TM(0, -Hh * 0.12, -L / 2 - L * 0.05, -Math.PI / 2, 0, 0, 1, L * 0.12, 0.8), c: back });
+  if (D.mouth) parts.push({ g: new THREE.BoxGeometry(W * 0.38 * prof(0.04), 0.006, L * 0.035), m: TM(0, -Hh * 0.06 * prof(0.04), -L / 2 + L * 0.03, 0, 0, 0, 1, 1, 1), c: new THREE.Color(0x24201c) });
+  if (V.bill) parts.push({ g: new THREE.ConeGeometry(0.03, 1, Math.max(4, q(8))), m: TM(0, Hh * 0.02, -L / 2 - L * V.bill / 2 + 0.04, -Math.PI / 2, 0, 0, 1, L * V.bill, 1), c: back });
+  if (key === 'dolphin') parts.push({ g: new THREE.ConeGeometry(0.045, 1, Math.max(5, q(10))), m: TM(0, -Hh * 0.12, -L / 2 - L * 0.05, -Math.PI / 2, 0, 0, 1, L * 0.12, 0.8), c: back });
   if (key === 'hammerhead') parts.push({ g: new THREE.BoxGeometry(L * 0.3, Hh * 0.16, L * 0.07), m: TM(0, 0, -L * 0.47, 0, 0, 0, 1, 1, 1), c: back });
   return parts;
 }
