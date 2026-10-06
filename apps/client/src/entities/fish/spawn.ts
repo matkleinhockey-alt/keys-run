@@ -55,7 +55,7 @@ const SALT = {
   MEMBER_ANG: 9100, MEMBER_R: 9200, MEMBER_OY: 9300, MEMBER_PHASE: 9400, MEMBER_SCALE: 9500,
   ROAM_GATE: 9601, ROAM_SPECIES: 9602, ROAM_COUNT: 9603, ROAM_OFFSET_X: 9604, ROAM_OFFSET_Z: 9605, ROAM_HEADING: 9606,
   NEAR_GATE: 9701, NEAR_SPECIES: 9702, NEAR_COUNT: 9703, NEAR_OFFSET_X: 9704, NEAR_OFFSET_Z: 9705,
-  NEAR_HEADING: 9706, NEAR_ANCHOR_R: 9707,
+  NEAR_HEADING: 9706, NEAR_ANCHOR_R: 9707, NEAR_BIG: 9708,
 } as const;
 
 /**
@@ -327,6 +327,37 @@ const NEAR_DENSITY_FACTOR = 2.6;
  * grunts, mackerel — and leaves solitary ambush predators (grouper, barracuda, goliath) to the
  * resident layer, where one of them holding a ledge is the point. */
 const NEAR_MIN_SCHOOL = 4;
+/**
+ * Chance that a near-field cell rolls a **big solitary fish** instead of a shoal.
+ *
+ * Without this the near field was shoaling species only, by construction — so the dense layer the
+ * diver actually swims through contained nothing but small schooling fish, and every grouper,
+ * barracuda, tarpon, shark and ray was left to the sparse 220 m resident layer where you almost
+ * never meet one. That is the opposite of the intent: the brief's whole point is that the big
+ * fish are the star, and the small schools are the thing that reacts to them.
+ *
+ * Deliberately a minority of cells. A reef where every patch holds a grouper is as wrong as one
+ * holding none — the point is that you round a coral head and there is something big there.
+ */
+const NEAR_BIG_CHANCE = 0.22;
+/** A species qualifies as a "big" near-field pick on body length, not school size — this is about
+ * what reads as substantial at 10 m underwater. */
+const NEAR_BIG_MIN_LEN = 0.85;
+
+/** `ZONE_LIFE` filtered to the big-bodied species — the near field's "statement fish" pick.
+ * Marine mammals stay excluded here too: a manatee or a dolphin pod is an event the resident/
+ * roaming layers own, and making them a 1-in-5 cell roll would cheapen them. */
+const _bigTables = new Map<string, ReadonlyArray<readonly [string, number]>>();
+function bigTable(key: string, table: ReadonlyArray<readonly [string, number]>): ReadonlyArray<readonly [string, number]> {
+  const hit = _bigTables.get(key);
+  if (hit) return hit;
+  const out = table.filter(([k]) => {
+    const V = VIS[k];
+    return !!V && V.len >= NEAR_BIG_MIN_LEN && V.catchable !== false;
+  });
+  _bigTables.set(key, out);
+  return out;
+}
 
 /** `ZONE_LIFE` table filtered to the shoaling species, with weights re-normalised. Memoised per
  * habitat key because it is pure and is otherwise recomputed for every candidate cell. */
@@ -353,9 +384,14 @@ export function nearFieldForCell(seed: number, cellX: number, cellZ: number): Re
   const d = depthAt(cx, cz);
   const life = lifeTableFor(cx, cz, zoneAt(cx, cz), d, true);
   if (!life) return null;
-  const table = shoalingTable(`${life.table.length}:${life.density}`, life.table);
-  if (table.length === 0) return null;
   if (hashCell(seed, cellX, cellZ, SALT.NEAR_GATE) >= life.density * NEAR_DENSITY_FACTOR) return null;
+
+  // A minority of cells hold a big solitary fish rather than a shoal — see NEAR_BIG_CHANCE.
+  const tableKey = `${life.table.length}:${life.density}`;
+  const wantBig = hashCell(seed, cellX, cellZ, SALT.NEAR_BIG) < NEAR_BIG_CHANCE;
+  const big = wantBig ? bigTable(tableKey, life.table) : [];
+  const table = big.length > 0 ? big : shoalingTable(tableKey, life.table);
+  if (table.length === 0) return null;
 
   const type = weightedPick(() => hashCell(seed, cellX, cellZ, SALT.NEAR_SPECIES), table);
   const V = VIS[type];

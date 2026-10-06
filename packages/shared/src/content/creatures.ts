@@ -180,26 +180,26 @@ export const ZONE_LIFE: Record<string, Array<[string, number]>> = {
   // Mangrove creek channels — juveniles sheltering along the edges.
   'Creek':[['snook',3],['redfish',2.5],['tarpon',1.5],['manatee',1],['mangrove',3.5],['ladyfish',2.5],['trout',1.5],['jackcrevalle',1]],
   // Very shallow skinny water — bonefish/permit on the sand, small sharks cruising the edges.
-  'Flats':[['bonefish',5],['permit',2.2],['stingray',3],['redfish',1.5],['barracuda',2],['blacktip',1.5],['lemonshark',1],['eagleray',1],['ladyfish',3],['pompano',1.2],['palometa',3],['bluerunner',2]],
+  'Flats':[['bonefish',5],['permit',2.2],['stingray',3],['redfish',1.5],['barracuda',2],['blacktip',1.5],['lemonshark',1],['eagleray',1],['ladyfish',3],['pompano',1.2],['palometa',3],['bluerunner',2],['manatee',.7]],
   // Florida Bay backcountry — juvenile snapper, small barracuda, rays on the sand, baitfish
   // schools, manatees in the shallows, and dolphin pods working the bay ("the bay" in the task
   // brief).
   'Backcountry':[['redfish',4],['snook',3],['trout',3],['mangrove',2.5],['tarpon',2],['bonefish',1.5],['permit',1],['barracuda',1.2],['manatee',1.2],['stingray',2.2],['jackcrevalle',2],['ladyfish',3],['pompano',1.5],['tripletail',.6],['dolphin',1.5]],
   // Bridge pilings and the channels that run under them — structure-holders in current. Dolphin
   // pods regularly work the bridge channels for bait pushed through on the tide.
-  'Bridge':[['tarpon',5],['snook',2],['mangrove',3],['eagleray',1],['sheepshead',3],['goliath',.6],['jackcrevalle',1.5],['nurse',1],['cobia',1],['barracuda',1],['dolphin',1.2],['lookdown',3.5],['bluerunner',4],['schoolmaster',2]],
+  'Bridge':[['tarpon',5],['snook',2],['mangrove',3],['eagleray',1],['sheepshead',3],['goliath',.6],['jackcrevalle',1.5],['nurse',1],['cobia',1],['barracuda',1],['dolphin',1.2],['lookdown',3.5],['bluerunner',4],['schoolmaster',2],['manatee',.9]],
   // Mixed mid-water schools, mackerel and jacks between the Bay and the reef line — classic
   // bottlenose water, hence the higher dolphin weight ("less rare" per the task brief).
-  'Hawk Channel':[['mangrove',4],['eagleray',2],['turtle',1.5],['barracuda',2],['nurse',1.5],['mutton',2],['dolphin',1.8],['cero',2],['pompano',1.5],['cobia',1],['graytrigger',1.2],['jackcrevalle',1.8],['yellowtail',1.5],['sheepshead',1.2],['bluerunner',4.5],['lanesnapper',3],['spanishmack',3],['lookdown',1.5],['schoolmaster',2]],
+  'Hawk Channel':[['mangrove',4],['eagleray',2],['turtle',1.5],['barracuda',2],['nurse',1.5],['mutton',2],['dolphin',1.8],['cero',2],['pompano',1.5],['cobia',1],['graytrigger',1.2],['jackcrevalle',1.8],['yellowtail',1.5],['sheepshead',1.2],['tarpon',1.6],['goliath',.5],['bullshark',.35],['bluerunner',4.5],['lanesnapper',3],['spanishmack',3],['lookdown',1.5],['schoolmaster',2]],
   // Patch reef / Sombrero crest — the existing shallow reef life (depthAt < REEF_WALL_DEPTH).
   // Dolphins work the reef line hunting bait off the coral too.
-  'Reef':[['yellowtail',5],['parrotfish',3],['angelfish',2],['hogfish',2],['grouper',2],['gag',1.2],['redgrouper',1.2],['nurse',1],['turtle',1.5],['barracuda',1.5],['mutton',2],['lionfish',1.5],['graytrigger',2],['cero',2],['goliath',.4],['dolphin',1],['schoolmaster',4.5],['lanesnapper',3.5],['bluerunner',4],['vermilion',2],['spanishmack',2]],
+  'Reef':[['yellowtail',5],['parrotfish',3],['angelfish',2],['hogfish',2],['grouper',2],['gag',1.2],['redgrouper',1.2],['nurse',1],['turtle',1.5],['barracuda',1.5],['mutton',2],['lionfish',1.5],['graytrigger',2],['cero',2],['goliath',1.1],['hammerhead',.3],['bullshark',.3],['tarpon',1.2],['dolphin',1],['schoolmaster',4.5],['lanesnapper',3.5],['bluerunner',4],['vermilion',2],['spanishmack',2]],
   // The reef wall's top and ledges (depthAt in [REEF_WALL_DEPTH, DEEP_WALL_DEPTH), spawn.ts) —
   // docs/ARCHITECTURE.md bands 3-4 (reef wall top / elkhorn-staghorn, ledges and overhangs):
   // grouper holding on ledges, bigger snapper/jack schools working the drop, dolphins cruising
   // the wall edge. `DeepWall` below (band 5, >= DEEP_WALL_DEPTH) used to be the same table all the
   // way to 45 m — split out so the deep wall/wreck band actually feels different, not just emptier.
-  'ReefWall':[['grouper',3],['gag',2],['redgrouper',2],['yellowtail',4],['mutton',2.5],['amberjack',2],['kingfish',1.5],['cero',1.5],['nurse',1],['goliath',.6],['graytrigger',1.2],['lionfish',1],['hammerhead',.3],['cobia',1],['dolphin',1.3],['vermilion',5],['bluerunner',3],['schoolmaster',2]],
+  'ReefWall':[['grouper',3],['gag',2],['redgrouper',2],['yellowtail',4],['mutton',2.5],['amberjack',2],['kingfish',1.5],['cero',1.5],['nurse',1],['goliath',.6],['graytrigger',1.2],['lionfish',1],['hammerhead',.8],['bullshark',.5],['cobia',1],['dolphin',1.3],['vermilion',5],['bluerunner',3],['schoolmaster',2]],
   // The deep wall and wrecks (depthAt >= DEEP_WALL_DEPTH, spawn.ts) — docs/ARCHITECTURE.md band 5
   // (20 m+, "deep wall, wrecks, the Humps... torch required, blackout risk"). Bigger-bodied
   // structure-holders and more apex presence than the wall top, less of the small schooling

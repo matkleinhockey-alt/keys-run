@@ -33,6 +33,28 @@ import { clamp, lerp } from '../internal/math.js';
 // re-exported so callers don't need a second import just for the zone key union
 export type { Zone };
 
+/** Spool radius with a full load of line, metres — a 50-size conventional reel's arbor plus
+ * ~300 m of 30 lb mono. */
+export const SPOOL_FULL_R = 0.045;
+/** Bare-arbor radius, metres: the floor `spoolRadiusFor` approaches as line runs out. */
+export const SPOOL_ARBOR_R = 0.019;
+/** Line length (m) at which the spool is treated as down to the arbor. Past this the radius stays
+ * at `SPOOL_ARBOR_R` rather than going imaginary. */
+export const SPOOL_EMPTY_AT = 260;
+
+/**
+ * Effective spool radius for `lineOut` metres of line already paid out.
+ *
+ * Line lies on the spool in layers, so the radius falls as the square root of the remaining line,
+ * not linearly — that is why the pitch of a screaming drag climbs slowly at first and then runs
+ * away near the end of a long run.
+ */
+export function spoolRadiusFor(lineOut: number): number {
+  const remaining = clamp(1 - lineOut / SPOOL_EMPTY_AT, 0, 1);
+  const r2 = SPOOL_ARBOR_R * SPOOL_ARBOR_R + remaining * (SPOOL_FULL_R * SPOOL_FULL_R - SPOOL_ARBOR_R * SPOOL_ARBOR_R);
+  return Math.sqrt(r2);
+}
+
 /** legacy `rand(a,b)` (index.html:323) — uniform draw from the injected stream, not `Math.random()`. */
 function rand(rng: Rng, a: number, b: number): number {
   return a + (b - a) * rng();
@@ -186,6 +208,25 @@ export interface FightState {
   deep: number;
   deepT: number;
   dist: number;
+  /**
+   * Rate of change of `dist`, m/s, signed: **positive = line paying off the spool**, negative =
+   * line coming back on. This is not a cosmetic number — it is literally `d(dist)/dt`, and line
+   * length *is* the fish-to-boat distance, so it is the physically correct line speed with no
+   * extra model needed.
+   *
+   * Exists because a reel's drag clicker ticks at a rate proportional to spool RPM, and RPM is
+   * line speed over spool radius. Before this the clicker had three hardcoded rates switched by
+   * a mode enum, which is why it read as a synth buzz rather than a drag: a fish screaming off at
+   * 8 m/s and one easing away at 0.5 m/s made the identical sound.
+   */
+  lineSpeed: number;
+  /**
+   * Effective spool radius, metres, shrinking as line pays out — see `SPOOL_FULL_R`.
+   * `rpm = lineSpeed / (2*PI*spoolR)`, which is what gives a long run its rising scream: the
+   * further the fish goes the smaller the spool gets and the faster it has to spin for the same
+   * line speed. Purely a function of `dist`, so it needs no state of its own.
+   */
+  spoolR: number;
   outcome: FightOutcome;
   events: FightEvent[];
 }
@@ -201,7 +242,7 @@ export function startFight(params: FightParams, fishX: number, fishZ: number, rn
     shake: 0.5, shakeT: rand(rng, 0.6, 1.4),
     jumpQ: 0, airborne: false, airT: 0,
     deep: 0, deepT: 0,
-    dist: 0,
+    dist: 0, lineSpeed: 0, spoolR: SPOOL_FULL_R,
     outcome: 'fighting',
     events: [{ type: 'splash', x: fishX, z: fishZ, big: true }],
   };
@@ -311,7 +352,18 @@ export function stepFight(state: FightState, input: FightInput, params: FightPar
     if (next.slackT > 2.6) { next.outcome = 'slack'; return next; }
   } else next.slackT = 0;
 
+  const prevDist = next.dist;
   next.dist = Math.hypot(next.x - env.boatX, next.z - env.boatZ);
+  // Line speed is exactly d(dist)/dt, because line length *is* fish-to-boat distance. Positive =
+  // paying off the spool. `prevDist === 0` on the first tick (startFight has no distance yet), so
+  // that one frame is skipped rather than reporting a spurious 30 m/s from 0 -> dist.
+  const rawLineSpeed = prevDist > 0 && dt > 0 ? (next.dist - prevDist) / dt : 0;
+  // Smoothed a little: the per-tick delta is noisy (the fish's run heading re-rolls, the boat
+  // bobs), and an unsmoothed value makes the drag clicker chatter between rates instead of
+  // sweeping. Time-constant ~80 ms — fast enough that the first scream of a run is still sudden.
+  const k = Math.min(1, dt / 0.08);
+  next.lineSpeed = next.lineSpeed + (rawLineSpeed - next.lineSpeed) * k;
+  next.spoolR = spoolRadiusFor(next.dist);
   if (next.dist > params.maxLine) { next.outcome = 'spooled'; return next; }
   if (landH(next.x, next.z) > 0.2) { next.outcome = 'mangrove'; return next; }
   if (rng() < dt * 1.5) next.events.push({ type: 'splash', x: next.x, z: next.z, big: false });
