@@ -39,249 +39,12 @@
 import * as THREE from 'three';
 import { makeFishMesh } from '../fishing/fish-mesh.js';
 import { buildOffscreenRig, readback, buildGradientEnv, resyncRigSize, type OffscreenRig } from './render-pipeline.js';
+import { buildFigure, type Figure } from './figure.js';
 
 export interface UnderwaterTrophy {
   show(color: string, lenM: number): void;
   render(renderer: THREE.WebGLRenderer, t: number): void;
   clear(): void;
-}
-
-// ---- two-bone IK (legacy index.html:1331-1333's `solve`, ported) -----------------------------
-
-interface IKResult { elbow: THREE.Vector3; hand: THREE.Vector3; dir: THREE.Vector3 }
-
-function solveIK(shoulder: THREE.Vector3, target: THREE.Vector3, l1: number, l2: number, pole: THREE.Vector3): IKResult {
-  const d = target.clone().sub(shoulder);
-  const len = Math.min(d.length(), l1 + l2 - 0.003) || 0.001;
-  const dir = d.clone().normalize();
-  const a1 = (l1 * l1 - l2 * l2 + len * len) / (2 * len);
-  const h = Math.sqrt(Math.max(0, l1 * l1 - a1 * a1));
-  const pp = pole.clone();
-  pp.addScaledVector(dir, -pp.dot(dir));
-  if (pp.lengthSq() < 1e-6) pp.set(0, 1, 0).addScaledVector(dir, -pp.dot(dir));
-  pp.normalize();
-  const elbow = shoulder.clone().addScaledVector(dir, a1).addScaledVector(pp, h);
-  const hand = shoulder.clone().addScaledVector(dir, len);
-  return { elbow, hand, dir };
-}
-
-/** Orients a unit-height (built with height=1) cylinder mesh to run from `a` to `b` — legacy's
- * `setLimb`, ported. */
-function setLimb(mesh: THREE.Mesh, a: THREE.Vector3, b: THREE.Vector3): void {
-  const d = b.clone().sub(a);
-  const len = d.length() || 0.001;
-  mesh.position.copy(a).addScaledVector(d, 0.5);
-  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.clone().multiplyScalar(1 / len));
-  mesh.scale.set(1, len, 1);
-}
-
-// ---- the diver figure --------------------------------------------------------------------------
-
-interface Arm {
-  sx: -1 | 1;
-  shoulder: THREE.Vector3;
-  upper: THREE.Mesh;
-  fore: THREE.Mesh;
-  elbow: THREE.Mesh;
-  hand: THREE.Mesh;
-}
-
-interface DiverFigure {
-  group: THREE.Group;
-  arms: [Arm, Arm];
-  /** Poses both arms so each hand lands exactly on the given world (pivot-local) target —
-   * called once per `show()` with the fish's own grip points. */
-  poseArms(targetA: THREE.Vector3, targetB: THREE.Vector3): void;
-  /** The points `show()`'s camera-fit should actually care about: head top, snorkel top, both
-   * shoulders, both (posed) hands — deliberately NOT the torso/tank, which are allowed to run out
-   * the bottom of frame (see TORSO_BOTTOM_Y's comment). Call after `poseArms`. */
-  framePoints(): THREE.Vector3[];
-  dispose(): void;
-}
-
-const L1 = 0.27; // upper arm
-const L2 = 0.25; // forearm
-
-function buildDiverFigure(): DiverFigure {
-  const group = new THREE.Group();
-  const geos: THREE.BufferGeometry[] = [];
-  const mats: THREE.Material[] = [];
-  // 14 radial segments (was 10) — a cheap, direct fix for the "boxy limbs" note in this task's
-  // brief: at 10 segments a smooth-shaded cylinder still reads as faceted at this card's close
-  // framing, and this geometry is built once per catch (human-interaction frequency, not
-  // per-frame — see fish-mesh.ts's header for the same reasoning), so the extra triangles cost
-  // nothing that matters.
-  const unitCyl = (r0: number, r1: number, seg = 14): THREE.CylinderGeometry => {
-    const g = new THREE.CylinderGeometry(r1, r0, 1, seg);
-    geos.push(g);
-    return g;
-  };
-
-  // `flatShading: true` (the first pass's choice, everywhere) was the other big contributor to
-  // "boxy": it forces per-face normals even on these already-round primitives, so every cylinder
-  // segment and sphere facet reads as a distinct flat plane instead of a continuous curved
-  // surface. Smooth-shaded (the default) here throughout.
-  //
-  // Lighter than a real neoprene black on purpose — a literal near-black wetsuit against this
-  // scene's dark blue-green backdrop measured as nearly invisible in the first render pass (see
-  // this task's report): "wetsuit-dark-teal" reads as a wetsuit while actually catching the key
-  // light enough to silhouette against the water behind it.
-  //
-  // Wetsuit/skin are `MeshPhysicalMaterial` with a light clearcoat — the same "wet" treatment
-  // underwater-trophy.ts already gives the fish itself (`applyWetFishMaterial`, below), so the
-  // diver's skin/neoprene reads as genuinely wet rather than the fish being the only surface in
-  // frame with any sheen. Noticeably less clearcoat than the fish's 0.45 — neoprene isn't as
-  // glossy as wet fish skin, and over-doing it here made the wetsuit look like plastic.
-  const wetsuit = new THREE.MeshPhysicalMaterial({ color: 0x2d4f58, roughness: 0.45, metalness: 0.1, clearcoat: 0.25, clearcoatRoughness: 0.4 });
-  const glove = new THREE.MeshStandardMaterial({ color: 0x23282d, roughness: 0.55 });
-  const skin = new THREE.MeshPhysicalMaterial({ color: 0xc9916b, roughness: 0.5, clearcoat: 0.2, clearcoatRoughness: 0.45 });
-  const maskGlass = new THREE.MeshStandardMaterial({ color: 0x0a0e12, roughness: 0.08, metalness: 0.3 });
-  const maskFrame = new THREE.MeshStandardMaterial({ color: 0x2b3238, roughness: 0.5 });
-  // Dark rubber, not a bright accent colour — the first pass made the snorkel the single most
-  // visually dominant thing in frame by giving it the only saturated colour anywhere on the
-  // figure. A small bright purge-valve accent (near the mouthpiece) is plenty.
-  const snorkelMat = new THREE.MeshStandardMaterial({ color: 0x24292e, roughness: 0.5 });
-  const accentMat = new THREE.MeshStandardMaterial({ color: 0xf2c14e, roughness: 0.4 });
-  mats.push(wetsuit, glove, skin, maskGlass, maskFrame, snorkelMat, accentMat);
-
-  const shoulderY = 0.12, chestZ = -0.03;
-  // Deliberately cropped at the chest, not the real waist: there are no legs (the frame never
-  // shows them) and a flat-bottomed cylinder — rather than a capsule's rounded cap — reads as
-  // "continues below, just out of frame" instead of "this is where the body actually ends".
-  // Keeping it short also keeps the auto-fit camera (see show()'s bounding-box framing) from
-  // zooming out to fit a tall, mostly-empty lower torso the shot was never meant to show.
-  const TORSO_BOTTOM_Y = -0.22, TORSO_TOP_Y = shoulderY + 0.03;
-  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.155, 0.185, TORSO_TOP_Y - TORSO_BOTTOM_Y, 18), wetsuit);
-  torso.position.set(0, (TORSO_TOP_Y + TORSO_BOTTOM_Y) / 2, chestZ);
-  group.add(torso);
-
-  // a BCD-ish ridge + a hint of tank, same cheap read as entities/diver/model.ts's own placeholder.
-  const tank = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.26, 4, 8), new THREE.MeshStandardMaterial({ color: 0x8a8f94, roughness: 0.35, metalness: 0.5 }));
-  tank.position.set(0, TORSO_TOP_Y - 0.16, chestZ - 0.2);
-  group.add(tank);
-  mats.push(tank.material as THREE.Material);
-
-  // shoulders (small caps where the arms root — helps the arm/torso joint read as one body).
-  for (const sx of [-1, 1] as const) {
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.095, 14, 10), wetsuit);
-    cap.position.set(sx * 0.19, shoulderY - 0.02, chestZ);
-    group.add(cap);
-  }
-
-  // neck + head + mask + snorkel.
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.058, 0.1, 14), skin);
-  neck.position.set(0, shoulderY + 0.1, chestZ + 0.01);
-  group.add(neck);
-
-  const headY = shoulderY + 0.28;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.135, 18, 14), skin);
-  head.position.set(0, headY, chestZ + 0.02);
-  group.add(head);
-
-  // A flattened sphere ("lens" shape) rather than the first pass's flat BoxGeometry — a box's
-  // corner vertices can't share smooth normals across perpendicular faces no matter the shading
-  // mode, so it stayed visibly boxy even after the flatShading fix above; a sphere is smooth by
-  // construction and scales down to the same rounded-rectangle silhouette a real dive mask lens
-  // has.
-  const mask = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), maskGlass);
-  mask.scale.set(0.105, 0.05, 0.025);
-  mask.position.set(0, headY - 0.01, chestZ + 0.02 + 0.105);
-  group.add(mask);
-  const maskRim = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.016, 6, 16), maskFrame);
-  maskRim.position.copy(mask.position);
-  maskRim.position.z -= 0.015;
-  group.add(maskRim);
-  const strap = new THREE.Mesh(new THREE.TorusGeometry(0.135, 0.012, 6, 12, Math.PI), maskFrame);
-  strap.position.set(0, headY - 0.01, chestZ + 0.02 - 0.02);
-  strap.rotation.y = Math.PI / 2;
-  group.add(strap);
-
-  // snorkel: mouthpiece near the mask's lower side, a bent tube running up past the top of the
-  // head — two straight segments read fine as a "J" at this fidelity. Shorter than a first pass
-  // of this (headY+0.32, nearly 1.4x the head's own radius above the head top) — still clearly a
-  // snorkel, without being the single tallest, most attention-grabbing shape in the frame.
-  const snorkA = new THREE.Vector3(0.1, headY - 0.1, chestZ + 0.09);
-  const snorkB = new THREE.Vector3(0.13, headY + 0.07, chestZ + 0.05);
-  const snorkC = new THREE.Vector3(0.13, headY + 0.22, chestZ + 0.03);
-  const snork1 = new THREE.Mesh(unitCyl(0.017, 0.017, 8), snorkelMat);
-  setLimb(snork1, snorkA, snorkB);
-  group.add(snork1);
-  const snork2 = new THREE.Mesh(unitCyl(0.015, 0.015, 8), snorkelMat);
-  setLimb(snork2, snorkB, snorkC);
-  group.add(snork2);
-  // Small bright purge-valve accent — the snorkel's one deliberate pop of colour, not the whole tube.
-  const purge = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.019, 0.03, 8), accentMat);
-  setLimb(purge, snorkB.clone().add(new THREE.Vector3(0, -0.015, 0)), snorkB.clone().add(new THREE.Vector3(0, 0.015, 0)));
-  group.add(purge);
-  const mouthpiece = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 6), new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.6 }));
-  mouthpiece.position.copy(snorkA);
-  group.add(mouthpiece);
-  mats.push(mouthpiece.material as THREE.Material);
-
-  // arms, built in a neutral pose — poseArms() re-solves them per catch.
-  const buildArm = (sx: -1 | 1): Arm => {
-    const shoulder = new THREE.Vector3(sx * 0.19, shoulderY - 0.02, chestZ);
-    const upper = new THREE.Mesh(unitCyl(0.052, 0.045), wetsuit);
-    const fore = new THREE.Mesh(unitCyl(0.044, 0.036), wetsuit);
-    const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.046, 14, 10), wetsuit);
-    // A short capsule (rotated so its long axis is Z, matching the grip-direction quaternion
-    // below — same "build pre-rotated, orient with setFromUnitVectors" convention `unitCyl`/
-    // `setLimb` use for the limbs) rather than a plain sphere — it reads as a loosely-closed fist
-    // wrapped around the fish instead of a ball balanced against it, while the IK math below
-    // (`poseArms`) still only ever positions and orients this mesh, never reshapes it.
-    // Not pushed to `geos` (disposed in bulk below) — `dispose()` already frees each arm's own
-    // `hand.geometry` individually, same as it already does for `elbow`'s.
-    const hand = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.028, 4, 12).rotateX(Math.PI / 2), glove);
-    group.add(upper, fore, elbow, hand);
-    return { sx, shoulder, upper, fore, elbow, hand };
-  };
-  const arms: [Arm, Arm] = [buildArm(-1), buildArm(1)];
-
-  function poseArms(targetA: THREE.Vector3, targetB: THREE.Vector3): void {
-    // Nearest-shoulder assignment so the arms never cross — try both pairings, keep the shorter.
-    const dAA = arms[0].shoulder.distanceToSquared(targetA) + arms[1].shoulder.distanceToSquared(targetB);
-    const dAB = arms[0].shoulder.distanceToSquared(targetB) + arms[1].shoulder.distanceToSquared(targetA);
-    const [tL, tR] = dAA <= dAB ? [targetA, targetB] : [targetB, targetA];
-    for (const [arm, target] of [[arms[0], tL], [arms[1], tR]] as const) {
-      const pole = new THREE.Vector3(arm.sx * 0.5, -0.85, 0.5);
-      const { elbow, hand } = solveIK(arm.shoulder, target, L1, L2, pole);
-      setLimb(arm.upper, arm.shoulder, elbow);
-      setLimb(arm.fore, elbow, hand);
-      arm.elbow.position.copy(elbow);
-      arm.hand.position.copy(hand);
-      // A slight squeeze/elongation along the grip direction reads a little more like a wrapped
-      // hand than a bare ball, cheaply.
-      const gripDir = target.clone().sub(elbow).normalize();
-      arm.hand.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), gripDir);
-      arm.hand.scale.set(1.25, 0.95, 0.85);
-    }
-  }
-
-  function framePoints(): THREE.Vector3[] {
-    return [
-      new THREE.Vector3(0, headY + 0.145, chestZ), // head top, a touch past the sphere radius
-      snorkC.clone(),
-      arms[0].shoulder.clone(), arms[1].shoulder.clone(),
-      arms[0].hand.position.clone(), arms[1].hand.position.clone(),
-    ];
-  }
-
-  function dispose(): void {
-    for (const g of geos) g.dispose();
-    for (const m of mats) m.dispose();
-    torso.geometry.dispose();
-    tank.geometry.dispose();
-    head.geometry.dispose();
-    mask.geometry.dispose();
-    maskRim.geometry.dispose();
-    strap.geometry.dispose();
-    neck.geometry.dispose();
-    mouthpiece.geometry.dispose();
-    purge.geometry.dispose();
-    for (const a of arms) { a.elbow.geometry.dispose(); a.hand.geometry.dispose(); }
-  }
-
-  return { group, arms, poseArms, framePoints, dispose };
 }
 
 // ---- underwater environment --------------------------------------------------------------------
@@ -349,7 +112,7 @@ function buildParticulate(): THREE.Points {
 
 interface TrophyRig extends OffscreenRig {
   pivot: THREE.Group;
-  diver: DiverFigure | null;
+  diver: Figure | null;
   fish: THREE.Group | null;
   particulate: THREE.Points;
   key: THREE.DirectionalLight;
@@ -447,7 +210,7 @@ export function createUnderwaterTrophy(canvasId: string): UnderwaterTrophy {
     if (r.diver) { r.pivot.remove(r.diver.group); r.diver.dispose(); r.diver = null; }
     if (r.fish) { r.pivot.remove(r.fish); disposeFishMesh(r.fish); r.fish = null; }
 
-    const diver = buildDiverFigure();
+    const diver = buildFigure('diver');
     r.pivot.add(diver.group);
     r.diver = diver;
 

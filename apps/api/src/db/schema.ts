@@ -78,16 +78,25 @@ export const players = pgTable('players', {
 });
 
 /**
- * Append-only ledger of landed fish. Server-written only — see
+ * Append-only ledger of landed fish. Originally server-written only — see
  * ARCHITECTURE.md "The leaderboard is reachable only through server-generated
- * catch rows": there is no endpoint in this service that inserts a row here
- * from a client-supplied species/weight. In Phase 1 (no `sim` yet) the only
- * writers are apps/api/src/db/seed.ts and test fixtures.
+ * catch rows" — with writers limited to apps/api/src/db/seed.ts and test
+ * fixtures.
  *
- * `suspicion` is a per-catch anti-cheat score (Phase 3+ will populate it from
- * the KS-test / fight-duration checks ARCHITECTURE.md describes under "Rod
- * fishing, server-authoritative"); the partial index lets the sim/ops tooling
- * scan flagged catches without ever touching the (much larger) clean set.
+ * `routes/catches.ts` now also writes here, from an authenticated client
+ * POST. Read that route's doc comment for the full honesty tradeoff: it is a
+ * deliberate interim step short of real server authority (which needs the
+ * sim to own the fight, phase 3), not a quiet reversal of the rule above.
+ *
+ * `suspicion` is a per-catch anti-cheat score — currently populated by
+ * routes/catches.ts's species/weight-range check (lib/catch-validation.ts),
+ * with Phase 3+ expected to add the KS-test / fight-duration checks
+ * ARCHITECTURE.md describes under "Rod fishing, server-authoritative". A
+ * `suspicion > 0` row is still written (this ledger is append-only, so the
+ * board can always be rebuilt) but is excluded from `global_records`/
+ * `species_records` by `lib/records.ts`'s `recordCatch` — the partial index
+ * below lets ops tooling scan flagged catches without touching the (much
+ * larger) clean set.
  */
 export const catches = pgTable('catches', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -107,8 +116,10 @@ export const catches = pgTable('catches', {
  * (any species) plus their total landed-fish count. This is the
  * "top_overall" table the brief refers to — `/leaderboard/overall` reads
  * this directly (ORDER BY weight_lb DESC LIMIT 100), never `catches`.
- * Maintained incrementally by apps/api/src/db/records.ts whenever a catch
- * row is written (seed/tests in Phase 1; the `sim` service from Phase 2 on).
+ * Maintained incrementally by apps/api/src/lib/records.ts's `recordCatch`
+ * whenever a non-suspicious catch row is written (seed/tests, or
+ * routes/catches.ts's authenticated client POST — see that route's doc
+ * comment). A `suspicion > 0` catch is deliberately skipped here.
  */
 export const globalRecords = pgTable('global_records', {
   userId: uuid('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),

@@ -4,10 +4,12 @@
  * keep/release choice. This is the one path both game/fishing and entities/speargun feed into —
  * see createCatchFlow's `landFish`.
  *
- * Session score/slam tracking here is a **client-local stand-in for a leaderboard, not a
- * leaderboard** — docs/ARCHITECTURE.md is explicit that the real leaderboard is reachable only
- * through server-generated catch rows (phase 3, a different agent's scope). Nothing here writes
- * anywhere persistent or calls a server.
+ * Session score/slam tracking here is a client-local stand-in for competitive scoring — it always
+ * runs, online or offline, and is never gated on the server call below. `landFish` also reports
+ * the catch to apps/api via ui/leaderboard/submit-catch.ts's `submitCatch`, which is a no-op when
+ * offline/logged out and never throws — see that module's header and apps/api/src/routes/
+ * catches.ts's doc comment for the honesty tradeoff that write is a deliberate, documented interim
+ * step short of real server authority (docs/ARCHITECTURE.md phase 3).
  */
 import * as THREE from 'three';
 import type { BoatModel } from '../../entities/boat/model.js';
@@ -20,6 +22,7 @@ import { ZONE_DESC } from '@keysrun/shared/world/depth';
 import { shoreInfo } from '@keysrun/shared/world/chain';
 import { clamp } from '../../core/math.js';
 import { toast } from '../../ui/toast.js';
+import { submitCatch } from '../../ui/leaderboard/submit-catch.js';
 import { beamBetween } from '../../entities/boat/hull.js';
 import { makeFishMesh } from '../fishing/fish-mesh.js';
 import { createCooler, meatLine, nearMarina, type CoolerFish } from './cooler.js';
@@ -185,6 +188,11 @@ export function createCatchFlow(deps: CatchFlowDeps) {
     if (!session.slam1 && ['tarpon', 'bonefish', 'permit'].every((k) => session.caught.has(k))) { session.slam1 = true; session.score += 1000; bonus = 'Inshore grand slam · +1,000'; }
     if (!session.slam2 && ['sailfish', 'mahi', 'wahoo'].every((k) => session.caught.has(k))) { session.slam2 = true; session.score += 1500; bonus = (bonus ? bonus + ' · ' : '') + 'Blue water slam · +1,500'; }
     if (!session.best || pts > session.best.pts) session.best = { name: S.name, w: fish.weight, pts };
+
+    // Fire-and-forget report to the real leaderboard (apps/api). Wrapped defensively even though
+    // submitCatch itself never throws (see its own header) — nothing downstream of a landed fish
+    // may ever be allowed to break the catch card or the frame loop over this.
+    try { submitCatch(fish.key, fish.weight); } catch (e) { console.error('submitCatch', e); }
 
     const fs = fishStats(fish.key, fish.weight);
     lastPts = pts; lastStats = fs; current = fish; caughtAt = performance.now();
