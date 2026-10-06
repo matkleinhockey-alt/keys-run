@@ -66,6 +66,10 @@
       "types": "./dist/sim/spear.d.ts",
       "default": "./dist/sim/spear.js"
     },
+    "./sim/race": {
+      "types": "./dist/sim/race.d.ts",
+      "default": "./dist/sim/race.js"
+    },
     "./proto": {
       "types": "./dist/proto/index.d.ts",
       "default": "./dist/proto/index.js"

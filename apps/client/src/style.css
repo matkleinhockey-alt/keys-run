@@ -262,3 +262,22 @@ body.photoing #gauges,body.photoing #mapbox,body.photoing #scorebox,body.photoin
   #diverHud{left:10px;top:10px}
   #breathBar{padding:9px 12px;min-width:140px}
 }
+
+/* --- race mode (game/race/**) ------------------------------------------- */
+.raceHud{position:absolute;left:50%;top:84px;transform:translateX(-50%);z-index:6;pointer-events:none;
+  font:600 13px/1.25 system-ui,-apple-system,sans-serif;color:#eaf4f8;text-align:center;
+  background:rgba(6,24,40,.62);backdrop-filter:blur(7px);border:1px solid rgba(160,220,240,.16);
+  border-radius:12px;padding:10px 16px;min-width:220px;box-shadow:0 6px 22px rgba(0,0,0,.3)}
+.raceBig{font-size:54px;font-weight:800;line-height:1;color:var(--sun,#f2c14e);text-shadow:0 2px 14px rgba(0,0,0,.5)}
+.raceSub{opacity:.72;font-weight:500;margin-top:4px}
+.raceTop{display:flex;gap:14px;align-items:baseline;justify-content:center}
+.raceTop i{font-style:normal;opacity:.5;font-size:11px}
+.racePlace{font-size:20px;font-weight:800;color:var(--sun,#f2c14e)}
+.raceLap{font-size:15px}
+.raceClock{font-variant-numeric:tabular-nums;font-size:15px;opacity:.9}
+.raceNext{margin-top:3px;opacity:.75;font-weight:500}
+.raceBoard{list-style:none;margin:7px 0 0;padding:0;text-align:left}
+.raceBoard li{display:flex;gap:8px;align-items:baseline;padding:1px 0;opacity:.72;font-weight:500}
+.raceBoard li.me{opacity:1;font-weight:700;color:var(--sun,#f2c14e)}
+.raceBoard li b{min-width:14px;opacity:.6;font-weight:700}
+.raceBoard li span{margin-left:auto;font-variant-numeric:tabular-nums;opacity:.8}

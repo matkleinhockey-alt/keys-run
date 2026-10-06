@@ -56,6 +56,7 @@ import { createSpeargun, type DiverAimInput, type SpearTarget } from '../entitie
 import { bindSpeargunInput } from '../entities/speargun/input.js';
 
 import { createFishing } from './fishing/index.js';
+import { createRaceMode } from './race/index.js';
 import { F as FishF, lineOut as fishingLineOut } from './fishing/state.js';
 import { createCatchFlow } from './catch/catch-flow.js';
 import { bindCatchInput } from './catch/input.js';
@@ -292,6 +293,20 @@ export function initWorld(wrap: HTMLElement): World {
   document.getElementById('btnSound')?.addEventListener('click', () => { audio.init(); audio.toggleMute(); });
   const btnMusicEl = document.getElementById('btnMusic');
   btnMusicEl?.addEventListener('click', () => { audio.music.toggle(); });
+  // Race mode (game/race/**). Built once at boot but inert and invisible until started — its
+  // update() returns immediately while idle, so it costs nothing in normal play. Both the 🏁
+  // button and R toggle it.
+  const raceMode = createRaceMode({ scene, wrap, particles, toast });
+  // DEV/VERIFICATION HOOK ONLY — same spirit as __fishDebug/__diverDebug. No normal code path
+  // reads this; it exists so a screenshot/probe script can assert the field is actually running
+  // the course rather than inferring it from the HUD.
+  (window as unknown as { __raceDebug?: unknown }).__raceDebug = {
+    start: () => raceMode.start(),
+    abort: () => raceMode.abort(),
+    state: () => raceMode.state(),
+    opponents: () => raceMode.debugOpponents(),
+  };
+  document.getElementById('btnRace')?.addEventListener('click', () => raceMode.toggle());
   document.getElementById('btnBuddy')?.addEventListener('click', () => life.toggleBuddy());
   document.getElementById('btnSun')?.addEventListener('click', () => tod.toggleSunset());
   const camFwd = new THREE.Vector3();
@@ -369,6 +384,8 @@ export function initWorld(wrap: HTMLElement): World {
   setQualityLabels(quality.tier, false);
   window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyP') profiler.toggle();
+    // R starts a buoy race, or abandons one in progress — same toggle the 🏁 button calls.
+    if (e.code === 'KeyR') raceMode.toggle();
     if (e.code === 'KeyG') applyQuality(QUALITY_TIERS[(QUALITY_TIERS.indexOf(quality.tier) + 1) % QUALITY_TIERS.length]);
   });
   document.getElementById('btnQuality')?.addEventListener('click', () => {
@@ -827,6 +844,12 @@ export function initWorld(wrap: HTMLElement): World {
     // LOD/culling is evaluated against the real render camera, which is not the population
     // focus — see FishWorld.setCamera. Set before update() so this frame's submissions use this
     // frame's camera rather than last frame's.
+    // Race mode: checkpoint/lap scoring plus the AI field. No-op unless a race is running.
+    // Real `dt`, not the physics-clamped one: `clamped` is capped at 50 ms to keep the buoyancy
+    // accumulator stable, so on a machine running below 20 fps it advances slower than wall time
+    // — which for a *timed* race would quietly hand slow hardware a better lap time. Race scoring
+    // is not an integrator and wants real elapsed seconds.
+    raceMode.update(dt, simTime, { x: curState.x, z: curState.z });
     fishWorld.setCamera(camera);
     fishWorld.update(clamped, simTime, focus, boatThreat, fishThreats);
 
