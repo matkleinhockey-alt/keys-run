@@ -58,6 +58,20 @@ export function distAtFlightTime(t: number): number {
   return (SPEAR_SPEED / SPEAR_DRAG_K) * (1 - Math.exp(-SPEAR_DRAG_K * t));
 }
 
+/**
+ * Inverse of `distAtFlightTime`: seconds of flight to cover `dist` metres. Closed form — invert
+ * `d = (v/k)(1 - e^-kt)` to `t = -ln(1 - dk/v)/k`.
+ *
+ * Used by `assistAim` to lead a moving target by the shaft's real time of flight. The log's
+ * argument goes non-positive at the shaft's asymptotic maximum range (`v/k`, ~27.5 m — well past
+ * `SPEAR_RANGE`), so it is clamped to keep this finite for any input a caller can produce.
+ */
+export function timeToDistance(dist: number): number {
+  const maxD = SPEAR_SPEED / SPEAR_DRAG_K;
+  const frac = clamp(dist / maxD, 0, 0.999);
+  return -Math.log(1 - frac) / SPEAR_DRAG_K;
+}
+
 /** Instantaneous shaft speed after traveling `dist` meters from the muzzle. Linear in distance —
  * the algebraic consequence of `SPEAR_DRAG_K`'s exponential-in-time decay (substitute `t` out of
  * `v(t)` and `dist(t)`; see that constant's doc comment) — clamped at 0 defensively, though
@@ -127,6 +141,122 @@ export interface ShotState {
 export function fire(origin: Vec3, dir: Vec3): ShotState {
   const len = Math.hypot(dir.x, dir.y, dir.z) || 1;
   return { ox: origin.x, oy: origin.y, oz: origin.z, dx: dir.x / len, dy: dir.y / len, dz: dir.z / len, dist: 0, t: 0, alive: true };
+}
+
+/* ------------------------------------------------------------------------------------------ *
+ * Aim assist
+ * ------------------------------------------------------------------------------------------ */
+
+/**
+ * Half-angle of the assist cone, radians (~7 deg). Deliberately well inside
+ * docs/ARCHITECTURE.md's server-side aim-plausibility window ("fire direction within **0.22 rad**
+ * of the interpolated replicated aim"): assist nudges the shot by at most this much, so a assisted
+ * shot can never trip the anti-aimbot envelope it is checked against. That bound is the reason
+ * this lives in `packages/shared` and not in the client — when phase 5 moves spear resolution
+ * server-side, the server applies the *same* function to the *same* inputs and agrees on where
+ * the shaft went, instead of seeing a client aiming 7 deg off its own replicated look direction.
+ */
+export const ASSIST_CONE = 0.12;
+/**
+ * How far toward the computed intercept the aim is actually moved, 0..1. Not 1: a hard snap feels
+ * like the game taking the shot for you and removes any reason to track a fish. At 0.65 a shot
+ * that was close becomes a hit and a shot that was badly off still misses.
+ */
+export const ASSIST_STRENGTH = 0.65;
+/** Assist only engages inside this range — past it the shaft has bled most of its speed
+ * (`SPEAR_DRAG_K`) and the shot is not a real attempt anyway. */
+export const ASSIST_RANGE = SPEAR_RANGE;
+
+export interface AssistTarget extends CapsuleTarget {
+  /** Target velocity, m/s. Optional: a stationary or unknown-velocity target simply gets no lead. */
+  vx?: number;
+  vy?: number;
+  vz?: number;
+}
+
+export interface AssistResult {
+  /** Unit direction to fire. Equals the input direction when nothing qualified. */
+  dx: number; dy: number; dz: number;
+  /** The target the assist locked onto, or null. */
+  targetId: string | number | null;
+  /** Angle the aim was moved, radians — for a HUD tell, and for asserting the cone bound. */
+  applied: number;
+}
+
+/**
+ * Nudges `dir` toward the best nearby spearable target, leading it for travel time.
+ *
+ * Two things make a speargun hard to aim that this addresses, in order of how much they matter:
+ *
+ * 1. **Travel time.** The shaft leaves at 25 m/s and *decelerates* (`SPEAR_DRAG_K`), so a shot at
+ *    8 m is in the water for over half a second. A fish swimming at 1 m/s has moved most of its
+ *    own body length by the time the spear arrives, so aiming *at* it is a clean miss behind —
+ *    and the fix players are expected to discover (lead the fish) is invisible underwater with no
+ *    tracer. The assist aims at the **intercept point**, solving for where the target and the
+ *    decelerating shaft meet.
+ * 2. **No sight picture.** There is no rear sight, the view model is off-centre, and refraction
+ *    shifts everything. A small adhesion cone compensates without taking the shot over.
+ *
+ * Non-catchable targets are skipped here exactly as they are in `stepSpear` — the assist must
+ * never pull aim toward a dolphin the shaft would then pass straight through.
+ */
+export function assistAim(
+  origin: Vec3,
+  dir: Vec3,
+  targets: readonly AssistTarget[],
+  opts: { cone?: number; strength?: number; range?: number } = {},
+): AssistResult {
+  const cone = opts.cone ?? ASSIST_CONE;
+  const strength = clamp(opts.strength ?? ASSIST_STRENGTH, 0, 1);
+  const range = opts.range ?? ASSIST_RANGE;
+
+  const dl = Math.hypot(dir.x, dir.y, dir.z) || 1;
+  const ux = dir.x / dl, uy = dir.y / dl, uz = dir.z / dl;
+
+  let bestAng = Infinity;
+  let best: { x: number; y: number; z: number; id: string | number } | null = null;
+
+  for (const t of targets) {
+    if (t.catchable === false) continue;
+    // Capsule midpoint is the aim point; a fish's capsule is its body axis, so the middle is the
+    // thickest part and the most forgiving thing to aim at.
+    const cx = (t.ax + t.bx) / 2, cy = (t.ay + t.by) / 2, cz = (t.az + t.bz) / 2;
+    let px = cx - origin.x, py = cy - origin.y, pz = cz - origin.z;
+    const d0 = Math.hypot(px, py, pz);
+    if (d0 < 0.3 || d0 > range) continue;
+
+    // Lead: iterate the intercept a couple of times. `timeToDistance` is the inverse of the
+    // decelerating travel curve, and moving the aim point changes the distance, which changes the
+    // time — two passes converges far inside the capsule radius at these ranges.
+    const vx = t.vx ?? 0, vy = t.vy ?? 0, vz = t.vz ?? 0;
+    let aimX = cx, aimY = cy, aimZ = cz;
+    if (vx || vy || vz) {
+      for (let i = 0; i < 2; i++) {
+        const d = Math.hypot(aimX - origin.x, aimY - origin.y, aimZ - origin.z);
+        const tof = timeToDistance(Math.min(d, SPEAR_RANGE));
+        aimX = cx + vx * tof; aimY = cy + vy * tof; aimZ = cz + vz * tof;
+      }
+    }
+
+    px = aimX - origin.x; py = aimY - origin.y; pz = aimZ - origin.z;
+    const pl = Math.hypot(px, py, pz) || 1;
+    const cosA = clamp((px * ux + py * uy + pz * uz) / pl, -1, 1);
+    const ang = Math.acos(cosA);
+    if (ang > cone) continue;
+    if (ang < bestAng) { bestAng = ang; best = { x: px / pl, y: py / pl, z: pz / pl, id: t.id }; }
+  }
+
+  if (!best) return { dx: ux, dy: uy, dz: uz, targetId: null, applied: 0 };
+
+  // Blend toward the intercept direction and renormalize — a slerp is unnecessary at <=7 deg,
+  // where the normalized lerp differs from it by well under a milliradian.
+  let nx = ux + (best.x - ux) * strength;
+  let ny = uy + (best.y - uy) * strength;
+  let nz = uz + (best.z - uz) * strength;
+  const nl = Math.hypot(nx, ny, nz) || 1;
+  nx /= nl; ny /= nl; nz /= nl;
+  const applied = Math.acos(clamp(nx * ux + ny * uy + nz * uz, -1, 1));
+  return { dx: nx, dy: ny, dz: nz, targetId: best.id, applied };
 }
 
 export function shaftPosition(shot: ShotState, dist: number): Vec3 {

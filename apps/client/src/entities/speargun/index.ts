@@ -25,7 +25,7 @@ import { zoneAt } from '@keysrun/shared/world/depth';
 import { mulberry32, type Rng } from '@keysrun/shared/rng';
 import {
   createGun, canFire, stepReload, startReload,
-  fire, stepSpear, spearFightParamsFor, startSpearFight, stepSpearFight,
+  fire, assistAim, stepSpear, spearFightParamsFor, startSpearFight, stepSpearFight,
   SPEAR_RELOAD,
   type GunState, type ShotState, type CapsuleTarget, type SpearFightState, type SpearFightParams, type Vec3,
 } from '@keysrun/shared/sim/spear';
@@ -84,6 +84,10 @@ export interface Speargun {
    * for a tension/stamina HUD, same role as game/fishing's directly-readable `F` singleton
    * (`F.fight.tension`/`.stam`). */
   getFightState(): SpearFightState | null;
+  /** Target the last shot's aim assist locked onto, or null. */
+  assistTargetId(): string | number | null;
+  /** Target aim assist would lock onto right now — the live reticle feed, no side effects. */
+  aimTargetId(diver: DiverAimInput): string | number | null;
   /** Unconditional cleanup for a mode exit (diver climbing back aboard) — mirrors
    * game/fishing/index.ts's `reelIn()` being called the moment the diver jumps in, the other
    * direction: hides every visual and drops any in-flight shot/speared fish without resolving it
@@ -138,6 +142,9 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
   let speared: Speared | null = null;
   let hauling = false;
 
+  /** Target id the most recent shot's assist locked onto — see `assistTargetId`. */
+  let lastAssist: string | number | null = null;
+
   function tryFire(diver: DiverAimInput): boolean {
     if (shot || speared) return false; // one shaft out at a time — see this module's header
     if (!canFire(gun)) return false;
@@ -148,7 +155,15 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
     // rather than the boat's own origin.
     gunVM.muzzle.getWorldPosition(tmpMuzzle);
     const origin = { x: tmpMuzzle.x, y: tmpMuzzle.y, z: tmpMuzzle.z };
-    shot = fire(origin, diver.aimDir);
+    // Aim assist (@keysrun/shared/sim/spear's `assistAim`) — nudges the shot toward the best
+    // target in a ~7 deg cone and, more importantly, *leads* it by the shaft's real time of
+    // flight. A shot at 8 m is in the water over half a second against a decelerating shaft, so
+    // aiming straight at a swimming fish is a clean miss behind it, and nothing underwater tells
+    // you that. Deliberately inside docs/ARCHITECTURE.md's 0.22 rad server aim-plausibility
+    // window, so an assisted shot can never trip the anti-aimbot envelope.
+    const assist = assistAim(origin, diver.aimDir, deps.getTargets());
+    lastAssist = assist.targetId;
+    shot = fire(origin, { x: assist.dx, y: assist.dy, z: assist.dz });
     gun = startReload(SPEAR_RELOAD);
     shaftVisual.setVisible(true);
     shaftVisual.update(shot);
@@ -156,11 +171,23 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
     // A loaded band snapping forward through water visibly exhausts a puff of air out the
     // muzzle — see shaft.ts's createMuzzleBubbles header for why this owns its own tiny particle
     // system rather than reaching into world/particles.ts's shared one.
-    muzzleBubbles.burst(origin, diver.aimDir);
+    muzzleBubbles.burst(origin, { x: assist.dx, y: assist.dy, z: assist.dz });
     return true;
   }
 
   function setHauling(v: boolean): void { hauling = v; }
+
+  /** The target the last shot's aim assist locked onto, or null. Exposed so a reticle can show a
+   * lock — an assist the player cannot see reads as the gun being inaccurate rather than helpful. */
+  function assistTargetId(): string | number | null { return lastAssist; }
+
+  /** The target aim assist *would* lock onto right now, without firing — the live reticle feed.
+   * Runs the identical `assistAim` so what the reticle promises and what the shot does can never
+   * disagree; `strength: 0` means it only reports, never moves anything. */
+  function aimTargetId(diver: DiverAimInput): string | number | null {
+    gunVM.muzzle.getWorldPosition(tmpMuzzle);
+    return assistAim({ x: tmpMuzzle.x, y: tmpMuzzle.y, z: tmpMuzzle.z }, diver.aimDir, deps.getTargets(), { strength: 0 }).targetId;
+  }
 
   function isActive(): boolean { return !!shot || !!speared; }
 
@@ -267,5 +294,5 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
     speredVisual.dispose();
   }
 
-  return { update, tryFire, setHauling, isActive, getFightState, reset, debugForceReloadReady, setViewVisible, dispose };
+  return { update, tryFire, setHauling, isActive, getFightState, assistTargetId, aimTargetId, reset, debugForceReloadReady, setViewVisible, dispose };
 }
