@@ -174,13 +174,19 @@ function buildHangRigProp(totalLen: number): THREE.Group {
   const cable = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.6 });
   const V = (x: number, y: number, z: number): THREE.Vector3 => new THREE.Vector3(x, y, z);
 
-  const postX = -0.6 - totalLen * 0.05;
+  // More separation and noticeably fatter beams than a literal gin pole would have — a big fish's
+  // own frame-fit camera distance grows with it (`show()`'s `dv`), so a realistically thin pole
+  // shrinks to a near-invisible 1-2 px sliver against the dark backdrop at this card's small
+  // rendered size (measured in an earlier pass: present in the scene, invisible in the screenshot
+  // for a 600 lb marlin). Legible beats literal here — the scale/hook read as "hung from a scale"
+  // either way, but the pole itself should actually be visible proving the structure.
+  const postX = -0.8 - totalLen * 0.08;
   const postTop = Math.max(0.55, totalLen * 0.2);
   const postBottom = -Math.max(0.45, totalLen * 0.38);
 
-  group.add(beamBetween(V(postX, postBottom, 0), V(postX, postTop, 0), 0.045, steel));
-  group.add(beamBetween(V(postX, postTop, 0), V(0, postTop + 0.05, 0), 0.035, steel));
-  group.add(beamBetween(V(postX, postTop - 0.3, 0), V(postX + 0.3, postTop, 0), 0.025, steel));
+  group.add(beamBetween(V(postX, postBottom, 0), V(postX, postTop, 0), 0.08, steel));
+  group.add(beamBetween(V(postX, postTop, 0), V(0, postTop + 0.05, 0), 0.06, steel));
+  group.add(beamBetween(V(postX, postTop - 0.3, 0), V(postX + 0.3, postTop, 0), 0.045, steel));
   // cable from the arm tip down to the scale
   group.add(beamBetween(V(0, postTop, 0), V(0, 0.22, 0), 0.01, cable));
 
