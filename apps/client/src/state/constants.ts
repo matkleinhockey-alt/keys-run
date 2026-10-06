@@ -30,4 +30,11 @@ export const SALT = {
   CORAL_FAN_DX: 144, CORAL_FAN_DZ: 145, CORAL_FAN_ROT: 146, CORAL_FAN_SCALE: 147,
   MOORING_REEF_X: 151, MOORING_REEF_Z: 152,
   MOORING_HARBOR_X: 153, MOORING_HARBOR_Z: 154, MOORING_HARBOR_ROT: 155,
+  // World life (entities/life/**) — hotspots and weedlines are gameplay-relevant world content
+  // (docs/ARCHITECTURE.md "Determinism": "gameplay-relevant placement is computed ... from the
+  // shared seed" so every player sees the same birds-and-bait spot) and must not depend on
+  // Math.random()/iteration order. Rigs are 4 fixed coordinates in legacy — no salt needed.
+  HOTSPOT_CREEK_PICK: 161, HOTSPOT_CREEK_FRAC: 162, HOTSPOT_HUMP_PICK: 163,
+  HOTSPOT_X: 164, HOTSPOT_Z: 165,
+  WEED_X: 171, WEED_Z: 172, WEED_ANG: 173, WEED_LEN: 174, WEED_WID: 175, WEED_HUMP_OFFX: 176, WEED_HUMP_OFFZ: 177,
 } as const;

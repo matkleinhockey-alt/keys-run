@@ -67,6 +67,10 @@ import { toast } from '../ui/toast.js';
 import { spotClear, findClearSpot } from '../state/game.js';
 import { SPAWN_X, SPAWN_DZ, SPAWN_H } from '../state/constants.js';
 
+import { createAudioSystem, type SurfaceTransitionSource, type ReelAudioState, type SpeakerSink } from '../audio/index.js';
+import { createLifeSystems } from '../entities/life/index.js';
+import { installWorldLife, BUDDY as legacyBuddyStub } from '../stubs.js';
+
 const DT = 1 / 30;
 
 /** Query radius for `getSpearTargets` (below): comfortably past `SPEAR_RANGE` so a fish right at
@@ -267,6 +271,35 @@ export function initWorld(wrap: HTMLElement): World {
   // attach to; re-attached below every time applyQuality() rebuilds that composer.
   const underwater = createUnderwaterWorld({ scene, camera, renderer, sunDisc: sceneCtx.sunDisc, sky: sceneCtx.sky });
   underwater.attachPostFX(postfx.composer, quality.tier);
+
+  // 12d. audio (docs/ARCHITECTURE.md; see audio/index.ts's header for the full integration
+  // contract) — the WebAudio engine, radio stations and underwater muffle/breathing/heartbeat,
+  // wired to the real surface-crossing signal underwater.ts already exposes.
+  const surfaceSource: SurfaceTransitionSource = {
+    isUnderwater: () => underwater.isUnderwater(),
+    onCross: (cb) => underwater.onSurfaceCross(cb),
+  };
+  const audio = createAudioSystem(surfaceSource);
+
+  // 12e. world life: people, the deck party, world traffic and bird life (entities/life/**; see
+  // that module's index.ts header).
+  const life = createLifeSystems(scene, { x: spot.x, z: spot.z }, {
+    lightMats: tod.lightMats, todK: tod.getK(), currentTodK: tod.getK,
+    mfdTex: electronics.mfdTex, gpsTex: electronics.gpsTex, sonTex: electronics.sonTex,
+    particles, bpm: audio.music.bpm, hypeCallout: audio.music.hypeCallout, sayCaelenLine: audio.sayCaelenLine,
+  });
+  installWorldLife(life.legacySnapshot());
+  document.getElementById('btnSound')?.addEventListener('click', () => { audio.init(); audio.toggleMute(); });
+  const btnMusicEl = document.getElementById('btnMusic');
+  btnMusicEl?.addEventListener('click', () => { audio.music.toggle(); });
+  document.getElementById('btnBuddy')?.addEventListener('click', () => life.toggleBuddy());
+  document.getElementById('btnSun')?.addEventListener('click', () => tod.toggleSunset());
+  const camFwd = new THREE.Vector3();
+  function reelAudioState(): ReelAudioState | undefined {
+    if (FishF.state === 'fight' && FishF.fight) return { mode: FishF.fight.running ? 'fightRunning' : 'fightHeld', drag: FishF.drag, bobX: FishF.bob.x, bobZ: FishF.bob.z };
+    if (FishF.reeling) return { mode: 'reelingNoTension', drag: FishF.drag, bobX: FishF.bob.x, bobZ: FishF.bob.z };
+    return undefined;
+  }
 
   const profiler = createProfiler();
   // The postprocessing composer issues several internal renderer.render() calls per frame
@@ -571,6 +604,11 @@ export function initWorld(wrap: HTMLElement): World {
       camState.yaw = 0;
       renderer.domElement.focus();
       toast('Head out and get a feel for the ' + boatSpec.name + '.');
+      // legacy `btnGo` handler (index.html:4164): starts the AudioContext on this click gesture,
+      // then — unless the player already touched the radio — eases the house station in a couple
+      // of seconds later rather than hitting play instantly.
+      audio.init();
+      if (audio.music.shouldAutoStart()) setTimeout(() => { if (audio.music.shouldAutoStart()) audio.music.playStation(2); }, 2500);
     },
   });
   document.getElementById('btnMarina')?.addEventListener('click', () => {
@@ -854,6 +892,33 @@ export function initWorld(wrap: HTMLElement): World {
     // updateCamera or updateDiverCamera above, plus any override), same as legacy's
     // `drawLine(time)` running after both `updateBoat`/`updateCamera`.
     fishing.render(simTime, curState, sw, ch);
+
+    // World life + audio (entities/life/**, audio/**) — after the model's and camera's final
+    // transforms for this frame (deck-mount points, tags, rooster-tail placement, HRTF panning
+    // all read them), same ordering legacy's updateParty/updateLuigi/updateCaelen/updateBuddy/
+    // updateTraffic/updateRacers/updateHotspots/AUD.update ran at.
+    life.update({
+      dt: clamped, t: simTime, model, boatLen: boatSpec.len, playerBoatId: boatSpec.id,
+      boat: { x: renderState.x, y: renderState.y, z: renderState.z, h: renderState.h, speed: renderState.speed, air: renderState.air },
+      camera, viewport: { w: wrap.clientWidth, h: wrap.clientHeight }, rendererEl: renderer.domElement,
+      trimV: renderState.trimV, lineOut: fishingLineOut(), fishCaught: FishF.state === 'caught',
+    });
+    legacyBuddyStub.on = life.isBuddyOn();
+    camera.getWorldDirection(camFwd);
+    const remoteEngines = life.engineSources();
+    const speakerSink: SpeakerSink = { position: () => model.group.localToWorld(model.speakerPos.clone()), leds: model.leds };
+    audio.update({
+      t: simTime, dt: clamped,
+      listener: { x: camera.position.x, y: camera.position.y, z: camera.position.z, fx: camFwd.x, fy: camFwd.y, fz: camFwd.z },
+      player: {
+        boatId: boatSpec.id, topMs: boatSpec.top * 0.5144 * SPEED_SCALE, speed: renderState.speed, throttle: renderState.thr,
+        trimV: renderState.trimV, trimVent: renderState.trimVent, ventilating: renderState.trimVent > 0.01, gearRev: renderState.gearRev,
+        running: game.running,
+      },
+      sw, ch, reel: reelAudioState(), buddy: remoteEngines.buddy, traffic: remoteEngines.traffic, racers: remoteEngines.racers,
+      gullSites: life.gullSites(),
+    }, speakerSink);
+    if (btnMusicEl) btnMusicEl.textContent = audio.music.label();
 
     // Cascades reposition from the camera's up-to-date matrix (updateCamera just finalized it)
     // and the sun's current colour/intensity (time-of-day.ts mutated sceneCtx.sun above).
