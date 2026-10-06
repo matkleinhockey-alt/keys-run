@@ -27,10 +27,32 @@
  * more northern-water look, lower it for gin-clear tropical water.
  */
 export const EXTINCTION_SCALE = 0.38;
+/**
+ * The per-channel *ratio* is softened from water's true 0.45 / 0.09 / 0.03 (15:3:1) to roughly
+ * 4.9:2.1:1. This is the second art-direction dial and it is the one that controls colour, where
+ * EXTINCTION_SCALE above controls haze.
+ *
+ * Why: the shader applies these over `uwDist + uwCameraDepth`, so a diver at 7 m looking at coral
+ * 5 m away is on a 12 m path. At the true ratio that left red at `exp(-0.171*12) = 0.13` against
+ * green at 0.66, so a burnt-orange coral (0.80, 0.35, 0.15) arrived as (0.10, 0.23, 0.13) —
+ * **green dominant**. Every warm colour in the reef collapsed to the same green-teal before it
+ * reached the eye, which is why the reef read as "all one green" whatever hue the coral actually
+ * was. The filter sat upstream of the palette, so no choice in world/reef/** could escape it.
+ *
+ * Scaling the whole curve down instead is the obvious fix and it is wrong: it also removes the
+ * haze that keeps bright sand in range, and the sea floor blows out to flat white (measured, not
+ * predicted). Softening only the ratio keeps total attenuation — and therefore the haze and the
+ * draw-distance falloff — essentially where it was, while letting red survive to mid-range.
+ *
+ * At 12 m this now leaves r=0.37 / g=0.65 / b=0.81 and that coral arrives at (0.29, 0.23, 0.12):
+ * recognisably orange. The depth cue is intact where it matters — at band 5 (25 m down looking
+ * 10 m) red is still down to 0.05 against blue at 0.55, so the deep goes blue and colourless
+ * exactly as the depth-band table intends.
+ */
 export const EXTINCTION = {
-  r: 0.45 * EXTINCTION_SCALE,
-  g: 0.09 * EXTINCTION_SCALE,
-  b: 0.03 * EXTINCTION_SCALE,
+  r: 0.22 * EXTINCTION_SCALE,
+  g: 0.095 * EXTINCTION_SCALE,
+  b: 0.045 * EXTINCTION_SCALE,
 } as const;
 
 /** Linear-light tint water scatters toward at depth (the "inscatter" term in

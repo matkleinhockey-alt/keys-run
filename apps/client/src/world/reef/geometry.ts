@@ -30,6 +30,56 @@ function disposeAll(parts: THREE.BufferGeometry[]): void {
   for (const p of parts) p.dispose();
 }
 
+function hashN(i: number, seed: number): number {
+  const h = Math.sin(i * 12.9898 + seed * 78.233) * 43758.5453;
+  return h - Math.floor(h);
+}
+
+const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
+
+/**
+ * Paints a per-vertex `color` attribute (itemSize 3, grey-scale only — see below) that
+ * MULTIPLIES against the per-instance colour (chunk-manager.ts's `setColorAt`) and the material's
+ * own white base colour — every 'solid'-style material sets `vertexColors: true` (materials.ts)
+ * specifically to read this. Two effects, both aimed at this module's report ("flat solid-colour
+ * slabs... no colour variation within a single coral head... slabs appear to hover rather than sit
+ * in the substrate"):
+ *
+ *  1. A persistent low-amplitude per-vertex noise multiplier across the whole surface, so a single
+ *     instance never reads as one flat swatch — real coral tissue visibly mottles even within one
+ *     colony, and this is the one piece of "variation within a head" that survives the underwater
+ *     extinction filter regardless of hue (see species.ts's header): it is a brightness effect,
+ *     not a hue one.
+ *  2. A darkening blend toward the part's own lowest local Y (`yMin`, in the geometry's OWN local
+ *     space, before the instance transform) when `baseBlend` is set — only true for the parts that
+ *     actually touch the ground (a boulder's whole base, a branching coral's trunk segment but
+ *     none of its upper branches). This is a grounding/contact-shadow approximation, not a literal
+ *     recolour to sand: the per-instance colour varies at runtime and this attribute is baked once
+ *     per shared LOD geometry, so it cannot know any given instance's exact final hue — multiplying
+ *     by grey is the one operation guaranteed to read as "shadowed/settling into the substrate"
+ *     for every possible instance colour rather than looking right for some and wrong for others.
+ *
+ * Deliberately grey (r=g=b=k, not a tinted colour): this keeps every possible lerped instance
+ * colour (species.ts's colorLo..colorHi range) inside its own correct hue, only modulating value —
+ * a colour tint here would fight the per-instance lerp instead of complementing it.
+ */
+function paintVertexColors(geo: THREE.BufferGeometry, yMin: number, yMax: number, seed: number, baseBlend: boolean): void {
+  const pos = geo.attributes.position as THREE.BufferAttribute;
+  const col = new Float32Array(pos.count * 3);
+  const span = Math.max(1e-4, yMax - yMin);
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    const n = hashN(Math.floor(x * 9) + Math.floor(y * 11) * 17 + Math.floor(z * 9) * 23, seed);
+    let k = 0.82 + n * 0.36; // ~0.82..1.18 — persistent within-surface mottle.
+    if (baseBlend) {
+      const t = clamp01((y - yMin) / (span * 0.35)); // bottom 35% of this part's own local height.
+      k *= 0.52 + t * 0.48; // darken toward the ground-contact edge, full value above it.
+    }
+    col[i * 3] = k; col[i * 3 + 1] = k; col[i * 3 + 2] = k;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+}
+
 function merge(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
   const g = mergeGeometries(parts, false) ?? new THREE.BufferGeometry();
   g.computeVertexNormals();
@@ -77,8 +127,13 @@ function branchingCoral(opts: BranchOpts): THREE.BufferGeometry {
   const tipFlare = opts.tipFlare ?? 0.6;
   const decayChance = opts.branchDecayChance ?? 0.4;
 
-  const grow = (mat: THREE.Matrix4, length: number, radius: number, depth: number, branchFactor: number): void => {
+  const grow = (mat: THREE.Matrix4, length: number, radius: number, depth: number, branchFactor: number, isRoot: boolean): void => {
     const seg = branchSegment(length, radius, tipFlare, opts.radial, opts.flatX, opts.flatZ);
+    // Painted while local Y is still this segment's own known 0..length (before applyMatrix4
+    // folds it into the whole tree's space) — only the trunk (`isRoot`) gets the base-grounding
+    // darken, since no upper branch ever actually touches the sand; every segment gets the
+    // persistent mottle. See this file's `paintVertexColors` header.
+    paintVertexColors(seg, 0, length, opts.seed + depth * 97, isRoot);
     seg.applyMatrix4(mat);
     parts.push(seg);
     if (depth <= 0) return;
@@ -95,11 +150,11 @@ function branchingCoral(opts: BranchOpts): THREE.BufferGeometry {
       // generation (0.92 falloff * 1.4 flare ≈ 1.29x PER GENERATION), so outer twigs ended up
       // wider than the trunk — a top-heavy, bulbous silhouette, not a tapering antler. Each new
       // generation's base is simply a fraction of its parent's own base radius.
-      grow(m, length * opts.lengthFalloff, radius * opts.radiusFalloff, depth - 1, nextFactor);
+      grow(m, length * opts.lengthFalloff, radius * opts.radiusFalloff, depth - 1, nextFactor, false);
     }
   };
 
-  grow(new THREE.Matrix4(), opts.baseLength, opts.baseRadius, opts.depth, opts.branchFactor);
+  grow(new THREE.Matrix4(), opts.baseLength, opts.baseRadius, opts.depth, opts.branchFactor, true);
   return merge(parts);
 }
 
@@ -138,11 +193,6 @@ function staghornGeo(lod: 'near' | 'mid'): THREE.BufferGeometry {
 // Massive boulder corals (brain, star) — a flattened, noise-displaced icosahedron.
 // ---------------------------------------------------------------------------
 
-function hashN(i: number, seed: number): number {
-  const h = Math.sin(i * 12.9898 + seed * 78.233) * 43758.5453;
-  return h - Math.floor(h);
-}
-
 /** Pushes each vertex outward along its own (already-normalized-ish) position by a per-vertex
  * noise amount — turns a perfect icosahedron into an irregular boulder with rounded lumps
  * standing in for brain coral's ridges / star coral's knobbier corallite heads. */
@@ -163,25 +213,33 @@ function displaceBoulder(geo: THREE.BufferGeometry, amp: number, freq: number, s
 
 function brainGeo(detail: 0 | 1 | 2): THREE.BufferGeometry {
   const g = new THREE.IcosahedronGeometry(1, detail);
-  g.scale(1, 0.56, 1); // smooth, flattened dome
+  const sy = 0.56;
+  g.scale(1, sy, 1); // smooth, flattened dome
   // A light, large-scale dome displacement for an organic (not perfectly geometric) silhouette —
   // the actual meandering-groove detail now comes from grooveNormalTex (materials.ts), not from
   // per-vertex bumps, which read as lumps rather than ridges at this triangle budget.
   if (detail > 0) displaceBoulder(g, 0.06, 1.6, 11);
+  // Grounds the boulder's own lower third and breaks up the flat lerped instance colour — see
+  // this file's `paintVertexColors` header.
+  paintVertexColors(g, -sy, sy, 11, true);
   return g;
 }
 
 function starGeo(detail: 0 | 1 | 2): THREE.BufferGeometry {
   const g = new THREE.IcosahedronGeometry(1, detail);
-  g.scale(1, 0.72, 1); // chunkier boulder than brain coral
+  const sy = 0.72;
+  g.scale(1, sy, 1); // chunkier boulder than brain coral
   if (detail > 0) displaceBoulder(g, 0.1, 2.2, 29);
+  paintVertexColors(g, -sy, sy, 29, true);
   return g;
 }
 
 function encrustingGeo(detail: 0 | 1): THREE.BufferGeometry {
   const g = new THREE.IcosahedronGeometry(1, detail);
-  g.scale(1, 0.24, 1); // low plate/encrusting mound filling gaps between heads
+  const sy = 0.24;
+  g.scale(1, sy, 1); // low plate/encrusting mound filling gaps between heads
   if (detail === 1) displaceBoulder(g, 0.14, 4, 47);
+  paintVertexColors(g, -sy, sy, 47, true);
   return g;
 }
 
@@ -286,7 +344,9 @@ function barrelProfile(): THREE.Vector2[] {
 }
 
 function barrelSpongeGeo(radial: number): THREE.BufferGeometry {
-  return new THREE.LatheGeometry(barrelProfile(), radial);
+  const g = new THREE.LatheGeometry(barrelProfile(), radial);
+  paintVertexColors(g, 0, 1, 91, true); // the barrel's own base is where it meets the ledge.
+  return g;
 }
 
 function tubeProfile(): THREE.Vector2[] {
@@ -304,6 +364,9 @@ function tubeSpongeGeo(radial: number, count: number, seed: number): THREE.Buffe
   const parts: THREE.BufferGeometry[] = [];
   for (let i = 0; i < count; i++) {
     const g = new THREE.LatheGeometry(tubeProfile(), radial);
+    // Painted before the per-tube height scale, while local Y is still a known 0..1 — see this
+    // file's `paintVertexColors` header.
+    paintVertexColors(g, 0, 1, seed + i * 97, true);
     const h = 0.55 + rng() * 0.55;
     g.scale(1, h, 1);
     const ang = rng() * Math.PI * 2;

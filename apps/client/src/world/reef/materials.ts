@@ -59,9 +59,18 @@ export function materialFor(species: SpeciesDef, style: MaterialStyle): THREE.Me
     mat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       flatShading: false,
-      roughness: 0.88,
+      // vertexColors multiplies geometry.ts's per-vertex `color` attribute (paintVertexColors) in
+      // on top of the per-instance colour: a subtle persistent mottle so one instance never reads
+      // as one flat swatch, plus a darkened/grounded blend near the boulder's own base so it reads
+      // as settling into the substrate rather than a slab sitting on top of it (this module's
+      // report: "no colour variation within a single coral head" / "slabs appear to hover").
+      vertexColors: true,
+      roughness: 0.82,
+      // Raised from 1.1: under the game's real lighting (soft hemisphere-dominated ambient, not
+      // the harness's single hard directional sun) a shallower normal scale reads as almost flat —
+      // see this module's report's harness-vs-real-game comparison.
       normalMap: grooveNormalTex(freq, strength),
-      normalScale: new THREE.Vector2(1.1, 1.1),
+      normalScale: new THREE.Vector2(1.6, 1.6),
     });
   } else {
     const { freq, strength } = polypParamsFor(species.id);
@@ -71,9 +80,10 @@ export function materialFor(species: SpeciesDef, style: MaterialStyle): THREE.Me
       // every "solid" reef species needs to read as a soft living organism, not just brain/star
       // (see this module's report). The normal map still carries the surface micro-detail.
       flatShading: false,
-      roughness: 0.92,
+      vertexColors: true, // see the brain/star branch's comment above — same technique, all solid species.
+      roughness: 0.85,
       normalMap: polypNormalTex(freq, strength),
-      normalScale: new THREE.Vector2(0.6, 0.6),
+      normalScale: new THREE.Vector2(0.95, 0.95),
     });
   }
   _cache.set(key, mat);
