@@ -30,8 +30,9 @@ import {
   type GunState, type ShotState, type CapsuleTarget, type SpearFightState, type SpearFightParams, type Vec3,
 } from '@keysrun/shared/sim/spear';
 import { createGunViewModel } from './gun-viewmodel.js';
-import { createShaftVisual, createFloatLineVisual } from './shaft.js';
+import { createShaftVisual, createFloatLineVisual, createMuzzleBubbles } from './shaft.js';
 import { createSpearFightUI } from './fight-ui.js';
+import { createSperedFishVisual } from './speared-fish-visual.js';
 import { toast } from '../../ui/toast.js';
 import { SPECIES } from '@keysrun/shared/content/species';
 import type { CaughtFishInfo } from '../../game/catch/catch-flow.js';
@@ -128,6 +129,8 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
   const gunVM = createGunViewModel(deps.camera);
   const shaftVisual = createShaftVisual(deps.scene);
   const floatLine = createFloatLineVisual(deps.scene);
+  const muzzleBubbles = createMuzzleBubbles(deps.scene);
+  const speredVisual = createSperedFishVisual(deps.scene);
   const fightUI = createSpearFightUI();
 
   let gun: GunState = createGun();
@@ -144,11 +147,16 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
     // as game/fishing/update.ts's `cast()` reading `rodVM.tip`'s world position for `F.from`
     // rather than the boat's own origin.
     gunVM.muzzle.getWorldPosition(tmpMuzzle);
-    shot = fire({ x: tmpMuzzle.x, y: tmpMuzzle.y, z: tmpMuzzle.z }, diver.aimDir);
+    const origin = { x: tmpMuzzle.x, y: tmpMuzzle.y, z: tmpMuzzle.z };
+    shot = fire(origin, diver.aimDir);
     gun = startReload(SPEAR_RELOAD);
     shaftVisual.setVisible(true);
     shaftVisual.update(shot);
     gunVM.kick();
+    // A loaded band snapping forward through water visibly exhausts a puff of air out the
+    // muzzle — see shaft.ts's createMuzzleBubbles header for why this owns its own tiny particle
+    // system rather than reaching into world/particles.ts's shared one.
+    muzzleBubbles.burst(origin, diver.aimDir);
     return true;
   }
 
@@ -171,19 +179,30 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
 
   function update(dt: number, t: number, diver: DiverAimInput, sw: number, ch: number): void {
     gun = stepReload(gun, dt);
+    muzzleBubbles.update(dt);
+    speredVisual.tick(dt, t);
     if (shot) {
       const targets = deps.getTargets();
-      const { shot: nextShot, hit } = stepSpear(shot, targets, dt);
+      // `clientRng` rolls sim/spear.ts's `holdChance` against the impact speed — a shot that
+      // geometrically connects at the ragged edge of SPEAR_RANGE (water drag has already bled off
+      // most of its speed, see that module's SPEAR_DRAG_K) can still come back `held: false`: the
+      // "unreliable rather than binary" edge-of-range behaviour the task brief asks for.
+      const { shot: nextShot, hit } = stepSpear(shot, targets, dt, clientRng);
       shot = nextShot;
       if (hit) {
         const target = targets.find((cand) => cand.id === hit.id);
         shaftVisual.setVisible(false);
         shot = null;
-        if (target) {
+        if (target && hit.held) {
           const params = spearFightParamsFor(target.key, target.weight);
           speared = { target, params, fight: startSpearFight(hit.point.x, hit.point.z) };
           floatLine.setVisible(true);
           fightUI.show(fightLabelFor(target.key, target.weight));
+          speredVisual.spawnAt(target.key, target.weight, hit.point.x, hit.point.y, hit.point.z);
+        } else if (target) {
+          // Geometric hit, but too weak to hold (see `holdChance`'s doc comment) — the shaft
+          // glances off rather than anchoring. No fight starts; the fish swims on unharmed.
+          toast("The shot doesn't have enough force left to hold — it glances off.");
         }
       } else if (!shot.alive) {
         resolveShotMiss();
@@ -202,17 +221,24 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
       // own line-to-the-surface visual already reads correctly regardless of the diver's depth.
       if (diver.blackedOut) {
         toast("Blacked out — the shaft tears free. You lose the fish, and the gear's lucky to float back to you.");
+        speredVisual.flee(diver.position.x, diver.position.z);
         endFight();
       } else {
         const next = stepSpearFight(speared.fight, { hauling }, speared.params, { diverX: diver.position.x, diverZ: diver.position.z }, clientRng, dt);
         speared.fight = next;
-        floatLine.update({ x: next.x, y: diver.position.y, z: next.z }, t, sw, ch);
+        floatLine.update({ x: next.x, y: diver.position.y, z: next.z }, t, sw, ch, next.tension);
+        speredVisual.setTarget(next.x, diver.position.y - 0.3, next.z, next.tension, next.stam);
         fightUI.update(next, diver.breath);
         if (next.outcome === 'landed') {
           deps.onLanded({ key: speared.target.key, weight: speared.target.weight, x: next.x, z: next.z, zone: zoneAt(next.x, next.z), source: 'spear' });
+          // The trophy card (game/catch/underwater-trophy.ts) takes over showing this catch —
+          // vanish rather than fade, so there's never a moment with both a line-side fish and a
+          // trophy-card fish on screen at once.
+          speredVisual.vanish();
           endFight();
         } else if (next.outcome === 'tornFree') {
           toast('The shaft tears free — it got away.');
+          speredVisual.flee(diver.position.x, diver.position.z);
           endFight();
         }
       }
@@ -225,6 +251,7 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
   function reset(): void {
     shot = null;
     shaftVisual.setVisible(false);
+    speredVisual.vanish();
     if (speared) endFight();
   }
 
@@ -236,6 +263,8 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
     gunVM.dispose();
     shaftVisual.dispose();
     floatLine.dispose();
+    muzzleBubbles.dispose();
+    speredVisual.dispose();
   }
 
   return { update, tryFire, setHauling, isActive, getFightState, reset, debugForceReloadReady, setViewVisible, dispose };

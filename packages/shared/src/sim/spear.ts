@@ -24,12 +24,61 @@ import type { Rng } from '../rng/index.js';
  * Constants (docs/ARCHITECTURE.md "Spearfishing" envelope table)
  * ------------------------------------------------------------------------------------------ */
 
-export const SPEAR_SPEED = 25; // m/s
+export const SPEAR_SPEED = 25; // m/s, muzzle speed
 export const SPEAR_RANGE = 11; // m (projectile lifetime, not a hard raycast distance)
 export const SPEAR_RELOAD = 2.5; // s, normal reload
 export const SPEAR_RELOAD_FLOOR = 1.6; // s, hard anti-cheat floor — never fire faster than this
 
+/**
+ * Water drag on the shaft, expressed as a time constant for `dv/dt = -SPEAR_DRAG_K * v`
+ * (exponential velocity decay — the standard first-order drag approximation). Chosen so the
+ * shaft retains 60% of muzzle speed at `SPEAR_RANGE`: real water drag on a weighted spear shaft
+ * over 11 m is a genuine effect but a mild one, not a shot that visibly stalls.
+ *
+ * The reason this is a *time* constant rather than a distance one: integrating `dv/dt=-k*v`
+ * closed-form gives `v(t) = v0*exp(-k*t)` and `dist(t) = (v0/k)*(1-exp(-k*t))` — both pure
+ * functions of elapsed flight time alone, so `distAtFlightTime` below reproduces the exact same
+ * answer whether the caller asks for it in one big step or many tiny ones. That determinism
+ * property (see test/spear.test.ts's "trajectory" describe block) is what the server's rewind-
+ * and-reintegrate plan (docs/ARCHITECTURE.md "Spearfishing") depends on, and it's easy to lose by
+ * accident with a naive per-step `v -= drag*dt` Euler integration (whose answer *does* depend on
+ * step size). Composing `v(t)` and `dist(t)` algebraically also happens to collapse to a plain
+ * linear speed-vs-distance relationship (`shaftSpeedAtDist` below) — a nice closed-form bonus,
+ * not a separate model.
+ */
+export const SPEAR_DRAG_K = (0.4 * SPEAR_SPEED) / SPEAR_RANGE; // ≈0.909 / s
+
 export interface Vec3 { x: number; y: number; z: number }
+
+/** Closed-form distance traveled after `t` seconds of flight from the muzzle — see
+ * `SPEAR_DRAG_K`'s doc comment for why this must be evaluated from cumulative elapsed time, never
+ * accumulated step-by-step. Not range-clamped; callers clamp to `SPEAR_RANGE` themselves (`stepSpear`
+ * does). */
+export function distAtFlightTime(t: number): number {
+  return (SPEAR_SPEED / SPEAR_DRAG_K) * (1 - Math.exp(-SPEAR_DRAG_K * t));
+}
+
+/** Instantaneous shaft speed after traveling `dist` meters from the muzzle. Linear in distance —
+ * the algebraic consequence of `SPEAR_DRAG_K`'s exponential-in-time decay (substitute `t` out of
+ * `v(t)` and `dist(t)`; see that constant's doc comment) — clamped at 0 defensively, though
+ * `SPEAR_RANGE`'s hard cutoff means a real shaft never travels far enough to reach it. */
+export function shaftSpeedAtDist(dist: number): number {
+  return Math.max(0, SPEAR_SPEED - SPEAR_DRAG_K * dist);
+}
+
+/**
+ * Probability a geometrically-registered hit actually *holds* (the tip penetrates and the shaft
+ * stays anchored) rather than glancing off a fish too weakly struck to seat — docs/ARCHITECTURE.md's
+ * spearfishing brief's "a shot at the edge of range should be unreliable rather than binary."
+ * Below ~25% of muzzle speed (a shot that's traveled most of the way to a far graze) there's
+ * essentially no chance; it ramps to a 0.95 cap at full muzzle speed — even a point-blank hit
+ * isn't a certainty, same spirit as a hooked fish's line-break chance never being exactly 0 or 1.
+ * Pure function of impact speed; callers decide how to roll it (see `stepSpear`'s optional `rng`).
+ */
+export function holdChance(impactSpeed: number): number {
+  const frac = clamp(impactSpeed / SPEAR_SPEED, 0, 1);
+  return clamp((frac - 0.25) / 0.6, 0, 1) * 0.95;
+}
 
 /* ------------------------------------------------------------------------------------------ *
  * The gun: loaded/reloading
@@ -63,8 +112,12 @@ export function startReload(reloadS: number = SPEAR_RELOAD): GunState {
 export interface ShotState {
   ox: number; oy: number; oz: number; // origin, world space
   dx: number; dy: number; dz: number; // unit direction
-  /** Distance traveled from origin so far, meters. */
+  /** Distance traveled from origin so far, meters — derived each step from `t` via
+   * `distAtFlightTime`, not accumulated, so it stays exact regardless of step size. */
   dist: number;
+  /** Elapsed flight time, seconds — the real state variable under water drag; `dist` is a cached
+   * convenience derived from it. */
+  t: number;
   alive: boolean;
 }
 
@@ -73,7 +126,7 @@ export interface ShotState {
  * function only knows about the projectile. */
 export function fire(origin: Vec3, dir: Vec3): ShotState {
   const len = Math.hypot(dir.x, dir.y, dir.z) || 1;
-  return { ox: origin.x, oy: origin.y, oz: origin.z, dx: dir.x / len, dy: dir.y / len, dz: dir.z / len, dist: 0, alive: true };
+  return { ox: origin.x, oy: origin.y, oz: origin.z, dx: dir.x / len, dy: dir.y / len, dz: dir.z / len, dist: 0, t: 0, alive: true };
 }
 
 export function shaftPosition(shot: ShotState, dist: number): Vec3 {
@@ -117,6 +170,14 @@ export interface SpearHit {
   /** Distance from the shaft's origin at which the hit occurred, meters. */
   atDist: number;
   point: Vec3;
+  /** Shaft speed at the moment of impact, m/s — `shaftSpeedAtDist(atDist)`, surfaced so callers
+   * can show/reason about it without recomputing. */
+  impactSpeed: number;
+  /** Whether this hit actually holds (see `holdChance`'s doc comment) — `true` whenever
+   * `stepSpear` is called without an `rng` (every existing call site/test that doesn't care about
+   * this mechanic keeps its old always-holds behaviour); with an `rng`, a weak edge-of-range hit
+   * can come back `false` — a geometric hit that glances off rather than anchoring. */
+  held: boolean;
 }
 
 /**
@@ -179,18 +240,27 @@ export function segmentHitsCapsule(
 }
 
 /**
- * Advance the shaft by `dt` at `SPEAR_SPEED`, clamped to `SPEAR_RANGE`, and test the swept
- * segment against every target. Pure: returns a new `ShotState` plus the nearest hit this step
- * (by distance along the shaft), or `null`. Once `alive` is false (range exhausted or a hit was
- * already resolved), further calls are no-ops — the caller retires the shot.
+ * Advance the shaft by `dt`, clamped to `SPEAR_RANGE`, and test the swept segment against every
+ * target. The shaft's speed decays with distance under water drag (`SPEAR_DRAG_K`) — `dist` is
+ * derived from cumulative flight time (`distAtFlightTime`), not an accumulated `speed*dt`, so the
+ * result is exact regardless of step size (see that constant's doc comment). Pure: returns a new
+ * `ShotState` plus the nearest hit this step (by distance along the shaft), or `null`. Once
+ * `alive` is false (range exhausted or a hit was already resolved), further calls are no-ops —
+ * the caller retires the shot.
+ *
+ * `rng`, if given, rolls `holdChance` against the impact speed to decide `SpearHit.held` — a weak
+ * edge-of-range hit can glance off instead of anchoring. Omit it to keep the old always-holds
+ * behaviour (every pre-existing call site/test).
  */
 export function stepSpear(
-  shot: ShotState, targets: readonly CapsuleTarget[], dt: number,
+  shot: ShotState, targets: readonly CapsuleTarget[], dt: number, rng?: Rng,
 ): { shot: ShotState; hit: SpearHit | null } {
   if (!shot.alive) return { shot, hit: null };
-  const travel = Math.min(SPEAR_SPEED * dt, Math.max(0, SPEAR_RANGE - shot.dist));
+  const newT = shot.t + dt;
+  const newDist = Math.min(distAtFlightTime(newT), SPEAR_RANGE);
+  const travel = newDist - shot.dist;
   const p1 = shaftPosition(shot, shot.dist);
-  const p2 = shaftPosition(shot, shot.dist + travel);
+  const p2 = shaftPosition(shot, newDist);
 
   let best: { target: CapsuleTarget; s: number } | null = null;
   for (const target of targets) {
@@ -202,14 +272,18 @@ export function stepSpear(
     if (hit && (!best || s < best.s)) best = { target, s };
   }
 
-  const newDist = shot.dist + travel;
   if (best) {
     const atDist = shot.dist + travel * best.s;
     const point = shaftPosition(shot, atDist);
-    return { shot: { ...shot, dist: atDist, alive: false }, hit: { id: best.target.id, atDist, point } };
+    const impactSpeed = shaftSpeedAtDist(atDist);
+    const held = rng ? rng() < holdChance(impactSpeed) : true;
+    return {
+      shot: { ...shot, dist: atDist, t: newT, alive: false },
+      hit: { id: best.target.id, atDist, point, impactSpeed, held },
+    };
   }
   const alive = newDist < SPEAR_RANGE - 1e-9;
-  return { shot: { ...shot, dist: newDist, alive }, hit: null };
+  return { shot: { ...shot, dist: newDist, t: newT, alive }, hit: null };
 }
 
 /* ------------------------------------------------------------------------------------------ *
