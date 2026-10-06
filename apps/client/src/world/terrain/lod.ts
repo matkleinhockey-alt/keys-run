@@ -79,6 +79,13 @@ export function createSeafloorManager(): SeafloorManager {
   group.name = 'seafloor-terrain';
 
   const material = new THREE.MeshStandardMaterial({
+    // `flatShading` stays ON, despite the faceted look it gives the sea floor. Smooth-shading it
+    // was tried and is worse: this heightfield is nearly flat over a chunk, so smooth normals all
+    // point straight up, the whole floor takes full sun at one uniform angle, and the bright sand
+    // albedo saturates to flat white with no readable relief at all (measured in-game, not
+    // predicted). The per-face normals are currently the only thing giving the bottom any tonal
+    // variation. Fixing the facets properly means giving the terrain real normal-mapped relief and
+    // a darker albedo first, then turning this off — not turning it off on its own.
     vertexColors: true, flatShading: true, roughness: 1,
     // Chunk perimeter skirts (./chunk.ts) can end up back-facing depending on which way a given
     // chunk's border loop winds; DoubleSide means a winding slip there dims, not vanishes.
