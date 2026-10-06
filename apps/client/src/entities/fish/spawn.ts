@@ -51,6 +51,8 @@ const SALT = {
   RESIDENT_ANCHOR_X: 9004, RESIDENT_ANCHOR_Z: 9005, RESIDENT_ANCHOR_R: 9006, RESIDENT_HEADING: 9007,
   MEMBER_ANG: 9100, MEMBER_R: 9200, MEMBER_OY: 9300, MEMBER_PHASE: 9400, MEMBER_SCALE: 9500,
   ROAM_GATE: 9601, ROAM_SPECIES: 9602, ROAM_COUNT: 9603, ROAM_OFFSET_X: 9604, ROAM_OFFSET_Z: 9605, ROAM_HEADING: 9606,
+  NEAR_GATE: 9701, NEAR_SPECIES: 9702, NEAR_COUNT: 9703, NEAR_OFFSET_X: 9704, NEAR_OFFSET_Z: 9705,
+  NEAR_HEADING: 9706, NEAR_ANCHOR_R: 9707,
 } as const;
 
 /**
@@ -272,5 +274,107 @@ export function instantiateRoamer(spawn: RoamSpawn): SchoolState {
     glide: 0, dive: 0, diveTimer: 6, diveTarget: 0,
     anchor: null, resident: false,
     members: spawn.members,
+  };
+}
+
+// --- near-field layer ----------------------------------------------------
+//
+// The layer that actually puts fish in front of your mask.
+//
+// Residents are rolled once per 64 m chunk out to a 220 m radius, and roamers sit in a 50-320 m
+// annulus. Both are tuned to the *topside* view, where the horizon is 1,900 m away and a school
+// 200 m off is a legitimate thing to see. Underwater, visibility is 10-30 m
+// (world/underwater/depth-bands.ts). Measured on the Sombrero crest before this existed: 23
+// active schools, ~195 fish, and **zero of them within 25 m** — the entire population was spread
+// across an annulus whose area is ~100x the sphere a diver can actually see into, so the expected
+// fish-in-frame was a fraction of one. Standing on the best reef in the game showed empty water.
+//
+// This is a third, much finer layer: 18 m cells, activated only inside `NEAR_RADIUS`, rolled from
+// the same `hashCell` machinery (so it is just as deterministic and just as shared-world-safe as
+// the other two) but biased hard toward species that genuinely shoal. It is affordable only
+// because of the per-frame LOD/culling in pool.ts/render.ts — at the old flat ~1,800 triangles per
+// fish at every distance, this many fish was arithmetically impossible.
+export const NEAR_CELL = 18;
+/** Activation radius. Comfortably past the ~30 m best-case visibility so schools are already
+ * there, already swimming, when they fade in — rather than popping at the edge of sight. */
+export const NEAR_RADIUS = 72;
+/** Gate scale on top of `HABITAT_DENSITY`. Well above 1: this layer's whole job is to be dense,
+ * and its cells are small enough that a high hit rate still reads as scattered groups rather than
+ * a uniform carpet. */
+const NEAR_DENSITY_FACTOR = 2.6;
+/** A species must shoal at least this many strong to be eligible. Filters the near field down to
+ * the fish that actually form the "schools of them" a reef is supposed to show — snapper, runners,
+ * grunts, mackerel — and leaves solitary ambush predators (grouper, barracuda, goliath) to the
+ * resident layer, where one of them holding a ledge is the point. */
+const NEAR_MIN_SCHOOL = 4;
+
+/** `ZONE_LIFE` table filtered to the shoaling species, with weights re-normalised. Memoised per
+ * habitat key because it is pure and is otherwise recomputed for every candidate cell. */
+const _nearTables = new Map<string, ReadonlyArray<readonly [string, number]>>();
+function shoalingTable(key: string, table: ReadonlyArray<readonly [string, number]>): ReadonlyArray<readonly [string, number]> {
+  const hit = _nearTables.get(key);
+  if (hit) return hit;
+  const out = table.filter(([k]) => {
+    const V = VIS[k];
+    // `catchable: false` excludes the marine mammals — a pod of dolphins is an event, not scenery,
+    // and multiplying them by this layer's density would cheapen exactly what makes them special.
+    return !!V && V.school[1] >= NEAR_MIN_SCHOOL && V.catchable !== false;
+  });
+  _nearTables.set(key, out);
+  return out;
+}
+
+/** Pure: `(seed, cellX, cellZ)` -> a dense near-field school for that 18 m cell, or null. Same
+ * contract as `residentsForChunk` — calling it twice with the same arguments gives the same
+ * school, so two divers on the same patch reef see the same fish. */
+export function nearFieldForCell(seed: number, cellX: number, cellZ: number): ResidentSpec | null {
+  const cx = cellX * NEAR_CELL + NEAR_CELL / 2;
+  const cz = cellZ * NEAR_CELL + NEAR_CELL / 2;
+  const d = depthAt(cx, cz);
+  const life = lifeTableFor(cx, cz, zoneAt(cx, cz), d, true);
+  if (!life) return null;
+  const table = shoalingTable(`${life.table.length}:${life.density}`, life.table);
+  if (table.length === 0) return null;
+  if (hashCell(seed, cellX, cellZ, SALT.NEAR_GATE) >= life.density * NEAR_DENSITY_FACTOR) return null;
+
+  const type = weightedPick(() => hashCell(seed, cellX, cellZ, SALT.NEAR_SPECIES), table);
+  const V = VIS[type];
+  if (!V) return null;
+
+  const anchorX = cx + (hashCell(seed, cellX, cellZ, SALT.NEAR_OFFSET_X) - 0.5) * NEAR_CELL;
+  const anchorZ = cz + (hashCell(seed, cellX, cellZ, SALT.NEAR_OFFSET_Z) - 0.5) * NEAR_CELL;
+  const ad = depthAt(anchorX, anchorZ);
+  if (ad < V.dMin || ad > V.dMax || shoreInfo(anchorX, anchorZ).d < 4) return null;
+  if (anchorX < WB.x0 || anchorX > WB.x1 || anchorZ < WB.z0 || anchorZ > WB.z1) return null;
+
+  const count = V.school[0] + Math.floor(hashCell(seed, cellX, cellZ, SALT.NEAR_COUNT) * (V.school[1] - V.school[0] + 1));
+  // Tighter orbit than a resident's 6-16 m: these are schools holding on a single coral head or
+  // sand patch, not patrolling a whole chunk.
+  const anchorR = 3 + 6 * hashCell(seed, cellX, cellZ, SALT.NEAR_ANCHOR_R);
+  const heading = hashCell(seed, cellX, cellZ, SALT.NEAR_HEADING) * Math.PI * 2;
+  const members = buildMembers(seed, cellX, cellZ, V, count, anchorX, anchorZ);
+  return { type, V, anchorX, anchorZ, anchorR, heading, diveTimerSeed: hashCell(seed, cellX, cellZ, SALT.NEAR_HEADING + 1), members };
+}
+
+export function nearCellOf(x: number, z: number): [number, number] {
+  return [Math.floor(x / NEAR_CELL), Math.floor(z / NEAR_CELL)];
+}
+
+export function nearKey(cellX: number, cellZ: number): string {
+  return `n:${cellX},${cellZ}`;
+}
+
+/** Builds the live school for a near-field cell. Mirrors `instantiateResident`; the separate id
+ * prefix keeps the two layers' keyspaces from ever colliding. */
+export function instantiateNearField(spec: ResidentSpec, cellX: number, cellZ: number): SchoolState {
+  return {
+    id: nearKey(cellX, cellZ),
+    type: spec.type,
+    cx: spec.anchorX, cz: spec.anchorZ, heading: spec.heading,
+    phase: spec.heading * 23.1, turn: 0, flee: 0, fleeHeading: spec.heading, bowRide: 0,
+    glide: 0, dive: 0, diveTimer: 4 + 7 * spec.diveTimerSeed, diveTarget: 0,
+    anchor: { x: spec.anchorX, z: spec.anchorZ, r: spec.anchorR },
+    resident: true,
+    members: spec.members,
   };
 }

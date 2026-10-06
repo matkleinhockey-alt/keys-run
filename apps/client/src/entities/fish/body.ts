@@ -95,6 +95,10 @@ export function bodyColor(V: CreatureVis, v: THREE.Vector3): THREE.Color {
     case 'spots': if (hsh > 0.8 && v.y > -0.2) c.multiplyScalar(0.6); break;
     case 'mottle': if (hsh > 0.6) c.multiplyScalar(0.75); break;
     case 'bars': if (Math.sin(v.z * 14) > 0.55 && v.y > -0.3) c.multiplyScalar(0.55); break;
+    // Skipjack tuna's 4-6 bold dark stripes, which — uniquely among tunas — run *horizontally*
+    // along the silver belly rather than vertically down the flank (see the supplied tuna ID
+    // chart). Gated to the lower body for exactly that reason.
+    case 'hline': if (v.y < -0.1 && Math.sin((v.y + 1) * 11) > 0.45) c.multiplyScalar(0.5); break;
     case 'lbars': if (Math.sin(v.z * 12) > 0.6 && v.y > -0.3) c.lerp(new THREE.Color(0x9fd2ff), 0.45); break;
     case 'ystripe': if (Math.abs(v.y - 0.08) < 0.09 && v.z < 0.35) c.lerp(new THREE.Color(0xf2c62e), 0.55); break;
     case 'gspots': if (hsh > 0.78 && v.y > -0.3 && v.y < 0.4) c.lerp(new THREE.Color(0xd8b84a), 0.6); break;

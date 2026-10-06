@@ -114,6 +114,45 @@ export const VIS: Record<string, CreatureVis> = {
   // Humpback — ~15 m, must dwarf the 7 m Robalo. Rare, Gulf-Stream/offshore only. `pec:.34` +
   // `wings:true` in SHAPE.humpback below are the signature huge pectoral "wings" (up to ~1/3 body
   // length on a real humpback); `pattern:'mottle'` reads as barnacles/scarring on the dark back.
+  // ---------------------------------------------------------------------------------------
+  // Florida FWC "Florida Saltwater Fish" ID chart species (reference image supplied by the
+  // user). Chosen for one reason above all: these are the Keys' real *schooling* fish, and the
+  // world had almost none of them — every reef species already here schools in ones and twos
+  // (mutton [1,3], hogfish [1,2], grouper [1,1]). Colours and proportions are read off the chart
+  // plate for each species rather than invented.
+  // ---------------------------------------------------------------------------------------
+  // Caranx crysos — blue-green back, brassy flanks, yellow-olive forked tail, a dark opercular
+  // spot. The Keys' default "wall of fish": big fast-moving schools over reef and channel.
+  bluerunner:{kind:'fish',len:.5,h:.15,w:.09,back:'#43707d',belly:'#eef2f2',fin:'#cdb94e',level:'mid',speed:2,school:[12,26],spread:4.2,dMin:1.5,dMax:60},
+  // Lutjanus apodus — olive-brown with eight pale vertical bars and yellow fins. Named for the
+  // habit this adds to the game: it hangs over patch reef in tight groups.
+  schoolmaster:{kind:'fish',len:.45,h:.16,w:.09,back:'#8a7347',belly:'#e8dcc0',fin:'#e0ac3c',pattern:'bars',level:'mid',speed:1.1,school:[8,18],spread:3,dMin:1.5,dMax:30},
+  // Lutjanus synagris — rose-pink above, silver below, with horizontal yellow stripes and a
+  // diffuse dark blotch under the rear dorsal.
+  lanesnapper:{kind:'fish',len:.34,h:.12,w:.07,back:'#c07a68',belly:'#f2ded2',fin:'#e8c050',pattern:'yline',level:'bottom',speed:1.1,school:[7,15],spread:2.8,dMin:2,dMax:45},
+  // Rhomboplites aurorubens — uniformly vermilion above, pale below. Schools hard along the
+  // reef wall's drop, which is exactly the band ZONE_LIFE.ReefWall covers.
+  vermilion:{kind:'fish',len:.4,h:.14,w:.08,back:'#ad3a2a',belly:'#eec6b6',fin:'#c24631',level:'mid',speed:1.3,school:[9,20],spread:3.2,dMin:8,dMax:90},
+  // Selene vomer — extreme laterally-compressed silver disc with a near-vertical head profile;
+  // h >> w is the whole identity of the fish. Hangs around bridge pilings and structure.
+  lookdown:{kind:'fish',len:.3,h:.33,w:.045,back:'#b9c8d2',belly:'#f4f8fa',fin:'#d8e2e8',level:'mid',speed:1.2,school:[6,14],spread:2.4,dMin:1.5,dMax:25},
+  // Trachinotus goodei — silver pompano-shaped body with long trailing dark dorsal/anal lobes
+  // and four faint bars. Small fast schools in the surf and over the flats.
+  palometa:{kind:'fish',len:.3,h:.17,w:.05,back:'#9fb0b8',belly:'#f4f0e0',fin:'#2a3038',pattern:'bars',level:'mid',speed:1.8,school:[6,13],spread:2.8,dMin:.6,dMax:12},
+  // Scomberomorus maculatus — the spotted mackerel: blue-green back, silver flanks, scattered
+  // round golden spots, no bars (that is how you tell it from a cero at a glance).
+  spanishmack:{kind:'fish',len:.6,h:.13,w:.08,back:'#3a6b8c',belly:'#eef3f6',fin:'#2d5370',pattern:'gspots',level:'surface',speed:2.6,school:[7,16],spread:4,dMin:2,dMax:50},
+  // ---------------------------------------------------------------------------------------
+  // Tuna ID chart species (second reference image supplied by the user). The world already had
+  // yellowfin, bluefin and albacore; these are the two it was missing.
+  // ---------------------------------------------------------------------------------------
+  // Thunnus obesus — deep-bodied, very large eye, dark metallic blue back, bright yellow
+  // finlets edged in black. Deep-water tuna, so dMin sits well past the reef wall.
+  bigeye:{kind:'tuna',tuna:true,len:1.6,h:.42,w:.34,back:'#1c3050',belly:'#e6ebf0',fin:'#27405e',finlet:'#f0c63a',sickle:.5,level:'mid',speed:3,school:[5,11],spread:5,dMin:40,dMax:1e5,act:'bust'},
+  // Katsuwonus pelamis — small, torpedo-shaped, dark blue above with 4-6 bold horizontal dark
+  // stripes running along a silver belly (unique among tunas; `hline` pattern below). The most
+  // abundant schooling tuna there is, which is why its school range is the largest here.
+  skipjack:{kind:'tuna',tuna:true,len:.75,h:.2,w:.17,back:'#23344f',belly:'#dfe6ec',fin:'#2b3a52',finlet:'#c8d0d8',sickle:.35,pattern:'hline',level:'surface',speed:3.4,school:[14,30],spread:5.5,dMin:25,dMax:1e5,act:'bust'},
   humpback:{kind:'whale',len:15,h:2.6,w:2.1,back:'#1c2430',belly:'#8f97a0',pattern:'mottle',level:'surface',speed:1.8,school:[1,2],spread:10,dMin:25,dMax:1e5,act:'blow',catchable:false}
 };
 
@@ -139,32 +178,32 @@ export const ZONE_LIFE: Record<string, Array<[string, number]>> = {
   // Mangrove creek channels — juveniles sheltering along the edges.
   'Creek':[['snook',3],['redfish',2.5],['tarpon',1.5],['manatee',1],['mangrove',3.5],['ladyfish',2.5],['trout',1.5],['jackcrevalle',1]],
   // Very shallow skinny water — bonefish/permit on the sand, small sharks cruising the edges.
-  'Flats':[['bonefish',5],['permit',2.2],['stingray',3],['redfish',1.5],['barracuda',2],['blacktip',1.5],['lemonshark',1],['eagleray',1],['ladyfish',3],['pompano',1.2]],
+  'Flats':[['bonefish',5],['permit',2.2],['stingray',3],['redfish',1.5],['barracuda',2],['blacktip',1.5],['lemonshark',1],['eagleray',1],['ladyfish',3],['pompano',1.2],['palometa',3],['bluerunner',2]],
   // Florida Bay backcountry — juvenile snapper, small barracuda, rays on the sand, baitfish
   // schools, manatees in the shallows, and dolphin pods working the bay ("the bay" in the task
   // brief).
   'Backcountry':[['redfish',4],['snook',3],['trout',3],['mangrove',2.5],['tarpon',2],['bonefish',1.5],['permit',1],['barracuda',1.2],['manatee',1.2],['stingray',2.2],['jackcrevalle',2],['ladyfish',3],['pompano',1.5],['tripletail',.6],['dolphin',1.5]],
   // Bridge pilings and the channels that run under them — structure-holders in current. Dolphin
   // pods regularly work the bridge channels for bait pushed through on the tide.
-  'Bridge':[['tarpon',5],['snook',2],['mangrove',3],['eagleray',1],['sheepshead',3],['goliath',.6],['jackcrevalle',1.5],['nurse',1],['cobia',1],['barracuda',1],['dolphin',1.2]],
+  'Bridge':[['tarpon',5],['snook',2],['mangrove',3],['eagleray',1],['sheepshead',3],['goliath',.6],['jackcrevalle',1.5],['nurse',1],['cobia',1],['barracuda',1],['dolphin',1.2],['lookdown',3.5],['bluerunner',4],['schoolmaster',2]],
   // Mixed mid-water schools, mackerel and jacks between the Bay and the reef line — classic
   // bottlenose water, hence the higher dolphin weight ("less rare" per the task brief).
-  'Hawk Channel':[['mangrove',4],['eagleray',2],['turtle',1.5],['barracuda',2],['nurse',1.5],['mutton',2],['dolphin',1.8],['cero',2],['pompano',1.5],['cobia',1],['graytrigger',1.2],['jackcrevalle',1.8],['yellowtail',1.5],['sheepshead',1.2]],
+  'Hawk Channel':[['mangrove',4],['eagleray',2],['turtle',1.5],['barracuda',2],['nurse',1.5],['mutton',2],['dolphin',1.8],['cero',2],['pompano',1.5],['cobia',1],['graytrigger',1.2],['jackcrevalle',1.8],['yellowtail',1.5],['sheepshead',1.2],['bluerunner',4.5],['lanesnapper',3],['spanishmack',3],['lookdown',1.5],['schoolmaster',2]],
   // Patch reef / Sombrero crest — the existing shallow reef life (depthAt < REEF_WALL_DEPTH).
   // Dolphins work the reef line hunting bait off the coral too.
-  'Reef':[['yellowtail',5],['parrotfish',3],['angelfish',2],['hogfish',2],['grouper',2],['gag',1.2],['redgrouper',1.2],['nurse',1],['turtle',1.5],['barracuda',1.5],['mutton',2],['lionfish',1.5],['graytrigger',2],['cero',2],['goliath',.4],['dolphin',1]],
+  'Reef':[['yellowtail',5],['parrotfish',3],['angelfish',2],['hogfish',2],['grouper',2],['gag',1.2],['redgrouper',1.2],['nurse',1],['turtle',1.5],['barracuda',1.5],['mutton',2],['lionfish',1.5],['graytrigger',2],['cero',2],['goliath',.4],['dolphin',1],['schoolmaster',4.5],['lanesnapper',3.5],['bluerunner',4],['vermilion',2],['spanishmack',2]],
   // The reef wall's ledges and drop-off (depthAt >= REEF_WALL_DEPTH, spawn.ts) — grouper holding on
   // ledges, bigger snapper/jack schools working the drop, dolphins cruising the wall edge.
-  'ReefWall':[['grouper',3],['gag',2],['redgrouper',2],['yellowtail',4],['mutton',2.5],['amberjack',2],['kingfish',1.5],['cero',1.5],['nurse',1],['goliath',.6],['graytrigger',1.2],['lionfish',1],['hammerhead',.3],['cobia',1],['dolphin',1.3]],
+  'ReefWall':[['grouper',3],['gag',2],['redgrouper',2],['yellowtail',4],['mutton',2.5],['amberjack',2],['kingfish',1.5],['cero',1.5],['nurse',1],['goliath',.6],['graytrigger',1.2],['lionfish',1],['hammerhead',.3],['cobia',1],['dolphin',1.3],['vermilion',5],['bluerunner',3],['schoolmaster',2]],
   // Gulf Stream / open offshore — pelagics (roaming layer only; see spawn.ts). Dolphin pods are a
   // common sight riding the current lines; pilot whales/humpbacks are a genuine *rare* event out
   // here — tiny weights are deliberate (see the task brief's "Encounter rarity").
-  'Offshore':[['mahi',5],['flyingfish',4],['dolphin',2.5],['blackfin',3],['sailfish',1.5],['wahoo',1],['turtle',.8],['marlin',.6],['blackmarlin',.25],['swordfish',.3],['yellowfin',2.5],['albacore',1.2],['bluefin',.8],['kingfish',1.5],['amberjack',1.5],['hammerhead',.3],['pilotwhale',.12],['humpback',.07]],
+  'Offshore':[['mahi',5],['flyingfish',4],['dolphin',2.5],['blackfin',3],['sailfish',1.5],['wahoo',1],['turtle',.8],['marlin',.6],['blackmarlin',.25],['swordfish',.3],['yellowfin',2.5],['albacore',1.2],['bluefin',.8],['kingfish',1.5],['amberjack',1.5],['hammerhead',.3],['pilotwhale',.12],['humpback',.07],['skipjack',4],['bigeye',.7]],
   // The Humps (Marathon Hump, West Hump) and other named structure far offshore — real relief that
   // concentrates bottom fish and jacks well out in otherwise-open water. Marathon's actual humps
   // are a known pilot-whale spot — a tiny weight here makes that a learnable, place-based rarity
   // (docs/ARCHITECTURE.md's resident-school note) rather than a per-frame dice roll.
-  'Humps':[['amberjack',4],['grouper',2.5],['gag',1.5],['redgrouper',1.5],['cobia',2],['mutton',2],['yellowtail',2],['kingfish',1.5],['barracuda',1.5],['goliath',.5],['bullshark',.4],['nurse',1],['pilotwhale',2.6],['humpback',.08]]
+  'Humps':[['amberjack',4],['grouper',2.5],['gag',1.5],['redgrouper',1.5],['cobia',2],['mutton',2],['yellowtail',2],['kingfish',1.5],['barracuda',1.5],['goliath',.5],['bullshark',.4],['nurse',1],['pilotwhale',2.6],['humpback',.08],['vermilion',3],['bluerunner',3],['skipjack',2]]
 };
 
 /** [startU, endU, heightScale, finStyle] along the body, used by finEdge/buildFishGeo. */
@@ -232,6 +271,27 @@ export const SHAPE: Record<string, FishShape> = {
   bullshark:{peak:.36,nose:.8,ped:.12,tail:'hetero',tl:.26,th:1,dor:[[.32,.44,.8,'sickle'],[.7,.75,.25,'tri']],anal:[[.72,.77,.2,'tri']],pec:.5,shark:true},
   lemonshark:{peak:.38,nose:1,ped:.12,tail:'hetero',tl:.26,th:1,dor:[[.36,.47,.6,'sickle'],[.6,.7,.55,'sickle']],anal:[[.68,.74,.25,'tri']],pec:.5,shark:true},
   hammerhead:{peak:.38,nose:1.2,ped:.1,tail:'hetero',tl:.3,th:1.1,dor:[[.3,.42,1.5,'sickle'],[.72,.76,.3,'tri']],anal:[[.72,.77,.3,'tri']],pec:.4,shark:true},
+  // --- FWC chart species (see the VIS block above) -----------------------------------------
+  // Jack body plan: deep-ish, strongly forked tail on a thin peduncle, sickle second dorsal/anal.
+  bluerunner:{peak:.38,nose:.7,ped:.1,tail:'fork',tl:.3,th:.8,dor:[[.34,.74,.28,'sickle']],anal:[[.56,.74,.26,'sickle']],pec:.18},
+  // Snapper body plan (as mangrove): continuous spiny dorsal, rounded anal, slight fork.
+  schoolmaster:{peak:.38,nose:.8,ped:.2,tail:'truncate',tl:.2,th:.55,dor:[[.3,.74,.32,'spiny']],anal:[[.64,.77,.3,'round']],pec:.15},
+  lanesnapper:{peak:.38,nose:.8,ped:.18,tail:'fork',tl:.24,th:.6,dor:[[.3,.74,.3,'spiny']],anal:[[.64,.77,.28,'round']],pec:.15},
+  // Slimmer, more forked than the Lutjanus snappers above — vermilion is built for midwater.
+  vermilion:{peak:.36,nose:.85,ped:.16,tail:'fork',tl:.3,th:.75,dor:[[.3,.75,.28,'spiny']],anal:[[.64,.78,.24,'tri']],pec:.16},
+  // Lookdown: the steep near-vertical forehead is the whole silhouette, so `nose` is pushed well
+  // below 0.5 (a low exponent makes the profile rise almost immediately off the snout) and the
+  // body peak sits far forward. Trailing dorsal/anal filaments complete it.
+  lookdown:{peak:.26,nose:.32,ped:.1,tail:'fork',tl:.3,th:.78,dor:[[.3,.84,.5,'trail']],anal:[[.42,.84,.42,'trail']],pec:.16},
+  // Palometa: pompano shape with much longer trailing dorsal/anal lobes.
+  palometa:{peak:.42,nose:.4,ped:.1,tail:'fork',tl:.32,th:.9,dor:[[.44,.72,.78,'trail']],anal:[[.48,.74,.7,'trail']],pec:.14},
+  // Spanish mackerel: same mackerel plan as cero, slightly deeper body, finlet row to the tail.
+  spanishmack:{peak:.4,nose:1.3,ped:.12,tail:'lunate',tl:.2,th:1.1,dor:[[.2,.4,.25,'spiny'],[.48,.58,.3,'tri']],anal:[[.56,.64,.3,'tri']],pec:.1,finlets:true},
+  // --- tuna chart species ------------------------------------------------------------------
+  // Bigeye: the deepest-bodied of the three mid-size tunas, lunate tail, full finlet row.
+  bigeye:{peak:.42,nose:.85,ped:.06,tail:'lunate',tl:.25,th:1.2,dor:[[.3,.4,.44,'tri']],anal:[],pec:.22,finlets:true},
+  // Skipjack: the slimmest, most torpedo-like tuna here.
+  skipjack:{peak:.44,nose:.9,ped:.06,tail:'lunate',tl:.24,th:1.15,dor:[[.3,.4,.36,'tri']],anal:[],pec:.18,finlets:true},
   dolphin:{peak:.38,nose:.7,ped:.14,tail:'flukes',tl:.2,th:1,dor:[[.42,.55,.7,'sickle']],anal:[],pec:.2,hump:.18},
   // Short-finned pilot whale — bulbous melon forehead (strong `hump`), low hooked dorsal set
   // forward of mid-body (real pilot whales, unlike a dolphin's tall mid-back sickle), flukes.

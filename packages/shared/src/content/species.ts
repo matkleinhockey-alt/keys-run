@@ -55,6 +55,15 @@ export const SPECIES: Record<string, SpeciesDef> = {
   marlin:{name:'Blue Marlin',min:150,max:800,str:1.45,mult:5,color:'#1f3f8f',jump:true,fact:'The bucket-list billfish of the Gulf Stream. Blue marlin over 300 lb are almost always females.'},
   swordfish:{name:'Swordfish',min:80,max:400,str:1.3,mult:6,color:'#40465a',fact:'Daytime swordfish live near the bottom in well over a thousand feet of water.'},
   blackmarlin:{name:'Black Marlin',min:200,max:900,str:1.55,mult:5,color:'#2b3340',jump:true,fact:'The only marlin whose pectoral fins lock rigidly out to the sides — a true giant, rarely seen this side of the Pacific.'},
+  bluerunner:{name:'Blue Runner',min:1,max:8,str:.5,mult:16,color:'#5e8392',fact:'Blue runners travel in big fast schools and make outstanding live bait for everything bigger.'},
+  schoolmaster:{name:'Schoolmaster Snapper',min:1,max:8,str:.4,mult:15,color:'#c99a3c',fact:'Named for the way it hangs over patch reef in tight schools. Yellow fins give it away.'},
+  lanesnapper:{name:'Lane Snapper',min:.5,max:6,str:.3,mult:17,color:'#d08a74',fact:'Pink with yellow stripes and a smudge under the back — a small, willing reef snapper.'},
+  vermilion:{name:'Vermilion Snapper',min:1,max:7,str:.35,mult:16,color:'#b8402e',fact:'Called the beeliner. They stack up in big schools just off the reef drop.'},
+  lookdown:{name:'Lookdown',min:.5,max:4,str:.35,mult:20,color:'#c3d2dc',fact:'A living mirror — flat as a plate, with a face that looks permanently unimpressed.'},
+  palometa:{name:'Palometa',min:.5,max:3,str:.4,mult:22,color:'#d7d2bd',fact:'The long black fin streamers trail behind it like ribbons in the surf.'},
+  spanishmack:{name:'Spanish Mackerel',min:1,max:9,str:.55,mult:14,color:'#44739a',fact:'Golden spots and no bars is how you tell a Spanish from a cero. They slash through bait schools at speed.'},
+  bigeye:{name:'Bigeye Tuna',min:30,max:300,str:1.2,mult:7,color:'#24405f',fact:'That enormous eye is for hunting in deep, dark water — bigeye feed far below the other tunas.'},
+  skipjack:{name:'Skipjack Tuna',min:4,max:30,str:.8,mult:11,color:'#2b4160',fact:'The striped belly is unique among tunas. Skipjack school in the thousands and churn the surface when they feed.'},
   gag:{name:'Gag Grouper',min:6,max:45,str:.9,mult:7,color:'#6f6a60',fact:'Gags hang over ledges and wrecks; the big ones are almost always males.'},
   redgrouper:{name:'Red Grouper',min:5,max:30,str:.85,mult:7,color:'#9a5a46',fact:'Red groupers dig out holes in the bottom that other reef fish move into.'}
 };
@@ -63,12 +72,12 @@ export const ZONE_TABLE: Record<string, Array<[string, number]>> = {
   'Creek':[['snook',5],['redfish',3],['tarpon',2],['mangrove',3],['jackcrevalle',2],['ladyfish',2]],
   'Oil Rig':[['amberjack',6],['blackfin',3],['cobia',3],['grouper',1.5],['gag',1.2],['barracuda',2],['kingfish',2.5],['mahi',1.5],['wahoo',1.5],['yellowfin',.8]],
   'Weedline':[['mahi',8],['tripletail',3],['blackfin',2],['graytrigger',2],['wahoo',1],['sailfish',1],['jackcrevalle',1.5]],
-  'Flats':[['bonefish',5],['permit',2],['barracuda',3],['tarpon',1],['ladyfish',2],['lemonshark',.8],['blacktip',1]],
+  'Flats':[['bonefish',5],['permit',2],['barracuda',3],['tarpon',1],['ladyfish',2],['lemonshark',.8],['blacktip',1],['palometa',1.5]],
   'Backcountry':[['snook',4],['redfish',4],['trout',5],['tarpon',2],['ladyfish',3],['jackcrevalle',2],['tripletail',.8],['bullshark',.6]],
-  'Bridge':[['tarpon',5],['mangrove',4],['snook',2],['sheepshead',3],['jackcrevalle',2],['goliath',.6],['bullshark',.6]],
-  'Hawk Channel':[['mangrove',4],['yellowtail',3],['mutton',2],['redgrouper',1.2],['gag',.8],['barracuda',2],['cero',2],['pompano',1.5],['cobia',1],['jackcrevalle',1.5],['graytrigger',1.5]],
-  'Reef':[['yellowtail',5],['mutton',3],['hogfish',3],['grouper',2.5],['gag',2],['redgrouper',2],['barracuda',2],['cero',2.5],['kingfish',2],['lionfish',1.5],['graytrigger',2],['goliath',.4]],
-  'Offshore':[['mahi',6],['blackfin',4],['wahoo',2],['sailfish',2],['marlin',1.3],['blackmarlin',.5],['swordfish',1.1],['yellowfin',.8],['albacore',.3],['bluefin',.2],['kingfish',1.5],['amberjack',1.5],['cobia',.5],['hammerhead',.3]]
+  'Bridge':[['tarpon',5],['mangrove',4],['snook',2],['sheepshead',3],['jackcrevalle',2],['goliath',.6],['bullshark',.6],['lookdown',2],['bluerunner',2.5]],
+  'Hawk Channel':[['mangrove',4],['yellowtail',3],['mutton',2],['redgrouper',1.2],['gag',.8],['barracuda',2],['cero',2],['pompano',1.5],['cobia',1],['jackcrevalle',1.5],['graytrigger',1.5],['bluerunner',3],['lanesnapper',2.5],['spanishmack',2.5],['lookdown',1]],
+  'Reef':[['yellowtail',5],['mutton',3],['hogfish',3],['grouper',2.5],['gag',2],['redgrouper',2],['barracuda',2],['cero',2.5],['kingfish',2],['lionfish',1.5],['graytrigger',2],['goliath',.4],['schoolmaster',3],['lanesnapper',2.5],['vermilion',2.5],['bluerunner',2.5],['spanishmack',1.5]],
+  'Offshore':[['mahi',6],['blackfin',4],['wahoo',2],['sailfish',2],['marlin',1.3],['blackmarlin',.5],['swordfish',1.1],['yellowfin',.8],['albacore',.3],['bluefin',.2],['kingfish',1.5],['amberjack',1.5],['cobia',.5],['hammerhead',.3],['skipjack',3],['bigeye',.5]]
 };
 
 /** Species that make a reel-screaming "sounder" run worth announcing (legacy index.html:2662). */

@@ -12,13 +12,14 @@
  */
 import * as THREE from 'three';
 import { VIS } from '@keysrun/shared/content/creatures';
-import { createSpeciesPool, allocSlot, freeSlot, type SpeciesPool } from './pool.js';
+import { createSpeciesPool, beginPoolFrame, endPoolFrame, type SpeciesPool } from './pool.js';
 import { stepSchool, waterColumnAt } from './school.js';
-import { renderSchool, finalizePoolRender } from './render.js';
+import { renderSchool, beginRenderStats, renderStats, type RenderView } from './render.js';
 import { createSpoutSystem } from './spout.js';
 import {
   chunkOf, chunkKey, residentsForChunk, instantiateResident,
   tryRoamCell, instantiateRoamer, ROAM_CELL, ROAM_MIN_R, ROAM_MAX_R, ROAM_TARGET, DORMANT_TTL_S,
+  nearFieldForCell, instantiateNearField, nearCellOf, nearKey, NEAR_CELL, NEAR_RADIUS,
 } from './spawn.js';
 import { swimClock } from './swim-clock.js';
 import type { SchoolState, Threat } from './types.js';
@@ -39,7 +40,25 @@ export interface FishWorld {
    * side and the population focus has moved to the diver (see world.ts's call site).
    */
   update(dt: number, t: number, focus: { x: number; z: number }, boat: Threat, extraThreats?: Threat[]): void;
-  readonly stats: { schools: number; fish: number; draws: number };
+  /** The camera every LOD/cull decision is made against (render.ts). Separate from `focus`
+   * (which is the *population* centre — the diver or the boat) because the two genuinely differ:
+   * in the chase camera the eye sits metres behind the hull, and while diving the camera is at
+   * eye height rather than at the diver's own origin. Call once per frame before `update`. */
+  setCamera(camera: THREE.Camera): void;
+  readonly stats: {
+    schools: number; fish: number; draws: number;
+    /** Instances actually submitted to the GPU this frame, after distance+frustum culling. */
+    drawnFish: number;
+    culledDistance: number;
+    culledFrustum: number;
+    /** Submitted instances per detail tier — the headline LOD-is-working number: a busy reef
+     * should be mostly 'impostor'/'coarse', with only what you are close to in 'low'. */
+    byTier: Readonly<Record<string, number>>;
+    triangles: number;
+    /** World position the LOD/cull decision was evaluated from this frame. Permanently useful:
+     * if this ever diverges from where the viewer actually is, every fish culls at once. */
+    camX: number; camY: number; camZ: number;
+  };
   /** Scans resident chunks (via the same pure `residentsForChunk` activation uses — no game
    * state touched) outward from `(originX, originZ)` out to `maxRadius` for the first species
    * matching `wantType`. Verification-only (Playwright screenshot targeting — see
@@ -54,7 +73,7 @@ export interface FishWorld {
   debugActiveSchools(): Array<{ id: string; type: string; cx: number; cz: number; heading: number; count: number; resident: boolean }>;
   /** Verification-only: per-species-pool draw-call/triangle accounting, isolated from the rest of
    * the scene. */
-  debugPoolStats(): Array<{ type: string; triPerInstance: number; meshCount: number; inUse: number; capacity: number }>;
+  debugPoolStats(): Array<{ type: string; lod: string; triPerInstance: number; instances: number; capacity: number }>;
   /** Verification-only: running count of 'blow' SchoolEvents consumed since world creation — lets
    * a screenshot script (test/capture-mammals-screenshots.mjs) confirm a whale has actually blown
    * at least once instead of guessing from a screenshot whether it just hasn't happened yet. */
@@ -74,6 +93,9 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
   for (const [key, V] of Object.entries(VIS)) pools.set(key, createSpeciesPool(group, key, V));
 
   const residents = new Map<string, SchoolState>(); // chunkKey -> active resident
+  // The dense 18 m-cell layer inside NEAR_RADIUS — see spawn.ts's "near-field layer" header for
+  // why the resident/roamer layers alone left a diver standing in empty water.
+  const nearField = new Map<string, SchoolState>();
   const roamers = new Map<string, SchoolState>(); // id -> active roamer
   const dormant = new Map<string, DormantEntry>(); // id -> frozen roamer
 
@@ -92,24 +114,9 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
 
   let throttle = 0;
 
-  function allocateMembers(state: SchoolState): boolean {
-    const pool = pools.get(state.type);
-    if (!pool) return false;
-    const taken: number[] = [];
-    for (const m of state.members) {
-      const slot = allocSlot(pool, m.swimPhase);
-      if (slot === null) { for (const s of taken) freeSlot(pool, s); return false; }
-      m.slot = slot;
-      taken.push(slot);
-    }
-    return true;
-  }
-
-  function releaseMembers(state: SchoolState): void {
-    const pool = pools.get(state.type);
-    if (!pool) return;
-    for (const m of state.members) { if (m.slot >= 0) freeSlot(pool, m.slot); m.slot = -1; }
-  }
+  // Activating/retiring a school used to have to reserve (and could fail to reserve) a stable
+  // InstancedMesh slot per member. Instances are assigned per frame now (pool.ts), so activation
+  // is pure bookkeeping and can never be refused for lack of room — see pool.ts's header.
 
   function updateResidents(focus: { x: number; z: number }): void {
     const [fcx, fcz] = chunkOf(focus.x, focus.z);
@@ -124,13 +131,33 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
         if (residents.has(key)) continue;
         const spec = residentsForChunk(seed, cx, cz);
         if (!spec) continue;
-        const state = instantiateResident(spec, cx, cz);
-        if (allocateMembers(state)) residents.set(key, state);
+        residents.set(key, instantiateResident(spec, cx, cz));
       }
     }
-    for (const [key, state] of residents) {
-      if (!wanted.has(key)) { releaseMembers(state); residents.delete(key); }
+    for (const key of residents.keys()) {
+      if (!wanted.has(key)) residents.delete(key);
     }
+  }
+
+  function updateNearField(focus: { x: number; z: number }): void {
+    const [fcx, fcz] = nearCellOf(focus.x, focus.z);
+    const reach = Math.ceil(NEAR_RADIUS / NEAR_CELL);
+    const wanted = new Set<string>();
+    for (let dx = -reach; dx <= reach; dx++) {
+      for (let dz = -reach; dz <= reach; dz++) {
+        if (Math.hypot(dx, dz) * NEAR_CELL > NEAR_RADIUS) continue;
+        const cellX = fcx + dx, cellZ = fcz + dz;
+        const key = nearKey(cellX, cellZ);
+        wanted.add(key);
+        if (nearField.has(key)) continue;
+        const spec = nearFieldForCell(seed, cellX, cellZ);
+        if (!spec) continue;
+        nearField.set(key, instantiateNearField(spec, cellX, cellZ));
+      }
+    }
+    // Recomputing a cell is pure and cheap (spawn.ts), so a departed cell is simply dropped —
+    // nothing to preserve, and walking back onto it rebuilds exactly the same school.
+    for (const key of nearField.keys()) if (!wanted.has(key)) nearField.delete(key);
   }
 
   function manageRoamers(focus: { x: number; z: number }, t: number): void {
@@ -138,7 +165,6 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
     // see spawn.ts's header for why this is what actually fixes "turning around re-rolls the reef"
     for (const [id, state] of roamers) {
       if (Math.hypot(state.cx - focus.x, state.cz - focus.z) > ROAM_RETIRE_R) {
-        releaseMembers(state);
         roamers.delete(id);
         dormant.set(id, { state, since: t });
       }
@@ -147,7 +173,8 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
     for (const [id, entry] of dormant) {
       if (t - entry.since > DORMANT_TTL_S) { dormant.delete(id); continue; }
       if (Math.hypot(entry.state.cx - focus.x, entry.state.cz - focus.z) <= ROAM_MAX_R) {
-        if (allocateMembers(entry.state)) { roamers.set(id, entry.state); dormant.delete(id); }
+        roamers.set(id, entry.state);
+        dormant.delete(id);
       }
     }
     // top up the roaming population — candidate cells are chosen with Math.random (scan order
@@ -166,11 +193,50 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
       const spawnSpec = tryRoamCell(seed, cellX, cellZ);
       if (!spawnSpec) continue;
       const state = instantiateRoamer(spawnSpec);
-      if (allocateMembers(state)) roamers.set(state.id, state);
+      roamers.set(state.id, state);
     }
   }
 
-  const stats = { schools: 0, fish: 0, draws: 0 };
+  const stats = {
+    schools: 0, fish: 0, draws: 0,
+    drawnFish: 0, culledDistance: 0, culledFrustum: 0,
+    byTier: { impostor: 0, coarse: 0, low: 0, high: 0 } as Record<string, number>, triangles: 0,
+    camX: 0, camY: 0, camZ: 0,
+  };
+
+  // The camera LOD/culling is evaluated against — see `setCamera`'s doc comment on the interface
+  // for why this is not the same point as the population `focus`. Until the caller supplies one,
+  // the view falls back to the focus point with an all-pass frustum, so a headless/test caller
+  // that never calls setCamera still gets every fish submitted rather than none.
+  let camera: THREE.Camera | null = null;
+  const _frustum = new THREE.Frustum();
+  const _viewProj = new THREE.Matrix4();
+  const _camPos = new THREE.Vector3();
+  const view: RenderView = { camX: 0, camY: 0, camZ: 0, frustum: _frustum };
+
+  function setCamera(c: THREE.Camera): void { camera = c; }
+
+  /** All-pass frustum: six planes pointing outward from a point at infinity, so
+   * `intersectsSphere` is always true. Used when no camera has been supplied. */
+  function setAllPassFrustum(): void {
+    for (const p of _frustum.planes) p.set(new THREE.Vector3(0, 1, 0), Infinity);
+  }
+
+  function updateView(focus: { x: number; z: number }): void {
+    if (camera) {
+      camera.updateMatrixWorld();
+      camera.getWorldPosition(_camPos);
+      view.camX = _camPos.x; view.camY = _camPos.y; view.camZ = _camPos.z;
+      const cam = camera as THREE.PerspectiveCamera;
+      if (cam.projectionMatrix && cam.matrixWorldInverse) {
+        _viewProj.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+        _frustum.setFromProjectionMatrix(_viewProj);
+        return;
+      }
+    }
+    view.camX = focus.x; view.camY = 0; view.camZ = focus.z;
+    setAllPassFrustum();
+  }
 
   function update(dt: number, t: number, focus: { x: number; z: number }, boat: Threat, extraThreats: Threat[] = []): void {
     swimClock.value = t;
@@ -178,6 +244,7 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
     if (throttle <= 0) {
       throttle = SPAWN_THROTTLE_S;
       updateResidents(focus);
+      updateNearField(focus);
       manageRoamers(focus, t);
     }
 
@@ -192,49 +259,62 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
     }
     lastBoatX = boat.x; lastBoatZ = boat.z;
 
+    updateView(focus);
+
     const threats: Threat[] = [boatWithHeading, ...extraThreats];
     const ctx = { t, dt, threats };
 
     let fishCount = 0;
     const touched = new Set<SpeciesPool>();
-    for (const state of residents.values()) {
+    beginRenderStats();
+
+    const runSchool = (state: SchoolState): void => {
       const pool = pools.get(state.type);
-      if (!pool) continue;
+      if (!pool) return;
       const events = stepSchool(state, pool.V, ctx);
       for (const ev of events) if (ev.type === 'blow') { spoutSystem.spawn(ev.x, ev.y, ev.z); blowCount++; }
-      renderSchool(state, pool);
-      touched.add(pool);
+      if (!touched.has(pool)) { beginPoolFrame(pool); touched.add(pool); }
+      renderSchool(state, pool, view);
       fishCount += state.members.length;
+    };
+    for (const state of residents.values()) runSchool(state);
+    for (const state of nearField.values()) runSchool(state);
+    for (const state of roamers.values()) runSchool(state);
+
+    let draws = 0, triangles = 0;
+    for (const pool of touched) {
+      endPoolFrame(pool);
+      for (const level of pool.levels.values()) {
+        if (level.cursor === 0) continue;
+        draws++;
+        triangles += level.cursor * level.triPerInstance;
+      }
     }
-    for (const state of roamers.values()) {
-      const pool = pools.get(state.type);
-      if (!pool) continue;
-      const events = stepSchool(state, pool.V, ctx);
-      for (const ev of events) if (ev.type === 'blow') { spoutSystem.spawn(ev.x, ev.y, ev.z); blowCount++; }
-      renderSchool(state, pool);
-      touched.add(pool);
-      fishCount += state.members.length;
-    }
-    for (const pool of touched) finalizePoolRender(pool);
     spoutSystem.update(dt);
 
-    stats.schools = residents.size + roamers.size;
+    stats.schools = residents.size + nearField.size + roamers.size;
     stats.fish = fishCount;
-    stats.draws = touched.size;
+    stats.draws = draws;
+    stats.drawnFish = renderStats.submitted;
+    stats.culledDistance = renderStats.culledDistance;
+    stats.culledFrustum = renderStats.culledFrustum;
+    for (const k of Object.keys(stats.byTier)) stats.byTier[k] = renderStats.byTier[k] ?? 0;
+    stats.triangles = triangles;
+    stats.camX = view.camX; stats.camY = view.camY; stats.camZ = view.camZ;
   }
 
   /** Verification-only: the fish system's own draw-call/triangle contribution in isolation from
-   * the rest of the (still fully topside-rendered, in this branch) scene — see pool.ts's
-   * `mesh.count` high-water-mark doc comment for why `meshCount` (not `capacity`) is what actually
-   * gets submitted to the GPU. */
-  function debugPoolStats(): Array<{ type: string; triPerInstance: number; meshCount: number; inUse: number; capacity: number }> {
-    const out: Array<{ type: string; triPerInstance: number; meshCount: number; inUse: number; capacity: number }> = [];
+   * the rest of the scene, now broken out per LOD level — this is the number that shows the LOD
+   * system working (a reef full of fish should be mostly `lod:2`/`lod:1` instances with only the
+   * handful you are actually looking at closely in `lod:0`). `instances` is what was submitted on
+   * the last completed frame, which is also exactly what the GPU drew. */
+  function debugPoolStats(): Array<{ type: string; lod: string; triPerInstance: number; instances: number; capacity: number }> {
+    const out: Array<{ type: string; lod: string; triPerInstance: number; instances: number; capacity: number }> = [];
     for (const pool of pools.values()) {
-      if (pool.inUse === 0) continue;
-      const pos = pool.mesh.geometry.attributes.position;
-      const idx = pool.mesh.geometry.index;
-      const triPerInstance = idx ? idx.count / 3 : pos.count / 3;
-      out.push({ type: pool.key, triPerInstance, meshCount: pool.mesh.count, inUse: pool.inUse, capacity: pool.capacity });
+      for (const level of pool.levels.values()) {
+        if (level.cursor === 0) continue;
+        out.push({ type: pool.key, lod: level.lod, triPerInstance: level.triPerInstance, instances: level.cursor, capacity: level.capacity });
+      }
     }
     return out;
   }
@@ -242,6 +322,7 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
   function debugActiveSchools(): Array<{ id: string; type: string; cx: number; cz: number; heading: number; count: number; resident: boolean }> {
     const out: Array<{ id: string; type: string; cx: number; cz: number; heading: number; count: number; resident: boolean }> = [];
     for (const s of residents.values()) out.push({ id: s.id, type: s.type, cx: s.cx, cz: s.cz, heading: s.heading, count: s.members.length, resident: true });
+    for (const s of nearField.values()) out.push({ id: s.id, type: s.type, cx: s.cx, cz: s.cz, heading: s.heading, count: s.members.length, resident: true });
     for (const s of roamers.values()) out.push({ id: s.id, type: s.type, cx: s.cx, cz: s.cz, heading: s.heading, count: s.members.length, resident: false });
     return out;
   }
@@ -263,5 +344,6 @@ export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
 
   function debugBlowCount(): number { return blowCount; }
 
-  return { group, update, stats, findResidentNear, waterColumnAt, debugActiveSchools, debugPoolStats, debugBlowCount };
+
+  return { group, update, setCamera, stats, findResidentNear, waterColumnAt, debugActiveSchools, debugPoolStats, debugBlowCount };
 }

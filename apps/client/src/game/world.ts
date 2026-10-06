@@ -719,6 +719,10 @@ export function initWorld(wrap: HTMLElement): World {
       const debugDiver = (window as unknown as { __fishDebugDiver?: { x: number; z: number } }).__fishDebugDiver;
       if (debugDiver) fishThreats = [{ x: debugDiver.x, z: debugDiver.z, kind: 'diver', speed: 0.6 }];
     }
+    // LOD/culling is evaluated against the real render camera, which is not the population
+    // focus — see FishWorld.setCamera. Set before update() so this frame's submissions use this
+    // frame's camera rather than last frame's.
+    fishWorld.setCamera(camera);
     fishWorld.update(clamped, simTime, focus, boatThreat, fishThreats);
 
     const amp = ampAt(renderState.x, renderState.z);
