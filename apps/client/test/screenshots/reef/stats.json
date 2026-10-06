@@ -2,12 +2,12 @@
   "perWaypoint": {
     "reef-crest": {
       "total": {
-        "calls": 25,
-        "triangles": 464534
+        "calls": 26,
+        "triangles": 464584
       },
       "reefOnly": {
-        "calls": 24,
-        "triangles": 184534
+        "calls": 25,
+        "triangles": 184584
       },
       "counts": {
         "residentChunks": 25,
@@ -21,7 +21,7 @@
           "barrelSponge": 6,
           "tubeSponge": 33,
           "encrusting": 1901,
-          "seagrass": 0
+          "seagrass": 25
         }
       }
     },
@@ -77,12 +77,12 @@
     },
     "sand-channel": {
       "total": {
-        "calls": 25,
-        "triangles": 442598
+        "calls": 26,
+        "triangles": 442660
       },
       "reefOnly": {
-        "calls": 24,
-        "triangles": 162598
+        "calls": 25,
+        "triangles": 162660
       },
       "counts": {
         "residentChunks": 25,
@@ -96,18 +96,18 @@
           "barrelSponge": 6,
           "tubeSponge": 25,
           "encrusting": 1821,
-          "seagrass": 0
+          "seagrass": 31
         }
       }
     },
     "seagrass-flat": {
       "total": {
         "calls": 11,
-        "triangles": 402826
+        "triangles": 428910
       },
       "reefOnly": {
         "calls": 9,
-        "triangles": 10326
+        "triangles": 36410
       },
       "counts": {
         "residentChunks": 25,
@@ -121,14 +121,14 @@
           "barrelSponge": 0,
           "tubeSponge": 0,
           "encrusting": 213,
-          "seagrass": 967
+          "seagrass": 12392
         }
       }
     }
   },
   "densest": {
     "name": "reef-crest",
-    "calls": 24,
-    "triangles": 184534
+    "calls": 25,
+    "triangles": 184584
   }
 }

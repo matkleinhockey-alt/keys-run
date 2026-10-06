@@ -19,6 +19,7 @@
 import { hashCell } from '@keysrun/shared/rng';
 import { chainZ } from '@keysrun/shared/world/chain';
 import { depthAt, zoneAt, HUMPS } from '@keysrun/shared/world/depth';
+import { chainNormal } from '@keysrun/shared/world/current';
 import { clamp, lerp } from '../../core/math.js';
 import {
   REEF_WORLD_SEED, CHUNK_SIZE, Attr, foldSalt, CANDIDATES_PER_CHUNK, WORLD_SALT,
@@ -41,23 +42,6 @@ const smoothstep = (v: number, lo: number, hi: number): number => {
   const t = clamp((v - lo) / (hi - lo), 0, 1);
   return t * t * (3 - 2 * t);
 };
-
-/** Local tangent to the island chain at x (chainZ's own derivative — see world/chain.ts: `chainZ
- * = 0.000012*x*x`), normalized. Used to orient sea fans broadside to the prevailing current. */
-function chainTangent(x: number): [number, number] {
-  const slope = 0.000024 * x; // d/dx of 0.000012*x*x
-  const len = Math.hypot(1, slope);
-  return [1 / len, slope / len];
-}
-
-/** The cross-shore direction (perpendicular to the chain, pointing offshore/+dz) at x. Real
- * Keys reef-tract currents run predominantly alongshore (parallel to the chain); a sea fan
- * oriented with its flat face normal along this cross-shore axis stands broadside to that flow —
- * "oriented across the current" (docs/ARCHITECTURE.md "Real reef ecology"). */
-function crossShoreNormal(x: number): [number, number] {
-  const [tx, tz] = chainTangent(x);
-  return [-tz, tx];
-}
 
 /** Distance-based fade (1 at the patch's center, 0 beyond PATCH_REEF_FADE_RADIUS) to the nearest
  * named patch-reef HUMPS entry (Coffins Patch, Delta Shoal) — these sit in Hawk Channel, not the
@@ -253,9 +237,14 @@ export function placeSpeciesInChunk(species: SpeciesDef, cx: number, cz: number)
 
     let rotY = rotRoll * Math.PI * 2;
     if (species.id === 'seaFan') {
-      // Orient broadside to the local cross-shore axis, with a gentle natural jitter around it
-      // rather than a perfectly uniform fence of fans — see crossShoreNormal's header.
-      const [nx, nz] = crossShoreNormal(x);
+      // Orient broadside to the real flow field's own cross-shore axis — the same
+      // `chainNormal(x)` that `@keysrun/shared/world/current` uses for wave surge and that
+      // reef/flow.ts republishes as `uSurgeAxis` for the current-driven sway shader
+      // (materials.ts's `attachSway`), rather than this module's own (now-removed) duplicate of
+      // the same maths. A gentle natural jitter around it keeps it from reading as a perfectly
+      // uniform fence of fans — see docs/ARCHITECTURE.md "Real reef ecology": "Fans orient across
+      // the current."
+      const { nx, nz } = chainNormal(x);
       rotY = Math.atan2(nx, nz) + lerp(-0.35, 0.35, rotRoll);
     }
 
