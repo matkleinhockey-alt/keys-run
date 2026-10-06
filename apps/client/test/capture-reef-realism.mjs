@@ -32,8 +32,8 @@ fs.mkdirSync(OUT, { recursive: true });
 const SHOTS = [
   ['01-crest-4m', 1.70, 201.27, 1447.18, -2.356, -0.331], // near a placed staghorn, depth~3.9m
   ['02-midslope-7m', 5.87, 200.30, 1478.13, -2.356, -0.331], // near a placed brain coral, depth~7.7m
-  ['03-wall-12m', 10.62, 200.74, 1499.62, -2.356, -0.331], // near a placed barrel sponge, depth~12.1m
-  ['04-wall-15m', 13.28, 200.24, 1511.64, -2.356, -0.331], // near a placed star coral, depth~15.2m
+  ['03-wall-12m', 11.72, 202.24, 1501.12, -2.356, -0.243], // near a placed barrel sponge, depth~12.8m
+  ['04-wall-15m', 14.38, 201.74, 1513.14, -2.356, -0.243], // near a placed star coral, depth~15.5m
   // Wider establishing shots at the task's own literal suggested coordinates, for context/honesty
   // about what a diver actually sees swimming through rather than only the close framed shots.
   ['05-crest-4m-wide', 4, 200, 1450, 0, -0.15],
