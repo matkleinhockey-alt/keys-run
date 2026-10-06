@@ -6,10 +6,12 @@
  *  - a couple of local test users, with a handful of catches each so
  *    /leaderboard/* and /players/:id/records have something to read.
  *
- * This is one of exactly two places in this codebase allowed to call
- * recordCatch() directly (the other is test fixtures) — see
- * docs/ARCHITECTURE.md "the leaderboard is reachable only through
- * server-generated catch rows." There is no HTTP endpoint that does this.
+ * This calls recordCatch() directly, same as test fixtures do — the one
+ * other caller is routes/catches.ts's authenticated POST /catches, which
+ * is the normal way a catch is written outside of seeding/tests. See that
+ * route's doc comment for the honesty tradeoff docs/ARCHITECTURE.md's "the
+ * leaderboard is reachable only through server-generated catch rows" now
+ * carries as a deliberate, documented interim step.
  */
 import { eq } from 'drizzle-orm';
 import { SPECIES } from '@keysrun/shared/content/species';

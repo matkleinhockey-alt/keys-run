@@ -14,6 +14,7 @@ import authRoutes from './routes/auth.js';
 import meRoutes from './routes/me.js';
 import leaderboardRoutes from './routes/leaderboard.js';
 import playersRoutes from './routes/players.js';
+import catchesRoutes from './routes/catches.js';
 import healthRoutes from './routes/health.js';
 
 declare module 'fastify' {
@@ -50,6 +51,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await fastify.register(meRoutes);
   await fastify.register(leaderboardRoutes);
   await fastify.register(playersRoutes);
+  await fastify.register(catchesRoutes);
 
   return fastify;
 }

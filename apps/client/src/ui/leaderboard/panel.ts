@@ -10,10 +10,18 @@
  * server-generated catch rows") — see ui/leaderboard/api.ts.
  *
  * Works whether or not the player is logged in: logged out, it's just a read-only board with no
- * "you" row highlighted; logged in, your own rows highlight the same way legacy's did.
+ * "you" row highlighted; logged in, your own rows highlight the same way legacy's did, and the
+ * sub-line shows your own standing (best catch overall, species caught) even when it's outside
+ * the top-100 cutoff /leaderboard/overall enforces.
+ *
+ * Live-updates on a catch the player just made without a page reload: game/catch/catch-flow.ts's
+ * `landFish` reports every landed fish to apps/api (ui/leaderboard/submit-catch.ts) and fires
+ * `CATCH_SUBMITTED_EVENT` on a confirmed write, which re-renders the panel here if it's currently
+ * open (and, if closed, `open()` below already refetches on every open regardless).
  */
 import { SPECIES } from '@keysrun/shared/content/species';
 import { fetchOverall, fetchPlayerRecords, fetchSpecies, type OverallRow, type SpeciesRow } from './api.js';
+import { CATCH_SUBMITTED_EVENT } from './submit-catch.js';
 import { logOutAndReload } from '../auth/gate.js';
 import './leaderboard.css';
 
@@ -98,7 +106,27 @@ export function mountLeaderboard(wrap: HTMLElement, identity: LeaderboardIdentit
         row(`${r.rank}. ${me ? 'You' : r.displayName}`, `${speciesName} · ${r.catchCount} fish total`, `${r.weightLb.toFixed(1)} lb`, me);
       }
     }
-    subEl.textContent = identity ? `Signed in as ${identity.displayName}.` : 'Log in to get your own catches on the board.';
+
+    if (!identity) {
+      subEl.textContent = 'Log in to get your own catches on the board.';
+      return;
+    }
+    // "Signed in as X" always holds; append the player's own standing even when their best catch
+    // doesn't crack /leaderboard/overall's top-100 cutoff — the `rows` list above alone wouldn't
+    // show them anything in that case, which is exactly when a "your standing" line matters most.
+    const onBoard = rows.some((r) => r.userId === identity.userId);
+    if (onBoard) {
+      subEl.textContent = `Signed in as ${identity.displayName}.`;
+      return;
+    }
+    let mine: Awaited<ReturnType<typeof fetchPlayerRecords>> | null = null;
+    try { mine = await fetchPlayerRecords(identity.userId); } catch { mine = null; }
+    if (mine?.best) {
+      const speciesName = SPECIES[mine.best.key]?.name ?? mine.best.key;
+      subEl.textContent = `Signed in as ${identity.displayName} · your best: ${mine.best.weight.toFixed(1)} lb ${speciesName} (outside the top 100).`;
+    } else {
+      subEl.textContent = `Signed in as ${identity.displayName} · land a fish to get on the board.`;
+    }
   }
 
   async function renderSpecies(): Promise<void> {
@@ -155,8 +183,18 @@ export function mountLeaderboard(wrap: HTMLElement, identity: LeaderboardIdentit
   panel.addEventListener('click', (e) => { if (e.target === panel) close(); });
   logoutBtn?.addEventListener('click', () => { if (identity) void logOutAndReload(identity.token); });
 
+  // Live update: a catch landed and was confirmed written (submit-catch.ts only fires this on a
+  // 2xx response) while the panel happens to be open right now — refresh in place instead of
+  // waiting for the player to close and reopen it. Closed panels need nothing here: `open()`
+  // above already refetches on every open.
+  function onCatchSubmitted(): void {
+    if (!panel.classList.contains('hidden')) void render();
+  }
+  window.addEventListener(CATCH_SUBMITTED_EVENT, onCatchSubmitted);
+
   return {
     dispose() {
+      window.removeEventListener(CATCH_SUBMITTED_EVENT, onCatchSubmitted);
       openBtn.remove();
       panel.remove();
     },
