@@ -2,39 +2,71 @@
  * Catch-insertion and record-derivation helpers.
  *
  * recordCatch() is the ONLY way a row is ever written to `catches` in this
- * codebase. There is no HTTP endpoint that calls it — see
- * docs/ARCHITECTURE.md "The leaderboard is reachable only through
- * server-generated catch rows". In Phase 1 (no `sim` yet) it is called only
- * from db/seed.ts and from test fixtures that need leaderboard data to
- * assert against.
+ * codebase. Historically (Phase 1, no `sim` yet) it was called only from
+ * db/seed.ts and test fixtures — see docs/ARCHITECTURE.md "The leaderboard
+ * is reachable only through server-generated catch rows".
+ *
+ * routes/catches.ts now also calls this, from an authenticated client POST.
+ * Read that route's doc comment for the honesty tradeoff that introduces —
+ * this file stays agnostic to who's calling it and just enforces one
+ * invariant: a `suspicion > 0` catch is written (the ledger is append-only)
+ * but never allowed to move `global_records`/`species_records`, so a flagged
+ * catch can never reach the public board.
  */
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
-import { catches, globalRecords, speciesRecords, players } from '../db/schema.js';
+import { catches, globalRecords, speciesRecords, players, auditFlags } from '../db/schema.js';
 
 export interface CatchInput {
   userId: string;
   speciesKey: string;
   weightLb: number;
   caughtAt?: Date;
+  /**
+   * >0 marks this catch suspicious (see routes/catches.ts's `assessCatch`).
+   * Defaults to 0 (trusted) — every existing caller (db/seed.ts, tests)
+   * passes no value and gets the exact pre-existing behaviour.
+   */
+  suspicion?: number;
+  /** Written to `audit_flags` in the same transaction, only when `suspicion` > 0. */
+  flag?: { reason: string; details?: Record<string, unknown> };
 }
 
 /**
- * Inserts one catch row and incrementally maintains `global_records` and
- * `species_records` so the leaderboard endpoints never scan `catches`.
- * Runs in a transaction: the catch row, the per-user overall-best upsert,
- * and the per-species-best upsert all commit together.
+ * Inserts one catch row and, unless it is flagged suspicious, incrementally
+ * maintains `global_records` and `species_records` so the leaderboard
+ * endpoints never scan `catches`. Everything — the catch row, the optional
+ * `audit_flags` row, and the per-user/per-species upserts — commits in one
+ * transaction.
  */
-export async function recordCatch(db: Db, input: CatchInput): Promise<{ catchId: string }> {
+export async function recordCatch(db: Db, input: CatchInput): Promise<{ catchId: string; suspicious: boolean }> {
   const caughtAt = input.caughtAt ?? new Date();
   const weightStr = input.weightLb.toFixed(2);
+  const suspicion = input.suspicion ?? 0;
+  const suspicious = suspicion > 0;
 
   return db.transaction(async (tx) => {
     const [row] = await tx
       .insert(catches)
-      .values({ userId: input.userId, speciesKey: input.speciesKey, weightLb: weightStr, caughtAt })
+      .values({ userId: input.userId, speciesKey: input.speciesKey, weightLb: weightStr, caughtAt, suspicion })
       .returning({ id: catches.id });
     const catchId = row.id;
+
+    if (suspicious && input.flag) {
+      await tx.insert(auditFlags).values({
+        userId: input.userId,
+        catchId,
+        reason: input.flag.reason,
+        details: input.flag.details ?? {},
+      });
+    }
+
+    if (suspicious) {
+      // Off the board: a flagged catch stays in the append-only ledger
+      // (auditable, and rebuildable if policy changes) but never touches
+      // the denormalised record tables the leaderboard actually reads.
+      return { catchId, suspicious };
+    }
 
     // Per-user overall best + running catch count.
     await tx
@@ -66,7 +98,7 @@ export async function recordCatch(db: Db, input: CatchInput): Promise<{ catchId:
         },
       });
 
-    return { catchId };
+    return { catchId, suspicious };
   });
 }
 
@@ -82,12 +114,16 @@ export interface PlayerRecords {
  * `catches` scoped to one user (bounded by that user's own catch count, and
  * backed by the catches(user_id, caught_at DESC) index), not from a
  * global/shared table.
+ *
+ * Excludes `suspicion > 0` rows — same "keep it off the board" rule as the
+ * global/species leaderboards (see routes/catches.ts), applied here too
+ * since this is still a player-facing record, not an internal audit view.
  */
 export async function getPlayerRecords(db: Db, userId: string): Promise<PlayerRecords> {
   const rows = await db
     .select({ speciesKey: catches.speciesKey, weightLb: catches.weightLb })
     .from(catches)
-    .where(eq(catches.userId, userId));
+    .where(and(eq(catches.userId, userId), eq(catches.suspicion, 0)));
 
   const sp: Record<string, number> = {};
   let best: { key: string; weight: number } | null = null;
