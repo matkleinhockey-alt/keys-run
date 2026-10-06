@@ -389,7 +389,23 @@ export function createPortrait(canvasId: string): Portrait {
     // the perpendicular distance at `dv` and only offsetting sideways) rather than orbiting keeps
     // the near tip from creeping closer than the fit allows.
     const azimuth = elongated ? 0.12 : 0.40;
-    cam.position.set(dv, vHalf * 0.10, dv * Math.tan(azimuth));
+    // Which world axis the fish's nose-to-tail length actually runs along differs by path: the
+    // plain (pre-captain) framing never rotated the mesh, so length ran along its native Z: a
+    // small azimuth (X-dominant camera offset, below) sits perpendicular to that — the least-
+    // foreshortened "profile" view, correctly matching "elongated -> small azimuth". The captain-
+    // hold path above rotates the fish onto `fishAxis` (mostly +X, matching the diver trophy
+    // card's own broadside pose) — length now runs along X, so an X-dominant camera looks nearly
+    // *down* the fish's own length instead of across it, foreshortening every species and making
+    // elongated ones (small azimuth = even more X-dominant) nearly edge-on invisible. The hang-rig
+    // path, in turn, rotates the fish onto Y (vertical) — azimuth barely matters there either way,
+    // since neither X nor Z viewing foreshortens a vertical length. Swapping which axis `dv`/
+    // `tan(azimuth)` land on for the captain-hold path restores "small azimuth = profile,
+    // perpendicular to the fish's actual length" for the axis that path actually uses.
+    if (lenM <= HOLDABLE_MAX_LEN_M) {
+      cam.position.set(dv * Math.tan(azimuth), vHalf * 0.10, dv);
+    } else {
+      cam.position.set(dv, vHalf * 0.10, dv * Math.tan(azimuth));
+    }
     // Aim a touch above centre so the subject sits slightly low in frame (headroom).
     cam.lookAt(0, vHalf * 0.10, 0);
     cam.updateProjectionMatrix();

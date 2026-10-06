@@ -16,26 +16,45 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const BASE = process.env.CLIENT_URL || 'http://localhost:5173';
 const TAG = process.argv[2] || 'after';
-const OUT = path.join(HERE, 'screenshots', 'catch-portrait', TAG);
+// 'captain' rather than the old 'catch-portrait' name — the catch-flow/captain-grip-and-grin task
+// renamed this script's output directory to match where it asked for verification screenshots.
+const OUT = path.join(HERE, 'screenshots', 'captain', TAG);
 fs.mkdirSync(OUT, { recursive: true });
 
 // name, species key, a mid-range weight (lb), covering a big pelagic, a reef fish and an
 // odd-shaped/elongated species per the task brief. `grouper` added for the fish-geometry task's
 // "rounded tail" case (apps/client/src/entities/fish/fins.ts's buildTail 'round' style).
+// `mutton` and `marlin` added for the captain-grip-and-grin task: a full small -> huge range
+// (yellowtail ~3 lb through a ~600 lb marlin) to prove both the captain-holds-it path and the
+// hang-rig fallback above portrait.ts's `HOLDABLE_MAX_LEN_M` threshold.
 const SPECIES = [
-  ['mahi', 'mahi', 25],
-  ['tarpon', 'tarpon', 80],
   ['yellowtail', 'yellowtail', 3],
+  ['mutton', 'mutton', 7],
   ['hogfish', 'hogfish', 8],
   ['barracuda', 'barracuda', 20],
+  ['mahi', 'mahi', 25],
   ['grouper', 'grouper', 25],
+  ['tarpon', 'tarpon', 80],
+  ['marlin', 'marlin', 600],
 ];
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+page.setDefaultTimeout(60000);
 const errs = [];
 page.on('pageerror', (e) => errs.push(String(e)));
 page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
+
+// This sandbox runs several agents' dev servers/browsers concurrently (CPU-contended, software
+// WebGL) — `locator().screenshot()`'s "wait until the element's layout is stable across frames"
+// polling can time out under that contention even though nothing is actually wrong
+// (capture-uw-trophy.mjs hit the same thing first). A plain `page.screenshot({clip})` from a
+// once-measured bounding box sidesteps that retry loop entirely.
+async function shootElement(selector, outPath) {
+  const box = await page.locator(selector).boundingBox();
+  if (!box) throw new Error(`${selector} has no bounding box (not visible?)`);
+  await page.screenshot({ path: outPath, clip: box });
+}
 
 await page.goto(BASE, { waitUntil: 'load' });
 await page.waitForTimeout(600);
@@ -65,8 +84,8 @@ for (const [label, key, weight] of SPECIES) {
   }, 0.55);
   timings.push([label, ms]);
   await page.waitForTimeout(80);
-  await page.locator('#card .catch').screenshot({ path: `${OUT}/${label}-card.png` });
-  await page.locator('#fishCanvas').screenshot({ path: `${OUT}/${label}-canvas.png` });
+  await shootElement('#card .catch', `${OUT}/${label}-card.png`);
+  await shootElement('#fishCanvas', `${OUT}/${label}-canvas.png`);
   console.log(`[catch-portrait] ${label}: renderFrame ${ms.toFixed(2)} ms (software WebGL — not representative of real GPU fps)`);
 }
 
