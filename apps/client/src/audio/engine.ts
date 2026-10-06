@@ -123,7 +123,20 @@ export interface PlayerEngineInputs {
 }
 
 export type ReelAudioMode = 'idle' | 'fightRunning' | 'fightHeld' | 'reelingNoTension';
-export interface ReelAudioState { mode: ReelAudioMode; drag: number; bobX: number; bobZ: number }
+export interface ReelAudioState {
+  mode: ReelAudioMode;
+  /** Drag setting 1..5. Sets how hard the clicker bites, not just how loud it is. */
+  drag: number;
+  bobX: number;
+  bobZ: number;
+  /**
+   * Signed line speed, m/s, from `FightState.lineSpeed` — positive = line paying OFF the spool.
+   * This is what the clicker rate is actually derived from; see `updateReel`.
+   */
+  lineSpeed?: number;
+  /** Effective spool radius, m, from `FightState.spoolR` — shrinks through a long run. */
+  spoolR?: number;
+}
 
 export interface AudioFrameInputs {
   t: number;
@@ -162,7 +175,13 @@ export function createAudioEngine() {
   let prevThr = 0;
 
   let rush: NoiseLoop | null = null, hiss: NoiseLoop | null = null, wind: NoiseLoop | null = null, wash: NoiseLoop | null = null;
-  let reel: { tone: OscillatorNode; lfo: OscillatorNode; depth: GainNode } | null = null;
+  let reel: {
+    tone: OscillatorNode; lfo: OscillatorNode; depth: GainNode;
+    /** Broadband pawl-strike layer, chopped by the same LFO — see `updateReel`. */
+    noiseDepth: GainNode; bp: BiquadFilterNode;
+  } | null = null;
+  /** `clamp` is imported from core/math; this is just the 0..1 shorthand the reel code reads with. */
+  const clamp01 = (v: number): number => clamp(v, 0, 1);
 
   const engineOn = { v: true, startT: -1 };
 
@@ -428,16 +447,31 @@ export function createAudioEngine() {
     wind = audLoop('bandpass', 550, 0.4, 0);
     wash = audLoop('lowpass', 380, 0.5, 0);
 
-    // reel: drag scream and crank ratchet (an amplitude-chopped high tone)
+    // Reel drag clicker — two voices sharing one chopping LFO, so they stay phase-locked and
+    // read as a single mechanism. See `updateReel` for the physics that drives the rate.
+    const lfo = c.createOscillator(); lfo.type = 'square'; lfo.frequency.value = 30;
+    lfo.start();
+
+    // Voice 1: the ringing tone of a tensioned drag.
     const tone = c.createOscillator(); tone.type = 'square'; tone.frequency.value = 2700;
     const chop = c.createGain(); chop.gain.value = 0;
-    const lfo = c.createOscillator(); lfo.type = 'square'; lfo.frequency.value = 30;
     const depth = c.createGain(); depth.gain.value = 0;
     lfo.connect(depth); depth.connect(chop.gain);
     const rbp = c.createBiquadFilter(); rbp.type = 'bandpass'; rbp.frequency.value = 2600; rbp.Q.value = 3;
     tone.connect(chop); chop.connect(rbp); rbp.connect(bus);
-    tone.start(); lfo.start();
-    reel = { tone, lfo, depth };
+    tone.start();
+
+    // Voice 2: the pawl strike itself. A pure square is a buzzer; a real ratchet tooth is a
+    // broadband transient, and this is what stops the effect sounding like a synth.
+    const noiseSrc = c.createBufferSource(); noiseSrc.buffer = noise; noiseSrc.loop = true;
+    const noiseChop = c.createGain(); noiseChop.gain.value = 0;
+    const noiseDepth = c.createGain(); noiseDepth.gain.value = 0;
+    lfo.connect(noiseDepth); noiseDepth.connect(noiseChop.gain);
+    const nbp = c.createBiquadFilter(); nbp.type = 'bandpass'; nbp.frequency.value = 2600; nbp.Q.value = 1.6;
+    noiseSrc.connect(noiseChop); noiseChop.connect(nbp); nbp.connect(bus);
+    noiseSrc.start();
+
+    reel = { tone, lfo, depth, noiseDepth, bp: nbp };
 
     ready = true;
     setPlayerBoat({ id: playerBoatId, engines: 2 });
@@ -629,18 +663,80 @@ export function createAudioEngine() {
     if (f < 0.15 && Math.random() < dt * (0.6 + sea * 0.8)) audBurst({ freq: 300, freqTo: 120, dur: 0.25, gain: 0.08 + sea * 0.05, att: 0.02 });
   }
 
+  /**
+   * The reel's drag clicker, driven by real line speed rather than a mode preset.
+   *
+   * A conventional reel's drag makes noise because a sprung pawl rides a toothed ratchet on the
+   * spool: the click rate is the tooth-passing frequency, i.e. **spool RPM x tooth count**, and
+   * spool RPM is `lineSpeed / (2*PI*spoolR)`. That single relationship is what the ear actually
+   * recognises as "a fish is taking line", and it is why a long run *rises* in pitch — the spool
+   * empties, its radius shrinks (sim/fight.ts's `spoolRadiusFor`), and it must spin faster to
+   * give up the same metres per second.
+   *
+   * The previous version had three hardcoded `rate`/`pitch` pairs chosen by a mode enum, so a
+   * marlin screaming off at 8 m/s and a snapper easing away at 0.5 m/s produced the identical
+   * buzz, and nothing changed over the course of a run. It also took `bobX`/`bobZ` and never used
+   * them, so the sound had no position.
+   *
+   * Three things make it read as a mechanism rather than a synth tone:
+   *  - **Rate from physics** (above), not from a mode.
+   *  - **Two voices.** The square-wave chop alone is a buzzer. A real pawl strike is a broadband
+   *    wooden/metallic transient, so a bandpassed noise layer is chopped by the same LFO and
+   *    mixed under the tone. At low click rates you hear individual clicks; as the rate climbs
+   *    past ~80 Hz the two fuse into the continuous scream.
+   *  - **Direction matters.** Line going out is the drag slipping — high, strained, loud. Line
+   *    coming in is the handle's retrieve pawl — lower, softer, mechanical. Same reel, two
+   *    completely different sounds, and before this they were indistinguishable.
+   */
   function updateReel(reelState: ReelAudioState | undefined): void {
     if (!reel || !ctx) return;
     const now = ctx.currentTime;
-    let rate = 0, rg = 0, pitch = 2700;
-    const m = reelState?.mode ?? 'idle';
-    const drag = reelState?.drag ?? 0;
-    if (m === 'fightRunning') { rate = 55; rg = 0.02 + 0.01 * drag; pitch = 3100; }
-    else if (m === 'fightHeld') { rate = 40 + drag * 30; rg = 0.025 + 0.012 * drag; }
-    else if (m === 'reelingNoTension') { rate = 14; rg = 0.012; pitch = 1900; }
-    reel.lfo.frequency.setTargetAtTime(Math.max(1, rate), now, 0.03);
-    reel.tone.frequency.setTargetAtTime(pitch, now, 0.05);
-    reel.depth.gain.setTargetAtTime(rg, now, 0.03);
+
+    if (!reelState) {
+      reel.lfo.frequency.setTargetAtTime(1, now, 0.05);
+      reel.depth.gain.setTargetAtTime(0, now, 0.06);
+      reel.noiseDepth.gain.setTargetAtTime(0, now, 0.06);
+      return;
+    }
+
+    const drag = clamp01((reelState.drag - 1) / 4);
+    const spoolR = Math.max(0.012, reelState.spoolR ?? 0.045);
+    // Fall back to the old mode behaviour when the caller has no line speed to give (a spear
+    // fight, a test harness) so this never goes silent on a path that used to make noise.
+    const fallback = reelState.mode === 'fightRunning' ? 2.4 : reelState.mode === 'fightHeld' ? 0.5 : -1.2;
+    const lineSpeed = reelState.lineSpeed ?? fallback;
+
+    const payingOut = lineSpeed > 0.03;
+    const speed = Math.abs(lineSpeed);
+    // Tooth-passing frequency: rev/s x teeth. ~26 teeth is typical for a conventional clicker.
+    const rpsSpool = speed / (2 * Math.PI * spoolR);
+    const clickHz = clamp(rpsSpool * 26, 0, 420);
+
+    // Below this the pawl is riding teeth one at a time and you hear separate clicks; above it
+    // they fuse. Nothing switches here — it falls out of the rate — but it is the threshold the
+    // whole effect is tuned around.
+    const fused = clamp01((clickHz - 55) / 90);
+
+    let gain: number, noise: number, pitch: number;
+    if (payingOut) {
+      // Drag slipping: strained and loud, and it bites harder with a tighter drag.
+      gain = (0.014 + 0.022 * fused) * (0.75 + 0.5 * drag);
+      noise = (0.020 + 0.030 * fused) * (0.8 + 0.4 * drag);
+      pitch = 2300 + 1500 * fused + 450 * drag;
+    } else if (speed > 0.03) {
+      // Retrieve: the handle's own pawl. Lower, softer, unhurried.
+      gain = 0.008 + 0.010 * fused;
+      noise = 0.012 + 0.014 * fused;
+      pitch = 1500 + 500 * fused;
+    } else {
+      gain = 0; noise = 0; pitch = 1900;
+    }
+
+    reel.lfo.frequency.setTargetAtTime(Math.max(1, clickHz), now, 0.025);
+    reel.tone.frequency.setTargetAtTime(pitch, now, 0.04);
+    reel.bp.frequency.setTargetAtTime(pitch * 0.95, now, 0.04);
+    reel.depth.gain.setTargetAtTime(gain, now, 0.03);
+    reel.noiseDepth.gain.setTargetAtTime(noise, now, 0.03);
   }
 
   function remoteSynthFor(src: RemoteEngineSource): EngineSynth {

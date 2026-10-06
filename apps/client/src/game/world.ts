@@ -296,8 +296,19 @@ export function initWorld(wrap: HTMLElement): World {
   document.getElementById('btnSun')?.addEventListener('click', () => tod.toggleSunset());
   const camFwd = new THREE.Vector3();
   function reelAudioState(): ReelAudioState | undefined {
-    if (FishF.state === 'fight' && FishF.fight) return { mode: FishF.fight.running ? 'fightRunning' : 'fightHeld', drag: FishF.drag, bobX: FishF.bob.x, bobZ: FishF.bob.z };
-    if (FishF.reeling) return { mode: 'reelingNoTension', drag: FishF.drag, bobX: FishF.bob.x, bobZ: FishF.bob.z };
+    // `lineSpeed`/`spoolR` come straight off the fight sim (@keysrun/shared/sim/fight) and are
+    // what the drag clicker's rate is actually derived from — see audio/engine.ts's `updateReel`.
+    // Without them the clicker falls back to the old three-preset behaviour.
+    if (FishF.state === 'fight' && FishF.fight) {
+      const f = FishF.fight;
+      return {
+        mode: f.running ? 'fightRunning' : 'fightHeld', drag: FishF.drag,
+        bobX: FishF.bob.x, bobZ: FishF.bob.z,
+        lineSpeed: f.lineSpeed, spoolR: f.spoolR,
+      };
+    }
+    // Reeling in with nothing hooked: the handle's retrieve pawl. Negative = line coming back on.
+    if (FishF.reeling) return { mode: 'reelingNoTension', drag: FishF.drag, bobX: FishF.bob.x, bobZ: FishF.bob.z, lineSpeed: -1.1 };
     return undefined;
   }
 
