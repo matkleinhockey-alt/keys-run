@@ -61,7 +61,7 @@
 import * as THREE from 'three';
 import { makeFishMesh } from '../fishing/fish-mesh.js';
 import { makeWetFishMaterial } from '../fishing/fish-skin.js';
-import { buildOffscreenRig, readback, buildGradientEnv, type OffscreenRig } from './render-pipeline.js';
+import { buildOffscreenRig, readback, buildGradientEnv, type OffscreenRig, resyncRigSize } from './render-pipeline.js';
 
 interface PortraitRig extends OffscreenRig {
   pivot: THREE.Group;
@@ -162,7 +162,6 @@ export function createPortrait(canvasId: string): Portrait {
 
   function ensureRig(): PortraitRig | null {
     if (rig) return rig;
-    const cv = document.getElementById(canvasId) as HTMLCanvasElement | null;
     const scene = new THREE.Scene();
     scene.background = buildBackdrop();
     // Weak ambient floor — the environment map (added lazily, first render) carries most of the
@@ -176,8 +175,12 @@ export function createPortrait(canvasId: string): Portrait {
     // Rim/kicker (brief item 3) — placed behind the subject from the camera's point of view so
     // it grazes the silhouette/dorsal edge instead of flooding the face the camera sees.
     const rim = new THREE.DirectionalLight(0xeaffff, 1.0); rim.position.set(-3, 3.2, -2.2); scene.add(rim);
-    const camera = new THREE.PerspectiveCamera(28, (cv?.width || 640) / (cv?.height || 300), 0.01, 200);
+    // Aspect is corrected from the rig's real dimensions immediately below — `buildOffscreenRig`
+    // is what resizes the backing store for the display, so reading cv.width here would use the
+    // pre-resize value.
+    const camera = new THREE.PerspectiveCamera(28, 640 / 300, 0.01, 200);
     const base = buildOffscreenRig(canvasId, scene, camera);
+    if (base) { camera.aspect = base.w / base.h; camera.updateProjectionMatrix(); }
     if (!base) return null;
     const pivot = new THREE.Group();
     scene.add(pivot);
@@ -188,34 +191,58 @@ export function createPortrait(canvasId: string): Portrait {
   function show(color: string, lenM: number, elongated = false): void {
     const r = ensureRig();
     if (!r) return;
+    // The card is display:none until the first catch, so the rig was very likely built against a
+    // zero clientWidth — this is the first moment the real display size exists. See
+    // `resyncRigSize`.
+    if (resyncRigSize(r, canvasId)) { r.camera.aspect = r.w / r.h; r.camera.updateProjectionMatrix(); }
     if (r.mesh) { r.pivot.remove(r.mesh); disposeMesh(r.mesh); }
     const mesh = makeFishMesh(color, lenM);
     applyPortraitMaterial(mesh, lenM);
-    r.pivot.add(mesh);
-    r.mesh = mesh;
     const cam = r.camera;
     const hf = 2 * Math.atan(Math.tan(cam.fov * Math.PI / 360) * cam.aspect);
-    // Padding bumped from the legacy-ported 1.18/1.4 (brief item 5's "frame with a little
-    // headroom" — the original padding left the nose/tail/dorsal line touching the canvas edge
-    // with zero margin; this was already true before any change in this file, not a regression
-    // introduced by the lighting/material work above).
-    const len = lenM, d = (len * 1.6 / 2) / Math.tan(hf / 2) + lenM * 0.1;
-    const dv = Math.max(d, (lenM * 0.4 * 1.9 / 2) / Math.tan(cam.fov * Math.PI / 360));
-    cam.near = dv / 100; cam.far = Math.max(dv * 10, 40);
-    // A slight three-quarter angle reads more like a photo than a dead-on profile (brief item
-    // 5); long/billfish-shaped species foreshorten noticeably at that angle, so they stay close
-    // to profile instead. `dv` above is calibrated for a broadside/profile view, where every
-    // point along the fish's length is equidistant from the camera; orbiting the camera around
-    // the subject at that same *radius* instead pulls it closer to the near tip (this length is
-    // comparable to the camera distance, so that parallax is large, not a rounding error — it
-    // was clipping the nose/tail badly in testing). Side-stepping instead — keeping the camera's
-    // perpendicular (x) distance at the safe `dv` and only offsetting it sideways — gives the
-    // same viewing angle without that extra closeness.
+
+    // Frame from the mesh's ACTUAL bounds, not from `lenM`.
+    //
+    // The previous fit assumed the subject spanned exactly `lenM` horizontally and at most
+    // `lenM * 0.4` vertically. Neither holds: `makeFishMesh` scales the *body loft* to `lenM`
+    // (fish-mesh.ts: `g.scale.setScalar(lenM / V.len)`), and `buildCreatureGeo` then hangs a tail
+    // *past* the peduncle and, for billfish, a bill *in front* of the nose — so a real mahi is
+    // ~1.3x `lenM` long, and a sailfish rather more. The 0.4 height ratio is worse: a mahi's
+    // dorsal runs almost the whole back, and a lookdown is *taller than it is long*. The result
+    // was deep/long-finned species cropped at the frame edge and slender ones floating in empty
+    // space — the fit was never measuring the thing it was fitting.
+    //
+    // Measured before the mesh is parented, so the pivot's current rotation can't skew the box.
+    const box = new THREE.Box3().setFromObject(mesh);
+    const size = box.getSize(new THREE.Vector3());
+    const centre = box.getCenter(new THREE.Vector3());
+    // Re-centre on the pivot so the fish turns about its own middle. Without this the subject
+    // orbits the origin as `render()` yaws the pivot, drifting in and out of frame.
+    mesh.position.sub(centre);
+    r.pivot.add(mesh);
+    r.mesh = mesh;
+
+    // The pivot yaws +/-0.45 rad every frame (`render()`), so the on-screen width is not simply
+    // the Z extent — at some point in the cycle the X extent swings into view. The XZ diagonal is
+    // the worst case over *any* yaw, which keeps the fit rotation-proof for one cheap hypot; for a
+    // fish (X extent tiny next to Z) it is barely looser than an exact per-angle fit.
+    const hHalf = 0.5 * Math.hypot(size.x, size.z);
+    const vHalf = 0.5 * size.y;
+    // Breathing room so nothing kisses the edge, and cover for the small pitch/roll wobble.
+    const PAD = 1.16;
+    const dH = (hHalf * PAD) / Math.tan(hf / 2);
+    const dV = (vHalf * PAD) / Math.tan(cam.fov * Math.PI / 360);
+    const dv = Math.max(dH, dV, 1e-3);
+
+    cam.near = Math.max(dv / 100, 1e-4); cam.far = Math.max(dv * 10, 40);
+    // A slight three-quarter angle reads more like a photo than a dead-on profile; long/billfish
+    // shapes foreshorten badly at that angle, so they stay nearer profile. Side-stepping (holding
+    // the perpendicular distance at `dv` and only offsetting sideways) rather than orbiting keeps
+    // the near tip from creeping closer than the fit allows.
     const azimuth = elongated ? 0.12 : 0.40;
-    cam.position.set(dv, lenM * 0.1, dv * Math.tan(azimuth));
-    // Aim a little above the fish's centre so it sits slightly low in frame (headroom) instead
-    // of dead-centre.
-    cam.lookAt(0, lenM * 0.18, 0);
+    cam.position.set(dv, vHalf * 0.10, dv * Math.tan(azimuth));
+    // Aim a touch above centre so the fish sits slightly low in frame (headroom).
+    cam.lookAt(0, vHalf * 0.10, 0);
     cam.updateProjectionMatrix();
     r.last = -1;
   }

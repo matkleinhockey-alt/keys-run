@@ -75,10 +75,56 @@ export interface OffscreenRig {
 /** Builds the render-target + 2D-canvas plumbing a `show()`/`render()` pair needs — everything
  * that was duplicated boilerplate between a surface and an underwater rig. Callers still own
  * their own `scene`/`camera` (lighting/background/subject differ on purpose) and pass them in. */
+/**
+ * Sizes a portrait canvas's backing store to the display it is actually on.
+ *
+ * The markup declares `width="640" height="300"`, but CSS lays the element out at
+ * `min(360px, 80vw)` (style.css) — so on any 2x display the browser is asked for ~720 device
+ * pixels across and given 640, and upsamples. That is the soft, slightly smeared look on a retina
+ * screen, and no amount of lighting or material work fixes it.
+ *
+ * The declared attributes still set the aspect ratio (and the CSS `aspect-ratio` matches them),
+ * so only the pixel count changes here, never the framing.
+ *
+ * Capped by total pixels because `readback` below tonemaps and sRGB-encodes every pixel on the
+ * CPU: the cost is linear in area, and this runs per portrait frame. The cap is chosen to land
+ * just above a 2x 360 px-wide card (~243k px) and to refuse to chase a 3x display all the way to
+ * half a megapixel for a thumbnail.
+ */
+const MAX_PORTRAIT_PX = 260_000;
+
+/** The portrait's declared backing size, and the aspect every rig frames to. Constants rather
+ * than reads of `cv.width`/`cv.height`, because this function *mutates* those attributes —
+ * deriving the aspect from them would feed each call's rounding into the next. Must stay in sync
+ * with index.html's `#fishCanvas` and style.css's matching `aspect-ratio`. */
+const DECLARED_W = 640;
+const DECLARED_H = 300;
+
+export function sizeCanvasForDisplay(cv: HTMLCanvasElement): { w: number; h: number } {
+  const aspect = DECLARED_W / DECLARED_H;
+  const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 3);
+  // clientWidth is 0 while the card is display:none — fall back to the declared width so a
+  // portrait built before the card is first shown is not sized to nothing.
+  const cssW = cv.clientWidth || 0;
+  // Never go *below* the declared attribute size. On a 1x display the CSS box (~360 px) is
+  // narrower than the 640 px backing store the markup asks for, so sizing purely from
+  // clientWidth*dpr would quietly halve the resolution — a downgrade on exactly the machines
+  // with the least headroom to spare. This only ever adds pixels.
+  let w = Math.max(DECLARED_W, Math.round(cssW * dpr));
+  let h = Math.max(1, Math.round(w / aspect));
+  if (w * h > MAX_PORTRAIT_PX) {
+    const k = Math.sqrt(MAX_PORTRAIT_PX / (w * h));
+    w = Math.max(1, Math.round(w * k));
+    h = Math.max(1, Math.round(h * k));
+  }
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+  return { w, h };
+}
+
 export function buildOffscreenRig(canvasId: string, scene: THREE.Scene, camera: THREE.PerspectiveCamera): OffscreenRig | null {
   const cv = document.getElementById(canvasId) as HTMLCanvasElement | null;
   if (!cv) return null;
-  const w = cv.width || 640, h = cv.height || 300;
+  const { w, h } = sizeCanvasForDisplay(cv);
   const rt = new THREE.WebGLRenderTarget(w, h);
   // Not sRGB: this target never gets three's automatic output-colourspace treatment regardless of
   // what we tag it (see this file's header) — tagging it accurately as linear documents that
@@ -95,6 +141,31 @@ export function buildOffscreenRig(canvasId: string, scene: THREE.Scene, camera: 
  * original `render()` ran. `alpha(x,y)` lets a caller make part of the frame transparent in the
  * destination canvas (portrait's background is always opaque; underwater-trophy's backdrop is
  * too, so both pass `undefined` today, but the hook costs nothing to keep). */
+/**
+ * Re-sizes an existing rig if the canvas's display size has changed since it was built, and
+ * returns true when it did.
+ *
+ * Needed because the catch card is `display:none` until the first catch, so `clientWidth` is 0
+ * when the rig is first constructed and `sizeCanvasForDisplay` has to fall back to the declared
+ * attribute width. The first `show()` after the card becomes visible is where the real size
+ * finally exists — without this the portrait would stay stuck at the fallback resolution for the
+ * whole session. Also covers a window moving between a 1x and a 2x display.
+ */
+export function resyncRigSize(rig: OffscreenRig, canvasId: string): boolean {
+  const cv = document.getElementById(canvasId) as HTMLCanvasElement | null;
+  if (!cv) return false;
+  const prevW = cv.width, prevH = cv.height;
+  const { w, h } = sizeCanvasForDisplay(cv);
+  if (w === rig.w && h === rig.h && w === prevW && h === prevH) return false;
+  rig.rt.dispose();
+  rig.rt = new THREE.WebGLRenderTarget(w, h);
+  rig.rt.texture.colorSpace = THREE.LinearSRGBColorSpace;
+  rig.w = w; rig.h = h;
+  rig.img = rig.ctx2d.createImageData(w, h);
+  rig.buf = new Uint8Array(w * h * 4);
+  return true;
+}
+
 export function readback(renderer: THREE.WebGLRenderer, rig: OffscreenRig): void {
   const prevCol = renderer.getClearColor(new THREE.Color()), prevA = renderer.getClearAlpha();
   const prevT = renderer.getRenderTarget(), prevAuto = renderer.autoClear, prevSh = renderer.shadowMap.enabled;

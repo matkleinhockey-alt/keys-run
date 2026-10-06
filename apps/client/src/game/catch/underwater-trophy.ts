@@ -38,7 +38,7 @@
  */
 import * as THREE from 'three';
 import { makeFishMesh } from '../fishing/fish-mesh.js';
-import { buildOffscreenRig, readback, buildGradientEnv, type OffscreenRig } from './render-pipeline.js';
+import { buildOffscreenRig, readback, buildGradientEnv, resyncRigSize, type OffscreenRig } from './render-pipeline.js';
 
 export interface UnderwaterTrophy {
   show(color: string, lenM: number): void;
@@ -392,7 +392,6 @@ export function createUnderwaterTrophy(canvasId: string): UnderwaterTrophy {
 
   function ensureRig(): TrophyRig | null {
     if (rig) return rig;
-    const cv = document.getElementById(canvasId) as HTMLCanvasElement | null;
     const scene = new THREE.Scene();
     scene.background = buildUwBackdrop();
     // Brighter overall than a strictly "moody" underwater grade would be — legible species/size
@@ -419,8 +418,11 @@ export function createUnderwaterTrophy(canvasId: string): UnderwaterTrophy {
     handFill.position.set(0.5, 0.6, 3);
     scene.add(handFill);
 
-    const camera = new THREE.PerspectiveCamera(34, (cv?.width || 640) / (cv?.height || 300), 0.05, 50);
+    // Aspect corrected from the rig's real dimensions below — `buildOffscreenRig` resizes the
+    // backing store for the display, so cv.width here is the pre-resize value.
+    const camera = new THREE.PerspectiveCamera(34, 640 / 300, 0.05, 50);
     const base = buildOffscreenRig(canvasId, scene, camera);
+    if (base) { camera.aspect = base.w / base.h; camera.updateProjectionMatrix(); }
     if (!base) return null;
     const pivot = new THREE.Group();
     scene.add(pivot);
@@ -431,6 +433,10 @@ export function createUnderwaterTrophy(canvasId: string): UnderwaterTrophy {
   }
 
   function show(color: string, lenM: number): void {
+    // This rig and the surface portrait's share `#fishCanvas`, so either one resizing it leaves
+    // the other's cached render target and ImageData stale — both re-sync on show. (It is also
+    // where the real display size first exists; the card is display:none until a catch.)
+    if (rig && resyncRigSize(rig, canvasId)) { rig.camera.aspect = rig.w / rig.h; rig.camera.updateProjectionMatrix(); }
     const r = ensureRig();
     if (!r) return;
     // A previous catch's render() may have left the pivot mid-sway (see render()'s gentle float)
