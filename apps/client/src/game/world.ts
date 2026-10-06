@@ -191,7 +191,21 @@ export function initWorld(wrap: HTMLElement): World {
   // *focus* point that follows whichever viewer is actually in the water (the diver once
   // entities/diver/** takes over, the boat otherwise) plus the boat's own position as a standing
   // threat and the diver as an optional extra threat.
-  const fishWorld = createFishWorld();
+  // `shadows` is created further down, so the hook defers the lookup rather than capturing it —
+  // fish LOD meshes are built lazily on first sighting, which is always well after that point.
+  // Without this they miss the boot-time applyToSubtree sweep and render with a shader that does
+  // not match the CSM-lit scene (invisible fish at every tier where shadows are on).
+  // Fish LOD meshes are built lazily on first sighting, long after the boot-time
+  // `applyToSubtree(scene)` sweep below — so without this they never get the cascaded-shadow
+  // setup and render with a shader that does not match the CSM-lit scene (invisible fish at every
+  // tier where shadows are on; `low` has shadows off, which is why this hid for so long).
+  //
+  // `registerCustomMaterial`, NOT `applyToSubtree`: the fish material already owns an
+  // `onBeforeCompile` (the VAT swim shader), and plain CSM setup overwrites that wholesale — see
+  // core/shadows.ts's header. Same path water and the palm fronds take.
+  const fishWorld = createFishWorld(undefined, (_mesh, material, baseCompile) => {
+    shadows.registerCustomMaterial(material, baseCompile);
+  });
   scene.add(fishWorld.group);
 
   // 9. clouds (one InstancedMesh — see world/clouds.ts header; count fixed at boot per the

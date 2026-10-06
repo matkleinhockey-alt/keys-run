@@ -90,10 +90,31 @@ export interface LodLevel {
   triPerInstance: number;
 }
 
+/**
+ * Called with each newly built LOD mesh, right after it is created and before it is first drawn.
+ *
+ * This exists because levels are built **lazily** (see this module's header). `world.ts` runs
+ * `shadows.applyToSubtree(scene)` once at boot to give every material in the scene its cascaded-
+ * shadow setup; a fish material that does not exist yet at that moment is simply never visited,
+ * and renders with a shader that does not match the CSM-lit scene around it. At `quality: low`
+ * shadows are off and nothing goes wrong, which is exactly why this survived verification —
+ * every measurement had been taken at `low`.
+ *
+ * `entities/crew-model` has the same problem for the same reason (its glTF arrives after boot)
+ * and solves it the same way; see `world.ts`'s `createCrewSystem(..., group => applyToSubtree)`.
+ */
+export type MeshReadyHook = (
+  mesh: THREE.InstancedMesh,
+  material: THREE.MeshPhysicalMaterial,
+  baseOnBeforeCompile: NonNullable<THREE.MeshPhysicalMaterial['onBeforeCompile']>,
+) => void;
+
 export interface SpeciesPool {
   key: string;
   V: CreatureVis;
   group: THREE.Group;
+  /** See `MeshReadyHook`. */
+  onMeshReady?: MeshReadyHook;
   /** Keyed by tier, populated lazily — a tier materialises on its first `pushInstance`. */
   levels: Map<FishDetail, LodLevel>;
   /** Instances submitted last completed frame, summed across levels (stats/verification only). */
@@ -102,9 +123,9 @@ export interface SpeciesPool {
   dropped: number;
 }
 
-export function createSpeciesPool(group: THREE.Group, key: string, V: CreatureVis): SpeciesPool {
+export function createSpeciesPool(group: THREE.Group, key: string, V: CreatureVis, onMeshReady?: MeshReadyHook): SpeciesPool {
   // Nothing is built here any more — see this module's header on lazy levels.
-  return { key, V, group, levels: new Map(), live: 0, dropped: 0 };
+  return { key, V, group, onMeshReady, levels: new Map(), live: 0, dropped: 0 };
 }
 
 function buildLevel(pool: SpeciesPool, lod: FishDetail, capacity: number): LodLevel {
@@ -112,7 +133,7 @@ function buildLevel(pool: SpeciesPool, lod: FishDetail, capacity: number): LodLe
   attachVertexIndex(geo);
   const profile = computeSwimProfile(geo, pool.key, pool.V);
   const vat = bakeVAT(profile, VAT_FRAMES[lod]);
-  const mat = createFishMaterial(pool.key, pool.V, vat, profile.uScl, profile.uShn);
+  const { material: mat, baseOnBeforeCompile } = createFishMaterial(pool.key, pool.V, vat, profile.uScl, profile.uShn);
   const mesh = new THREE.InstancedMesh(geo, mat, capacity);
   // Instance matrices are rewritten from scratch every frame (see this module's header), so the
   // buffer is genuinely dynamic. Per-instance frustum culling happens on the CPU in render.ts —
@@ -133,6 +154,10 @@ function buildLevel(pool: SpeciesPool, lod: FishDetail, capacity: number): LodLe
 
   const idx = geo.index;
   const triPerInstance = idx ? idx.count / 3 : geo.attributes.position.count / 3;
+  // Hand the brand-new mesh to the scene-level material setup before anything draws it. The base
+  // compile goes with it because CSM must re-wrap from that, not clobber it — see materials.ts's
+  // `FishMaterial` and core/shadows.ts's header.
+  pool.onMeshReady?.(mesh, mat, baseOnBeforeCompile);
   return { lod, mesh, vat, geo, mat, capacity, cursor: 0, attached: false, triPerInstance };
 }
 

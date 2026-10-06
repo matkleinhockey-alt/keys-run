@@ -50,7 +50,16 @@ function pbrParamsFor(key: string, V: CreatureVis): PbrParams {
 
 const TWO_PI = Math.PI * 2;
 
-export function createFishMaterial(key: string, V: CreatureVis, vat: VatBake, uScl: number, uShn: number): THREE.MeshPhysicalMaterial {
+/** A fish material plus the CSM-agnostic compile hook it was built with. `core/shadows.ts` must
+ * re-wrap from this original function rather than from whatever `onBeforeCompile` currently is —
+ * see that module's header (point 1) and `registerCustomMaterial`. Returning it is what lets the
+ * VAT swim shader survive the cascaded-shadow setup instead of being overwritten wholesale. */
+export interface FishMaterial {
+  material: THREE.MeshPhysicalMaterial;
+  baseOnBeforeCompile: NonNullable<THREE.MeshPhysicalMaterial['onBeforeCompile']>;
+}
+
+export function createFishMaterial(key: string, V: CreatureVis, vat: VatBake, uScl: number, uShn: number): FishMaterial {
   const pbr = pbrParamsFor(key, V);
   const mat = new THREE.MeshPhysicalMaterial({
     vertexColors: true,
@@ -75,7 +84,7 @@ export function createFishMaterial(key: string, V: CreatureVis, vat: VatBake, uS
     uShn: { value: uShn },
   };
 
-  mat.onBeforeCompile = (sh) => {
+  const baseOnBeforeCompile: NonNullable<THREE.MeshPhysicalMaterial['onBeforeCompile']> = (sh) => {
     Object.assign(sh.uniforms, uniforms);
 
     sh.vertexShader = sh.vertexShader
@@ -136,9 +145,10 @@ float gLatLine = 0.0;`)
     gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.03, 0.22, 0.30), min(0.96, haze));
     #include <dithering_fragment>`);
   };
+  mat.onBeforeCompile = baseOnBeforeCompile;
   // Force a fresh program on first compile (onBeforeCompile already runs on first compile; this
   // just documents that re-assigning onBeforeCompile later — e.g. a quality-tier swap rebuilding
   // materials — must bump needsUpdate, same convention as core/shadows.ts).
   mat.needsUpdate = true;
-  return mat;
+  return { material: mat, baseOnBeforeCompile };
 }

@@ -36,6 +36,48 @@
  */
 import * as THREE from 'three';
 import { CSM } from 'three/addons/csm/CSM.js';
+import { CSMShader } from 'three/addons/csm/CSMShader.js';
+
+/**
+ * Upstream bug fix: three r186's CSM addon ships a **stale copy** of `lights_fragment_begin`.
+ *
+ * `CSMShader.lights_fragment_begin` is a hand-maintained duplicate of three's own chunk with the
+ * cascade loop spliced in, and it has drifted. It still writes `material.iridescenceF0`, a field
+ * r186 removed when it split iridescence into dielectric and metallic terms — the struct in
+ * `lights_physical_pars_fragment` now declares `iridescenceF0Dielectric` / `iridescenceF0Metallic`
+ * and nothing else. The result is a hard fragment-shader compile failure:
+ *
+ *     ERROR: 'iridescenceF0' : no such field in structure 'PhysicalMaterial'
+ *
+ * for **any material that has both CSM and iridescence**. In this codebase that is every fish
+ * (materials.ts gives tuna/jacks/mackerel iridescence up to 0.55), so at any quality tier with
+ * shadows on — medium, high, ultra — every fish in the world silently rendered as nothing. Only
+ * `low` disables shadows, which is why this survived: it is the tier a software/virtualised GPU
+ * auto-detects, and therefore the tier every screenshot in development was taken at.
+ *
+ * Patched here, once, at module load — before any CSM instance is constructed — rather than
+ * worked around by stripping iridescence off the fish, because the bug hits any future
+ * iridescent/clearcoat material too. Written as an exact, idempotent string replace so it simply
+ * stops applying (and the code below still compiles) once three ships its own fix.
+ */
+const CSM_STALE_IRIDESCENCE = 'material.iridescenceF0 = Schlick_to_F0( material.iridescenceFresnel, 1.0, dotNVi );';
+const CSM_R186_IRIDESCENCE = [
+  'material.iridescenceFresnel = mix( iridescenceFresnelDielectric, iridescenceFresnelMetallic, material.metalness );',
+  'material.iridescenceF0Dielectric = Schlick_to_F0( iridescenceFresnelDielectric, 1.0, dotNVi );',
+  'material.iridescenceF0Metallic = Schlick_to_F0( iridescenceFresnelMetallic, 1.0, dotNVi );',
+].join('\n\t\t');
+const CSM_STALE_FRESNEL = 'material.iridescenceFresnel = evalIridescence( 1.0, material.iridescenceIOR, dotNVi, material.iridescenceThickness, material.specularColor );';
+const CSM_R186_FRESNEL = [
+  'vec3 iridescenceFresnelDielectric = evalIridescence( 1.0, material.iridescenceIOR, dotNVi, material.iridescenceThickness, material.specularColor );',
+  'vec3 iridescenceFresnelMetallic = evalIridescence( 1.0, material.iridescenceIOR, dotNVi, material.iridescenceThickness, material.diffuseColor );',
+].join('\n\t\t');
+
+if (CSMShader.lights_fragment_begin.includes(CSM_STALE_IRIDESCENCE)) {
+  CSMShader.lights_fragment_begin = CSMShader.lights_fragment_begin
+    .replace(CSM_STALE_FRESNEL, CSM_R186_FRESNEL)
+    .replace(CSM_STALE_IRIDESCENCE, CSM_R186_IRIDESCENCE);
+}
+
 import type { QualitySettings } from './quality.js';
 
 type OnBeforeCompile = THREE.MeshStandardMaterial['onBeforeCompile'];

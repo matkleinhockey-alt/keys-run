@@ -13,7 +13,7 @@
 import * as THREE from 'three';
 import { VIS, isCatchable } from '@keysrun/shared/content/creatures';
 import { SPECIES } from '@keysrun/shared/content/species';
-import { createSpeciesPool, beginPoolFrame, endPoolFrame, type SpeciesPool } from './pool.js';
+import { createSpeciesPool, beginPoolFrame, endPoolFrame, type SpeciesPool, type MeshReadyHook } from './pool.js';
 import { stepSchool, waterColumnAt } from './school.js';
 import { renderSchool, beginRenderStats, renderStats, type RenderView } from './render.js';
 import { createSpoutSystem } from './spout.js';
@@ -138,12 +138,18 @@ function hashUnit(id: string): number {
  * before `spearTargetsNear` touches their members — see that function. */
 const SCHOOL_QUERY_MARGIN = 20;
 
-export function createFishWorld(seed: number = WORLD_SEED): FishWorld {
+/**
+ * `onMeshReady` is handed each lazily-built per-(species, LOD) InstancedMesh so the caller can run
+ * scene-level material setup on it — in practice `shadows.applyToSubtree`. Required because pool
+ * levels materialise on first use, long after world.ts's one boot-time sweep; see pool.ts's
+ * `MeshReadyHook`.
+ */
+export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshReadyHook): FishWorld {
   const group = new THREE.Group();
   group.name = 'fish';
 
   const pools = new Map<string, SpeciesPool>();
-  for (const [key, V] of Object.entries(VIS)) pools.set(key, createSpeciesPool(group, key, V));
+  for (const [key, V] of Object.entries(VIS)) pools.set(key, createSpeciesPool(group, key, V, onMeshReady));
 
   const residents = new Map<string, SchoolState>(); // chunkKey -> active resident
   // The dense 18 m-cell layer inside NEAR_RADIUS — see spawn.ts's "near-field layer" header for
