@@ -25,6 +25,8 @@ import { toast } from '../../ui/toast.js';
 import { submitCatch } from '../../ui/leaderboard/submit-catch.js';
 import { beamBetween } from '../../entities/boat/hull.js';
 import { makeFishMesh } from '../fishing/fish-mesh.js';
+import { buildPulleyBlock } from './pulley.js';
+import { isHoldable } from './display-mode.js';
 import { createCooler, meatLine, nearMarina, type CoolerFish } from './cooler.js';
 import { createPortrait } from './portrait.js';
 import { createUnderwaterTrophy } from './underwater-trophy.js';
@@ -101,7 +103,17 @@ function hangRig(model: BoatModel, deckY: number, hx: number, hz: number, hookY:
   g.add(beamBetween(V(hx, deckY, hz), V(hx, top, hz), 0.045, steel));
   g.add(beamBetween(V(hx, top, hz), V(hx + 0.95, top + 0.05, hz), 0.035, steel));
   g.add(beamBetween(V(hx, top - 0.6, hz), V(hx + 0.6, top, hz), 0.025, steel));
-  g.add(beamBetween(V(hx + 0.95, top, hz), V(hx + 0.95, hookY + 0.38, hz), 0.008, new THREE.MeshStandardMaterial({ color: 0x222222 })));
+  // Block at the boom head the lifting line runs over — see game/catch/pulley.ts. Without it the
+  // cable started in mid-air at the tip, which reads as a bent pipe rather than a hoist you could
+  // crank a 600 lb fish up with.
+  const cableMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
+  const sheaveR = 0.11;
+  const block = buildPulleyBlock({ radius: sheaveR });
+  block.position.set(hx + 0.95, top - sheaveR * 1.15, hz);
+  g.add(block);
+  // Hauling part back along the boom to the post, then the hanging part down to the scale.
+  g.add(beamBetween(V(hx + 0.95 - sheaveR, top - sheaveR * 1.15, hz), V(hx, top - 0.5, hz), 0.007, cableMat));
+  g.add(beamBetween(V(hx + 0.95 + sheaveR, top - sheaveR * 1.15, hz), V(hx + 0.95, hookY + 0.38, hz), 0.008, cableMat));
   const sc = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.05, 20), new THREE.MeshStandardMaterial({ color: 0xc8102e, roughness: 0.4 }));
   sc.rotation.z = Math.PI / 2; sc.position.set(hx + 0.95, hookY + 0.27, hz);
   g.add(sc);
@@ -121,7 +133,9 @@ function setupPhoto(model: BoatModel, key: string, weight: number): PhotoHandle 
   const lenM = scaledLenM(key, weight);
   const fish = makeFishMesh(SPECIES[key].color, lenM);
   const deckY = model.fishSpot.y;
-  if (weight >= 25 || lenM > 1.7) {
+  // Same rule the catch card uses — see display-mode.ts. These used to be two different
+  // thresholds, so a 25 lb mahi hung from the pole on deck while the card showed it held.
+  if (!isHoldable(lenM, weight)) {
     const hx = model.fishSpot.x + 0.55, hz = model.fishSpot.z, fx = hx + 0.95;
     const hookY = deckY + clamp(lenM * 0.92, 2.3, 5.5);
     const rig = hangRig(model, deckY, hx, hz, hookY);
@@ -225,7 +239,7 @@ export function createCatchFlow(deps: CatchFlowDeps) {
     } else {
       model.station = 0;
       model.fishSpot.copy(model.stations[0].spot);
-      try { photo = setupPhoto(model, fish.key, fish.weight); portrait.show(S.color, scaledLenM(fish.key, fish.weight), ELONGATED_SPECIES.has(fish.key)); } catch (e) { console.error('photo setup', e); photo = null; }
+      try { photo = setupPhoto(model, fish.key, fish.weight); portrait.show(S.color, scaledLenM(fish.key, fish.weight), ELONGATED_SPECIES.has(fish.key), fish.weight); } catch (e) { console.error('photo setup', e); photo = null; }
     }
 
     const choice = cooler.prepareKeepChoice(boatSpec.id, fish.key, fish.weight);
