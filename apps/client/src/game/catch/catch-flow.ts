@@ -28,6 +28,7 @@ import { makeFishMesh } from '../fishing/fish-mesh.js';
 import { createCooler, meatLine, nearMarina, type CoolerFish } from './cooler.js';
 import { createPortrait } from './portrait.js';
 import { createUnderwaterTrophy } from './underwater-trophy.js';
+import { placeHoldingCaptain, placePresentingCaptain, type DeckCaptainHandle } from './deck-figure.js';
 
 function $(id: string): HTMLElement | null { return document.getElementById(id); }
 function setText(id: string, s: string): void { const el = $(id); if (el) el.textContent = s; }
@@ -58,6 +59,9 @@ interface PhotoHandle {
   parent: THREE.Object3D;
   hangGroup: THREE.Group | null;
   rig: THREE.Group | null;
+  /** The captain standing on deck with the catch (deck-figure.ts) — present on both branches of
+   * `setupPhoto` now, see that function's updated doc comment. */
+  captain: DeckCaptainHandle | null;
 }
 
 interface ReleasedFish { m: THREE.Object3D; t: number; dx: number; dz: number }
@@ -109,10 +113,10 @@ function hangRig(model: BoatModel, deckY: number, hx: number, hz: number, hookY:
   return g;
 }
 
-/** legacy `setupPhoto` (index.html:2920-2944), trimmed to the fish mesh itself: the
- * captain/crew-clearing and held-in-hands poses needed a real human model
- * (entities/boat/model.ts's `makeHumanStub` — out of scope, see that file's header), so a fish
- * too small for the gin pole rig just rests at the fishing spot instead of being held up. */
+/** legacy `setupPhoto` (index.html:2920-2944). Both branches now also put the captain on deck
+ * with the catch (game/catch/deck-figure.ts) — see that module's header for why it's a separate
+ * file (figure.ts's captain bust has no legs, built for the catch card's cropped frame) and why
+ * the big-fish branch presents beside the crane rather than gripping the hanging fish. */
 function setupPhoto(model: BoatModel, key: string, weight: number): PhotoHandle {
   const lenM = scaledLenM(key, weight);
   const fish = makeFishMesh(SPECIES[key].color, lenM);
@@ -127,12 +131,13 @@ function setupPhoto(model: BoatModel, key: string, weight: number): PhotoHandle 
     fish.position.set(0, -lenM / 2, 0);
     hang.add(fish);
     model.group.add(hang);
-    return { fish, parent: hang, hangGroup: hang, rig };
+    const captain = placePresentingCaptain(model, deckY);
+    model.group.add(captain.group);
+    return { fish, parent: hang, hangGroup: hang, rig, captain };
   }
-  fish.rotation.set(0, Math.PI / 2, 0.12);
-  fish.position.set(model.fishSpot.x, deckY + 0.3, model.fishSpot.z);
-  model.group.add(fish);
-  return { fish, parent: model.group, hangGroup: null, rig: null };
+  const captain = placeHoldingCaptain(model, deckY, fish);
+  model.group.add(captain.group);
+  return { fish, parent: captain.group, hangGroup: null, rig: null, captain };
 }
 
 /** Legacy `boatSpec.id`/`.brand`/`.name` — just enough of the active boat's identity for the
@@ -240,6 +245,10 @@ export function createCatchFlow(deps: CatchFlowDeps) {
     trophy.clear();
     if (photo?.rig?.parent) photo.rig.parent.remove(photo.rig);
     if (photo?.hangGroup?.parent) photo.hangGroup.parent.remove(photo.hangGroup);
+    if (photo?.captain) {
+      if (photo.captain.group.parent) photo.captain.group.parent.remove(photo.captain.group);
+      photo.captain.dispose();
+    }
     $('card')?.classList.add('hidden');
     document.body.classList.remove('photoing');
     if (photo?.fish && photo.fish.parent) photo.parent.remove(photo.fish);
