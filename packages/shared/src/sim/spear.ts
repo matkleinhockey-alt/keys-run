@@ -156,11 +156,28 @@ export function fire(origin: Vec3, dir: Vec3): ShotState {
  * server-side, the server applies the *same* function to the *same* inputs and agrees on where
  * the shaft went, instead of seeing a client aiming 7 deg off its own replicated look direction.
  */
-export const ASSIST_CONE = 0.12;
 /**
- * How far toward the computed intercept the aim is actually moved, 0..1. Not 1: a hard snap feels
- * like the game taking the shot for you and removes any reason to track a fish. At 0.65 a shot
- * that was close becomes a hit and a shot that was badly off still misses.
+ * Widened 0.12 -> 0.17 rad (~6.9 deg -> ~9.7 deg). The old cone was tuned before anyone had tried
+ * to hit a small schooling fish with this gun: a yellowtail subtends well under a degree at
+ * typical spearing range, so a 6.9 deg cone only helped if you were already nearly on target.
+ *
+ * Still comfortably inside docs/ARCHITECTURE.md's 0.22 rad server aim-plausibility window, which
+ * is the load-bearing constraint — assist must never push a shot outside the cone the server is
+ * willing to believe, or every assisted hit reads as an aimbot and gets rejected. 0.17 leaves
+ * 0.05 rad of headroom for the client/server interpolation disagreement that window exists to
+ * absorb.
+ */
+export const ASSIST_CONE = 0.17;
+/**
+ * How far toward the computed intercept the aim is actually moved, 0..1.
+ *
+ * Not 1: a hard snap feels like the game taking the shot for you and removes any reason to
+ * track a fish. At 0.65 a shot that was close becomes a hit and a shot that was badly off still
+ * misses.
+ *
+ * Measured note: raising this to 0.88 was tried and changed nothing (3/12 -> 2/12 on a tracked
+ * yellowtail at 4-7 m, i.e. noise). Residual lead is therefore NOT what misses are made of here,
+ * so this stays where it was rather than being quietly inflated toward an aimbot for no gain.
  */
 export const ASSIST_STRENGTH = 0.65;
 /** Assist only engages inside this range — past it the shaft has bled most of its speed
@@ -204,11 +221,19 @@ export function assistAim(
   origin: Vec3,
   dir: Vec3,
   targets: readonly AssistTarget[],
-  opts: { cone?: number; strength?: number; range?: number } = {},
+  opts: { cone?: number; strength?: number; range?: number; eye?: Vec3 } = {},
 ): AssistResult {
   const cone = opts.cone ?? ASSIST_CONE;
   const strength = clamp(opts.strength ?? ASSIST_STRENGTH, 0, 1);
   const range = opts.range ?? ASSIST_RANGE;
+  // The frame the PLAYER aims in. `origin` is where the shaft physically leaves (the muzzle);
+  // `eye` is where the crosshair is measured from (the camera). They are not the same point, and
+  // conflating them is a real bug: the cone test used to compare the camera's forward vector
+  // against the *muzzle*-to-target vector, so at close range — where the muzzle offset subtends
+  // several degrees — assist stopped locking precisely when the player had the crosshair dead on
+  // the fish. Measured: assist failed to lock on 2 of 8 well-aimed shots, and those 2 were
+  // guaranteed misses.
+  const eye = opts.eye ?? origin;
 
   const dl = Math.hypot(dir.x, dir.y, dir.z) || 1;
   const ux = dir.x / dl, uy = dir.y / dl, uz = dir.z / dl;
@@ -238,23 +263,39 @@ export function assistAim(
       }
     }
 
-    px = aimX - origin.x; py = aimY - origin.y; pz = aimZ - origin.z;
-    const pl = Math.hypot(px, py, pz) || 1;
-    const cosA = clamp((px * ux + py * uy + pz * uz) / pl, -1, 1);
-    const ang = Math.acos(cosA);
+    // Cone test from the eye, because that is what the crosshair means.
+    const ex = aimX - eye.x, ey = aimY - eye.y, ez = aimZ - eye.z;
+    const el = Math.hypot(ex, ey, ez) || 1;
+    const ang = Math.acos(clamp((ex * ux + ey * uy + ez * uz) / el, -1, 1));
     if (ang > cone) continue;
-    if (ang < bestAng) { bestAng = ang; best = { x: px / pl, y: py / pl, z: pz / pl, id: t.id }; }
+    if (ang < bestAng) {
+      bestAng = ang;
+      // Keep the intercept POINT, not a direction: the final firing direction has to be computed
+      // from the muzzle to that point, or the shaft leaves parallel to the eye's line instead of
+      // converging on it.
+      best = { x: aimX, y: aimY, z: aimZ, id: t.id };
+    }
   }
 
   if (!best) return { dx: ux, dy: uy, dz: uz, targetId: null, applied: 0 };
 
-  // Blend toward the intercept direction and renormalize — a slerp is unnecessary at <=7 deg,
-  // where the normalized lerp differs from it by well under a milliradian.
-  let nx = ux + (best.x - ux) * strength;
-  let ny = uy + (best.y - uy) * strength;
-  let nz = uz + (best.z - uz) * strength;
-  const nl = Math.hypot(nx, ny, nz) || 1;
-  nx /= nl; ny /= nl; nz /= nl;
+  // Blend in the eye frame: how far the player's aim is moved toward the intercept is an assist
+  // decision, and `strength` < 1 is what keeps a badly-aimed shot a miss.
+  const bx = best.x - eye.x, by = best.y - eye.y, bz = best.z - eye.z;
+  const bl = Math.hypot(bx, by, bz) || 1;
+  let ax = ux + (bx / bl - ux) * strength;
+  let ay = uy + (by / bl - uy) * strength;
+  let az = uz + (bz / bl - uz) * strength;
+  const al = Math.hypot(ax, ay, az) || 1;
+  ax /= al; ay /= al; az /= al;
+  // Convert that aim into a direction the SHAFT can use: point the muzzle at the spot the blended
+  // eye-ray reaches at the target's own distance. This is geometry, not assist — the parallax
+  // correction is applied in full, while `strength` still governs how much the aim itself moved.
+  const px2 = eye.x + ax * bl - origin.x;
+  const py2 = eye.y + ay * bl - origin.y;
+  const pz2 = eye.z + az * bl - origin.z;
+  const pl2 = Math.hypot(px2, py2, pz2) || 1;
+  let nx = px2 / pl2, ny = py2 / pl2, nz = pz2 / pl2;
   const applied = Math.acos(clamp(nx * ux + ny * uy + nz * uz, -1, 1));
   return { dx: nx, dy: ny, dz: nz, targetId: best.id, applied };
 }

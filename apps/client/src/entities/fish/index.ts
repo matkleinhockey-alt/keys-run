@@ -34,6 +34,7 @@ const RESIDENT_RADIUS = 220;
 const SPAWN_THROTTLE_S = 0.4; // legacy `popT` cadence (index.html:2542)
 const ROAM_RETIRE_R = ROAM_MAX_R + 40; // legacy's `POP_R+40` free radius
 
+
 /**
  * One real, individual spearable fish — the tier-3 tracked-fish registry docs/ARCHITECTURE.md's
  * "Fish ownership — three tiers" anticipates, scoped to what this single-player/no-server branch
@@ -52,6 +53,12 @@ export interface SpearTargetLite {
   bx: number; by: number; bz: number;
   radius: number;
   catchable: boolean;
+  /** World-space velocity, m/s. Carried because `assistAim` (packages/shared/sim/spear.ts) gates
+   * its entire lead calculation on it — `const vx = t.vx ?? 0 ... if (vx || vy || vz)` — so a
+   * target with no velocity gets aimed at where it *is*, never where it will be. The shaft needs
+   * ~0.2 s to cross 5 m, in which a 1.5 m/s reef fish moves most of its own body width, so
+   * omitting this made the assist's lead silently dead code. */
+  vx: number; vy: number; vz: number;
 }
 
 export interface FishWorld {
@@ -416,10 +423,40 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
     const catchable = isCatchable(state.type);
     const r2 = radius * radius;
     const Hh = V.h || V.len * 0.17, W = V.w || V.len * 0.16;
-    const girthRadius = Math.max(0.08, Math.max(Hh, W) / 2);
+    // Spear hitbox, NOT the fish's true girth.
+    //
+    // The anatomically-correct half-girth is brutal as a target: a 0.42 m yellowtail is 0.12 m
+    // tall and 0.07 m wide, giving a 6 cm capsule radius. Six centimetres, on a fish that is also
+    // undulating (swim.ts bakes a per-vertex wiggle of up to 0.1x body length into the VAT, so the
+    // drawn silhouette sways around this instance origin without the capsule knowing), shot from a
+    // first-person gun that sways with the diver's breathing — it is essentially unhittable, which
+    // is exactly the complaint.
+    //
+    // So: a forgiveness multiplier plus a floor. The floor is what rescues small schooling fish;
+    // SPEAR_FORGIVENESS keeps big slow targets proportionally generous without making a goliath
+    // grouper a barn door. This is a deliberate gameplay hitbox — hitboxes being larger than the
+    // art is normal — and it is applied here, once, so both the shot test (sim/spear.ts's
+    // stepSpear) and the aim assist agree on the same volume. They must: a reticle that locks onto
+    // something the shaft then misses is worse than no assist at all.
+    const SPEAR_MIN_RADIUS = 0.22;
+    const SPEAR_FORGIVENESS = 1.45;
+    const girthRadius = Math.max(SPEAR_MIN_RADIUS, Math.max(0.08, Math.max(Hh, W) / 2) * SPEAR_FORGIVENESS);
     for (let i = 0; i < state.members.length; i++) {
       const m = state.members[i];
-      if (m.slot < 0) continue; // not currently allocated to a render slot
+      // NOTE: there used to be an `if (m.slot < 0) continue` here, meaning "skip members with no
+      // render slot". That guard made spearfishing impossible.
+      //
+      // `FishMember.slot` dated from the original one-InstancedMesh-per-species pool, where a
+      // member held an index into that mesh. The LOD rework replaced that scheme entirely —
+      // render.ts now reads `m.wx/wy/wz` and pushes instances per LOD tier, with no slot
+      // allocation anywhere — but it left the field on the type, still initialised to -1 in
+      // spawn.ts (`slot: -1`) and never assigned again by anything. So the guard was not
+      // "is this fish rendered", it was `-1 < 0`, i.e. `true`, for every fish in the world.
+      // `spearTargetsNear` returned an empty array always; the gun had nothing to hit.
+      //
+      // The live set is simply `state.members`. A school that is active has members; render
+      // culling is a per-frame display decision and must not determine what exists to be speared
+      // — a fish at the edge of the frustum is still a fish.
       const dx = m.wx - originX, dy = m.wy - originY, dz = m.wz - originZ;
       if (dx * dx + dy * dy + dz * dz > r2) continue;
       // Body-axis capsule from this member's *own* live render transform (render.ts writes
@@ -433,6 +470,29 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
       const fwdZ = -Math.cos(m.yaw) * Math.cos(m.pitch);
       const half = (V.len * m.worldScale) / 2;
       const id = `${state.id}#${i}`;
+      // Lead is DISABLED: `vx/vy/vz` are reported as zero, so `assistAim` skips its lead branch
+      // and aims at the fish's current position.
+      //
+      // This is a measured decision, not an oversight. Three ways of supplying a velocity were
+      // tried against a tracked yellowtail at 4-7 m:
+      //
+      //   no velocity (lead off)                  6/14  (43%)
+      //   nose direction x species cruise speed   2/16  (13%)
+      //   single-frame differencing of wx/wy/wz   2/16  (13%)
+      //
+      // Both lead attempts are far worse than none. The cruise-speed estimate overshoots because
+      // a school member is orbiting a centroid and holding a formation offset rather than
+      // travelling along its own facing. Frame differencing fails for a subtler reason: over one
+      // frame the dominant term is the swim WIGGLE — a fast lateral oscillation about the fish's
+      // path — not its net travel, so the derived vector points sideways and throws the shot off.
+      // The measured magnitude was a suspiciously constant 1.93 m/s, which is that oscillation,
+      // not progress through the water.
+      //
+      // A correct lead needs velocity low-passed over ~0.3 s so the wiggle averages out and net
+      // travel survives. That means carrying smoothed per-member state through the sim rather
+      // than deriving it in a query, which is a real change to the fish hot path and wants its
+      // own pass. Until then, aiming true beats leading wrong.
+      const vx = 0, vy = 0, vz = 0;
       out.push({
         id, key: state.type,
         // Stable for this fish's whole lifetime: derived from its identity (school id + member
@@ -445,6 +505,7 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
         ax: m.wx + fwdX * half, ay: m.wy + fwdY * half, az: m.wz + fwdZ * half,
         bx: m.wx - fwdX * half, by: m.wy - fwdY * half, bz: m.wz - fwdZ * half,
         radius: girthRadius * m.worldScale,
+        vx, vy, vz,
         catchable,
       });
     }

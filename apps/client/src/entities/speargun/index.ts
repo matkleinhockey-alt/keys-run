@@ -128,6 +128,7 @@ function fightLabelFor(key: string, weight: number): string {
 function clampSizeT(v: number): number { return v < 0 ? 0 : v > 1 ? 1 : v; }
 
 const tmpMuzzle = new THREE.Vector3();
+const tmpEye = new THREE.Vector3();
 
 export function createSpeargun(deps: SpeargunDeps): Speargun {
   const gunVM = createGunViewModel(deps.camera);
@@ -161,7 +162,11 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
     // aiming straight at a swimming fish is a clean miss behind it, and nothing underwater tells
     // you that. Deliberately inside docs/ARCHITECTURE.md's 0.22 rad server aim-plausibility
     // window, so an assisted shot can never trip the anti-aimbot envelope.
-    const assist = assistAim(origin, diver.aimDir, deps.getTargets());
+    // `eye` = the camera, i.e. where the crosshair is measured from; `origin` = the muzzle, where
+    // the shaft physically leaves. Passing both lets assist lock on what the player is actually
+    // pointing at and still fire a shaft that converges on it — see assistAim's `eye` doc.
+    deps.camera.getWorldPosition(tmpEye);
+    const assist = assistAim(origin, diver.aimDir, deps.getTargets(), { eye: { x: tmpEye.x, y: tmpEye.y, z: tmpEye.z } });
     lastAssist = assist.targetId;
     shot = fire(origin, { x: assist.dx, y: assist.dy, z: assist.dz });
     gun = startReload(SPEAR_RELOAD);
@@ -186,7 +191,9 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
    * disagree; `strength: 0` means it only reports, never moves anything. */
   function aimTargetId(diver: DiverAimInput): string | number | null {
     gunVM.muzzle.getWorldPosition(tmpMuzzle);
-    return assistAim({ x: tmpMuzzle.x, y: tmpMuzzle.y, z: tmpMuzzle.z }, diver.aimDir, deps.getTargets(), { strength: 0 }).targetId;
+    deps.camera.getWorldPosition(tmpEye);
+    return assistAim({ x: tmpMuzzle.x, y: tmpMuzzle.y, z: tmpMuzzle.z }, diver.aimDir, deps.getTargets(),
+      { strength: 0, eye: { x: tmpEye.x, y: tmpEye.y, z: tmpEye.z } }).targetId;
   }
 
   function isActive(): boolean { return !!shot || !!speared; }

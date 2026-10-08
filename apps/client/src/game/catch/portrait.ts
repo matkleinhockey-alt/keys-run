@@ -61,6 +61,8 @@
 import * as THREE from 'three';
 import { makeFishMesh } from '../fishing/fish-mesh.js';
 import { makeWetFishMaterial } from '../fishing/fish-skin.js';
+import { buildPulleyBlock } from './pulley.js';
+import { isHoldable } from './display-mode.js';
 import { buildOffscreenRig, readback, buildGradientEnv, type OffscreenRig, resyncRigSize } from './render-pipeline.js';
 import { buildFigure, type Figure } from './figure.js';
 import { beamBetween } from '../../entities/boat/hull.js';
@@ -82,7 +84,7 @@ interface PortraitRig extends OffscreenRig {
 }
 
 export interface Portrait {
-  show(color: string, lenM: number, elongated?: boolean): void;
+  show(color: string, lenM: number, elongated?: boolean, weightLb?: number): void;
   render(renderer: THREE.WebGLRenderer, t: number): void;
   clear(): void;
 }
@@ -150,7 +152,7 @@ function disposeMesh(mesh: THREE.Group): void {
   });
 }
 
-/** A fish too big for a captain to plausibly hold (see `show()`'s `HOLDABLE_MAX_LEN_M`) gets
+/** A fish too big for a captain to plausibly hold (see display-mode.ts's `isHoldable`) gets
  * catch-flow.ts's real-world answer instead: a gin pole off the gunwale with a hanging scale
  * (legacy `hangRig`, index.html:2914-2919; ported here to `catch-flow.ts`'s `hangRig` for the real
  * boat-deck rig). This is a standalone re-build for this isolated studio scene — not a reuse of
@@ -187,8 +189,18 @@ function buildHangRigProp(totalLen: number): THREE.Group {
   group.add(beamBetween(V(postX, postBottom, 0), V(postX, postTop, 0), 0.08, steel));
   group.add(beamBetween(V(postX, postTop, 0), V(0, postTop + 0.05, 0), 0.06, steel));
   group.add(beamBetween(V(postX, postTop - 0.3, 0), V(postX + 0.3, postTop, 0), 0.045, steel));
-  // cable from the arm tip down to the scale
-  group.add(beamBetween(V(0, postTop, 0), V(0, 0.22, 0), 0.01, cable));
+
+  // The block at the boom head that the lifting line runs over. Without it the cable simply began
+  // in mid-air at the tip, which reads as a bent pipe rather than a hoist.
+  const sheaveR = 0.13;
+  const block = buildPulleyBlock({ radius: sheaveR });
+  block.position.set(0, postTop - sheaveR * 1.15, 0);
+  group.add(block);
+  // Hauling part: line running from the sheave back along the boom to the post, so the rig reads
+  // as something a winch actually pulls rather than a fixed hook.
+  group.add(beamBetween(V(-sheaveR, postTop - sheaveR * 1.15, 0), V(postX, postTop - 0.34, 0), 0.008, cable));
+  // Hanging part: from the sheave down to the scale.
+  group.add(beamBetween(V(sheaveR, postTop - sheaveR * 1.15, 0), V(0, 0.22, 0), 0.01, cable));
 
   const scale = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.06, 20), new THREE.MeshStandardMaterial({ color: 0xc8102e, roughness: 0.4 }));
   scale.rotation.z = Math.PI / 2;
@@ -277,9 +289,8 @@ export function createPortrait(canvasId: string): Portrait {
   // an 80 lb tarpon (~1.70 m) — already a 5-6 ft fish — does not, and is exactly the kind of
   // catch real anglers hang from a scale rather than lift overhead. A 600 lb marlin (~3.6 m)
   // clears the threshold by more than 2x, proving the fallback path below.
-  const HOLDABLE_MAX_LEN_M = 1.5;
 
-  function show(color: string, lenM: number, elongated = false): void {
+  function show(color: string, lenM: number, elongated = false, weightLb?: number): void {
     const r = ensureRig();
     if (!r) return;
     // The card is display:none until the first catch, so the rig was very likely built against a
@@ -303,7 +314,7 @@ export function createPortrait(canvasId: string): Portrait {
     // frame points (or the rig's bbox) with the fish's measured bbox — see each branch.
     let size: THREE.Vector3;
 
-    if (lenM <= HOLDABLE_MAX_LEN_M) {
+    if (isHoldable(lenM, weightLb)) {
       // --- the captain holds it up, broadside toward camera — same pose/IK machinery
       // underwater-trophy.ts's diver uses (figure.ts's `buildFigure`/`poseArms`/`framePoints`),
       // unchanged, so the one thing this shot lives or dies on (hands actually meeting the fish)
@@ -407,7 +418,7 @@ export function createPortrait(canvasId: string): Portrait {
     // since neither X nor Z viewing foreshortens a vertical length. Swapping which axis `dv`/
     // `tan(azimuth)` land on for the captain-hold path restores "small azimuth = profile,
     // perpendicular to the fish's actual length" for the axis that path actually uses.
-    if (lenM <= HOLDABLE_MAX_LEN_M) {
+    if (isHoldable(lenM, weightLb)) {
       cam.position.set(dv * Math.tan(azimuth), vHalf * 0.10, dv);
     } else {
       cam.position.set(dv, vHalf * 0.10, dv * Math.tan(azimuth));

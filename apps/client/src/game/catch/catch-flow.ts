@@ -25,9 +25,12 @@ import { toast } from '../../ui/toast.js';
 import { submitCatch } from '../../ui/leaderboard/submit-catch.js';
 import { beamBetween } from '../../entities/boat/hull.js';
 import { makeFishMesh } from '../fishing/fish-mesh.js';
+import { buildPulleyBlock } from './pulley.js';
+import { isHoldable } from './display-mode.js';
 import { createCooler, meatLine, nearMarina, type CoolerFish } from './cooler.js';
 import { createPortrait } from './portrait.js';
 import { createUnderwaterTrophy } from './underwater-trophy.js';
+import { placeHoldingCaptain, placePresentingCaptain, type DeckCaptainHandle } from './deck-figure.js';
 
 function $(id: string): HTMLElement | null { return document.getElementById(id); }
 function setText(id: string, s: string): void { const el = $(id); if (el) el.textContent = s; }
@@ -58,6 +61,9 @@ interface PhotoHandle {
   parent: THREE.Object3D;
   hangGroup: THREE.Group | null;
   rig: THREE.Group | null;
+  /** The captain standing on deck with the catch (deck-figure.ts) — present on both branches of
+   * `setupPhoto` now, see that function's updated doc comment. */
+  captain: DeckCaptainHandle | null;
 }
 
 interface ReleasedFish { m: THREE.Object3D; t: number; dx: number; dz: number }
@@ -97,7 +103,17 @@ function hangRig(model: BoatModel, deckY: number, hx: number, hz: number, hookY:
   g.add(beamBetween(V(hx, deckY, hz), V(hx, top, hz), 0.045, steel));
   g.add(beamBetween(V(hx, top, hz), V(hx + 0.95, top + 0.05, hz), 0.035, steel));
   g.add(beamBetween(V(hx, top - 0.6, hz), V(hx + 0.6, top, hz), 0.025, steel));
-  g.add(beamBetween(V(hx + 0.95, top, hz), V(hx + 0.95, hookY + 0.38, hz), 0.008, new THREE.MeshStandardMaterial({ color: 0x222222 })));
+  // Block at the boom head the lifting line runs over — see game/catch/pulley.ts. Without it the
+  // cable started in mid-air at the tip, which reads as a bent pipe rather than a hoist you could
+  // crank a 600 lb fish up with.
+  const cableMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
+  const sheaveR = 0.11;
+  const block = buildPulleyBlock({ radius: sheaveR });
+  block.position.set(hx + 0.95, top - sheaveR * 1.15, hz);
+  g.add(block);
+  // Hauling part back along the boom to the post, then the hanging part down to the scale.
+  g.add(beamBetween(V(hx + 0.95 - sheaveR, top - sheaveR * 1.15, hz), V(hx, top - 0.5, hz), 0.007, cableMat));
+  g.add(beamBetween(V(hx + 0.95 + sheaveR, top - sheaveR * 1.15, hz), V(hx + 0.95, hookY + 0.38, hz), 0.008, cableMat));
   const sc = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.05, 20), new THREE.MeshStandardMaterial({ color: 0xc8102e, roughness: 0.4 }));
   sc.rotation.z = Math.PI / 2; sc.position.set(hx + 0.95, hookY + 0.27, hz);
   g.add(sc);
@@ -109,15 +125,17 @@ function hangRig(model: BoatModel, deckY: number, hx: number, hz: number, hookY:
   return g;
 }
 
-/** legacy `setupPhoto` (index.html:2920-2944), trimmed to the fish mesh itself: the
- * captain/crew-clearing and held-in-hands poses needed a real human model
- * (entities/boat/model.ts's `makeHumanStub` — out of scope, see that file's header), so a fish
- * too small for the gin pole rig just rests at the fishing spot instead of being held up. */
+/** legacy `setupPhoto` (index.html:2920-2944). Both branches now also put the captain on deck
+ * with the catch (game/catch/deck-figure.ts) — see that module's header for why it's a separate
+ * file (figure.ts's captain bust has no legs, built for the catch card's cropped frame) and why
+ * the big-fish branch presents beside the crane rather than gripping the hanging fish. */
 function setupPhoto(model: BoatModel, key: string, weight: number): PhotoHandle {
   const lenM = scaledLenM(key, weight);
   const fish = makeFishMesh(SPECIES[key].color, lenM);
   const deckY = model.fishSpot.y;
-  if (weight >= 25 || lenM > 1.7) {
+  // Same rule the catch card uses — see display-mode.ts. These used to be two different
+  // thresholds, so a 25 lb mahi hung from the pole on deck while the card showed it held.
+  if (!isHoldable(lenM, weight)) {
     const hx = model.fishSpot.x + 0.55, hz = model.fishSpot.z, fx = hx + 0.95;
     const hookY = deckY + clamp(lenM * 0.92, 2.3, 5.5);
     const rig = hangRig(model, deckY, hx, hz, hookY);
@@ -127,12 +145,13 @@ function setupPhoto(model: BoatModel, key: string, weight: number): PhotoHandle 
     fish.position.set(0, -lenM / 2, 0);
     hang.add(fish);
     model.group.add(hang);
-    return { fish, parent: hang, hangGroup: hang, rig };
+    const captain = placePresentingCaptain(model, deckY);
+    model.group.add(captain.group);
+    return { fish, parent: hang, hangGroup: hang, rig, captain };
   }
-  fish.rotation.set(0, Math.PI / 2, 0.12);
-  fish.position.set(model.fishSpot.x, deckY + 0.3, model.fishSpot.z);
-  model.group.add(fish);
-  return { fish, parent: model.group, hangGroup: null, rig: null };
+  const captain = placeHoldingCaptain(model, deckY, fish);
+  model.group.add(captain.group);
+  return { fish, parent: captain.group, hangGroup: null, rig: null, captain };
 }
 
 /** Legacy `boatSpec.id`/`.brand`/`.name` — just enough of the active boat's identity for the
@@ -220,7 +239,7 @@ export function createCatchFlow(deps: CatchFlowDeps) {
     } else {
       model.station = 0;
       model.fishSpot.copy(model.stations[0].spot);
-      try { photo = setupPhoto(model, fish.key, fish.weight); portrait.show(S.color, scaledLenM(fish.key, fish.weight), ELONGATED_SPECIES.has(fish.key)); } catch (e) { console.error('photo setup', e); photo = null; }
+      try { photo = setupPhoto(model, fish.key, fish.weight); portrait.show(S.color, scaledLenM(fish.key, fish.weight), ELONGATED_SPECIES.has(fish.key), fish.weight); } catch (e) { console.error('photo setup', e); photo = null; }
     }
 
     const choice = cooler.prepareKeepChoice(boatSpec.id, fish.key, fish.weight);
@@ -240,6 +259,10 @@ export function createCatchFlow(deps: CatchFlowDeps) {
     trophy.clear();
     if (photo?.rig?.parent) photo.rig.parent.remove(photo.rig);
     if (photo?.hangGroup?.parent) photo.hangGroup.parent.remove(photo.hangGroup);
+    if (photo?.captain) {
+      if (photo.captain.group.parent) photo.captain.group.parent.remove(photo.captain.group);
+      photo.captain.dispose();
+    }
     $('card')?.classList.add('hidden');
     document.body.classList.remove('photoing');
     if (photo?.fish && photo.fish.parent) photo.parent.remove(photo.fish);
