@@ -29,6 +29,7 @@ import { buildPulleyBlock } from './pulley.js';
 import { isHoldable } from './display-mode.js';
 import { createCooler, meatLine, nearMarina, type CoolerFish } from './cooler.js';
 import { createPortrait } from './portrait.js';
+import type { Backdrop } from './render-pipeline.js';
 import { createUnderwaterTrophy } from './underwater-trophy.js';
 import { placeHoldingCaptain, placePresentingCaptain, type DeckCaptainHandle } from './deck-figure.js';
 
@@ -326,9 +327,9 @@ export function createCatchFlow(deps: CatchFlowDeps) {
     }
   }
 
-  function renderPortrait(t: number, renderer: THREE.WebGLRenderer): void {
+  function renderPortrait(t: number, renderer: THREE.WebGLRenderer, behind?: Backdrop): void {
     if (currentSource === 'spear') trophy.render(renderer, t);
-    else portrait.render(renderer, t);
+    else portrait.render(renderer, t, behind);
   }
 
   /** legacy `openCooler()` (index.html:2996-3002), supplying the active boat's identity. */

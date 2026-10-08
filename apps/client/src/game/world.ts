@@ -972,7 +972,7 @@ export function initWorld(wrap: HTMLElement): World {
     // profiler's per-frame draw-call count sampled just above. `catchFlow.current` (rather than
     // `FishF.state==='caught'`) so a speared fish's underwater trophy card renders too — the rod
     // state machine never leaves 'idle' for a dive catch (see entities/speargun's header).
-    if (catchFlow.current) catchFlow.renderPortrait(simTime, renderer);
+    if (catchFlow.current) catchFlow.renderPortrait(simTime, renderer, { canvas: renderer.domElement });
   }
 
   function resize(): void {
