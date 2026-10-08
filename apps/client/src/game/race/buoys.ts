@@ -26,10 +26,24 @@ export interface RaceBuoys {
   dispose(): void;
 }
 
-const BODY_R = 1.5;
-const BODY_H = 2.4;
-/** Start/finish gets a mast so it reads from across the channel. */
-const MAST_H = 7;
+/**
+ * Marks are deliberately far larger than a real race buoy (a real one is ~1 m and would be a
+ * single pixel at the distances this course is run at). The first pass used a 1.5 m cone and it
+ * vanished against the chop past about 150 m — on a 6.3 km lap that meant driving on the HUD
+ * text instead of on the course, which is the opposite of what a marked course is for.
+ *
+ * Every mark now carries the same three cues, because each one fails in a different condition:
+ *  - a **tall mast** (silhouette survives at range, where colour has washed to grey)
+ *  - a **flag** at the top (breaks the vertical line so it doesn't read as a piling)
+ *  - an **emissive band** (holds up at dusk and under the sunset tint, when unlit geometry goes
+ *    flat — `toneMapped: false` so the sunset grade can't crush it)
+ */
+const BODY_R = 2.6;
+const BODY_H = 4.2;
+/** Every mark gets a mast now, not just the start/finish — see the note above. */
+const MAST_H = 11;
+/** The start/finish mast is taller again so the line is unmistakable from anywhere on the lap. */
+const START_MAST_H = 17;
 
 export function createRaceBuoys(course: readonly CourseBuoy[] = MARATHON_COURSE): RaceBuoys {
   const group = new THREE.Group();
@@ -53,12 +67,29 @@ export function createRaceBuoys(course: readonly CourseBuoy[] = MARATHON_COURSE)
   const collar = new THREE.InstancedMesh(collarGeo, collarMat, n);
   collar.castShadow = false;
 
-  const mastGeo = new THREE.CylinderGeometry(0.1, 0.12, MAST_H, 6);
-  const mastMat = new THREE.MeshStandardMaterial({ color: 0xf2c14e, roughness: 0.5 });
-  const mast = new THREE.InstancedMesh(mastGeo, mastMat, 1);
+  // One mast per mark, plus a taller one on the start/finish (instance n).
+  const mastGeo = new THREE.CylinderGeometry(0.16, 0.2, 1, 6);
+  const mastMat = new THREE.MeshStandardMaterial({ color: 0xf4f4f2, roughness: 0.45 });
+  const mast = new THREE.InstancedMesh(mastGeo, mastMat, n + 1);
   mast.castShadow = false;
 
-  group.add(body, collar, mast);
+  // Emissive band around the cone. Unlit geometry goes flat under the sunset grade and at dusk;
+  // `toneMapped: false` keeps this readable through the tone mapper rather than being crushed
+  // with everything else.
+  const bandGeo = new THREE.CylinderGeometry(BODY_R * 0.82, BODY_R * 0.82, 0.8, 12, 1, true);
+  const bandMat = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false, side: THREE.DoubleSide });
+  const band = new THREE.InstancedMesh(bandGeo, bandMat, n);
+  band.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3);
+  band.castShadow = false;
+
+  // Flag at the masthead — a plane, double-sided, so the mark never reads as a bare piling.
+  const flagGeo = new THREE.PlaneGeometry(2.2, 1.3);
+  const flagMat = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false, side: THREE.DoubleSide });
+  const flag = new THREE.InstancedMesh(flagGeo, flagMat, n);
+  flag.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3);
+  flag.castShadow = false;
+
+  group.add(body, collar, mast, band, flag);
 
   const dummy = new THREE.Object3D();
   const col = new THREE.Color();
@@ -84,34 +115,61 @@ export function createRaceBuoys(course: readonly CourseBuoy[] = MARATHON_COURSE)
       // Next mark pulses amber; the rest are plain orange. Deliberately a colour/brightness
       // difference rather than an arrow or a label — it stays readable at any distance and in any
       // light, and costs one instance colour write.
-      if (i === nextIndex) {
+      const isNext = i === nextIndex;
+      if (isNext) {
         const pulse = 0.72 + 0.28 * Math.sin(t * 5);
         col.setRGB(1.0 * pulse, 0.78 * pulse, 0.12 * pulse);
       } else {
-        col.setRGB(0.85, 0.30, 0.12);
+        col.setRGB(0.92, 0.26, 0.06);
       }
       body.setColorAt(i, col);
+
+      // Emissive band: the next mark burns amber, the rest glow a dim orange so the whole course
+      // stays legible at dusk without competing with the one you are driving at.
+      const h = MAST_H;
+      if (isNext) { const p = 0.78 + 0.22 * Math.sin(t * 5); col.setRGB(1.5 * p, 1.15 * p, 0.2 * p); }
+      else col.setRGB(0.95, 0.34, 0.1);
+      band.setColorAt(i, col);
+      dummy.position.set(p.x, surf + BODY_H * 0.55, p.z);
+      dummy.rotation.set(lean, 0, 0);
+      dummy.scale.setScalar(1);
+      dummy.updateMatrix();
+      band.setMatrixAt(i, dummy.matrix);
+
+      // Mast — scaled on Y so one geometry serves both heights.
+      const mh = i === 0 ? START_MAST_H : h;
+      dummy.position.set(p.x, surf + mh * 0.5, p.z);
+      dummy.rotation.set(lean * 0.6, 0, 0);
+      dummy.scale.set(1, mh, 1);
+      dummy.updateMatrix();
+      mast.setMatrixAt(i, dummy.matrix);
+
+      // Flag, turned slowly so it catches the eye and never presents edge-on for long.
+      dummy.position.set(p.x + 1.05, surf + mh - 0.9, p.z);
+      dummy.rotation.set(0, t * 0.6 + i, Math.sin(t * 2.4 + i) * 0.12);
+      dummy.scale.setScalar(1);
+      dummy.updateMatrix();
+      flag.setMatrixAt(i, dummy.matrix);
+      if (isNext) { const p2 = 0.8 + 0.2 * Math.sin(t * 5); col.setRGB(1.6 * p2, 1.25 * p2, 0.25 * p2); }
+      else col.setRGB(1.0, 1.0, 1.0);
+      flag.setColorAt(i, col);
     }
     body.instanceMatrix.needsUpdate = true;
     if (body.instanceColor) body.instanceColor.needsUpdate = true;
     collar.instanceMatrix.needsUpdate = true;
-
-    const s = positions[0];
-    const surf0 = waveHBase(s.x, s.z, t, ampAt(s.x, s.z));
-    dummy.position.set(s.x, surf0 + MAST_H * 0.5, s.z);
-    dummy.rotation.set(Math.sin(t * 0.9) * 0.05, 0, 0);
-    dummy.scale.setScalar(1);
-    dummy.updateMatrix();
-    mast.setMatrixAt(0, dummy.matrix);
     mast.instanceMatrix.needsUpdate = true;
+    band.instanceMatrix.needsUpdate = true;
+    if (band.instanceColor) band.instanceColor.needsUpdate = true;
+    flag.instanceMatrix.needsUpdate = true;
+    if (flag.instanceColor) flag.instanceColor.needsUpdate = true;
   }
 
   function setVisible(v: boolean): void { group.visible = v; }
 
   function dispose(): void {
-    bodyGeo.dispose(); collarGeo.dispose(); mastGeo.dispose();
-    bodyMat.dispose(); collarMat.dispose(); mastMat.dispose();
-    body.dispose(); collar.dispose(); mast.dispose();
+    bodyGeo.dispose(); collarGeo.dispose(); mastGeo.dispose(); bandGeo.dispose(); flagGeo.dispose();
+    bodyMat.dispose(); collarMat.dispose(); mastMat.dispose(); bandMat.dispose(); flagMat.dispose();
+    body.dispose(); collar.dispose(); mast.dispose(); band.dispose(); flag.dispose();
   }
 
   return { group, update, setVisible, dispose };

@@ -131,6 +131,35 @@ export function startRace(state: RaceState): RaceState {
   };
 }
 
+/**
+ * Reconciles the entrant list with `ids`, preserving every existing racer's progress.
+ *
+ * Needed because the field is not fixed: other players come and go over the network mid-race
+ * (net/client.ts's slot tracks), and a racer who disconnects must not keep holding a place in the
+ * standings. New arrivals start from buoy 0 on the current lap count of 0 — joining late means
+ * you are genuinely behind, which is the honest result and needs no special case.
+ *
+ * Returns the same reference when nothing changed, so the common case (a stable field, every
+ * frame) allocates nothing.
+ */
+export function syncRacers(state: RaceState, ids: readonly string[]): RaceState {
+  const have = new Set(state.racers.map((r) => r.id));
+  let changed = ids.length !== state.racers.length;
+  if (!changed) { for (const id of ids) if (!have.has(id)) { changed = true; break; } }
+  if (!changed) return state;
+
+  const byId = new Map(state.racers.map((r) => [r.id, r]));
+  const racers = ids.map((id) => byId.get(id) ?? { id, next: 0, lap: 0, finishT: null, place: null });
+  // A departing finisher frees its place; renumber so places stay 1..n with no holes.
+  let place = 0;
+  const renumbered = racers
+    .slice()
+    .sort((a, b) => (a.finishT ?? Infinity) - (b.finishT ?? Infinity))
+    .map((r) => (r.finishT !== null ? { ...r, place: ++place } : r));
+  const finalById = new Map(renumbered.map((r) => [r.id, r]));
+  return { ...state, racers: ids.map((id) => finalById.get(id)!), finished: place };
+}
+
 export function abortRace(state: RaceState): RaceState {
   return { ...state, phase: 'idle', clock: 0, events: [] };
 }

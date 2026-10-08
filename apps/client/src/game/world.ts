@@ -849,7 +849,9 @@ export function initWorld(wrap: HTMLElement): World {
     // accumulator stable, so on a machine running below 20 fps it advances slower than wall time
     // — which for a *timed* race would quietly hand slow hardware a better lap time. Race scoring
     // is not an integrator and wants real elapsed seconds.
-    raceMode.update(dt, simTime, { x: curState.x, z: curState.z });
+    // Other players are entered automatically — see RaceMode.update on why this needs no new
+    // network message, and on the one thing it genuinely does not do (a synchronised start).
+    raceMode.update(dt, simTime, { x: curState.x, z: curState.z }, netRemoteBoats);
     fishWorld.setCamera(camera);
     fishWorld.update(clamped, simTime, focus, boatThreat, fishThreats);
 

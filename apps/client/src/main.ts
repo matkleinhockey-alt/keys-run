@@ -106,7 +106,7 @@ async function boot(): Promise<void> {
         // would hand them poses from two different instants.
         const snapshots = net.getRemoteBoats(now);
         remoteBoats.update(now, netSimT, snapshots);
-        world.setRemoteBoatsForNet(snapshots.map((s) => ({ x: s.pose.x, z: s.pose.z, h: s.pose.h })));
+        world.setRemoteBoatsForNet(snapshots.map((s) => ({ x: s.pose.x, z: s.pose.z, h: s.pose.h, slotId: s.slotId })));
       }
     } catch (e) {
       const t = now / 1000;
