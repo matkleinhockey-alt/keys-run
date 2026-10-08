@@ -164,7 +164,7 @@ function buildMembers(seed: number, cx: number, cz: number, V: CreatureVis, coun
     const swimPhase = hashCell(seed, cx, cz, SALT.MEMBER_PHASE + i) * Math.PI * 2;
     const baseScale = VSC * (0.8 + 0.35 * hashCell(seed, cx, cz, SALT.MEMBER_SCALE + i));
     members.push({
-      slot: -1, ox: Math.cos(ang) * r, oz: Math.sin(ang) * r, oy, swimPhase,
+      ox: Math.cos(ang) * r, oz: Math.sin(ang) * r, oy, swimPhase,
       scale: memberScale(baseScale, V, originX, originZ),
       act: null, actPhase: 0, actTimer: 1 + 7 * hashCell(seed, cx, cz, SALT.MEMBER_PHASE + 500 + i),
       splashed: false, splashed2: false, breaching: false,
@@ -216,7 +216,7 @@ export function residentsForChunk(seed: number, cx: number, cz: number): Residen
 }
 
 /** Builds the live `SchoolState` for a resident chunk — called when the chunk enters activation
- * range. `members[i].slot` is still -1; the caller (index.ts) allocates pool slots right after. */
+ * range. */
 export function instantiateResident(spec: ResidentSpec, cx: number, cz: number): SchoolState {
   return {
     id: `res:${chunkKey(cx, cz)}`,

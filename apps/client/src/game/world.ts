@@ -1077,6 +1077,14 @@ export function initWorld(wrap: HTMLElement): World {
      * very next `fire()` lands — the gun's own 11 m range/25 m/s flight still runs for real. */
     setSyntheticTarget(t: { key: string; weight: number } | null): void { debugSyntheticTarget = t; },
     forceReloadReady(): void { speargun.debugForceReloadReady(); },
+    /** Verification-only: what aim assist would lock onto right now, and how many targets the gun
+     * can actually see. These are the gun's OWN view (muzzle origin, `deps.getTargets()`), which is
+     * not the same thing as querying `fishWorld.spearTargetsNear` from the diver's body — the
+     * difference between those two is exactly where a "why does every shot miss" investigation
+     * gets stuck, so both are exposed rather than inferred. */
+    aimTargetId(): string | number | null { return speargun.aimTargetId(diverAim); },
+    assistTargetId(): string | number | null { return speargun.assistTargetId(); },
+    gunTargetCount(): number { return getSpearTargets().length; },
     reset(): void { speargun.reset(); },
   };
 

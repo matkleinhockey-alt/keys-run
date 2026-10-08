@@ -15,7 +15,6 @@ export type SwimAxis = 'x' | 'y';
 /** One live fish within a school — legacy's inline `m` member object, typed and renamed. */
 export interface FishMember {
   /** Slot index into the species' shared InstancedMesh (legacy `m.idx`). */
-  slot: number;
   /** Offset from the school centroid, in the school's own heading-relative frame (legacy ox/oz). */
   ox: number;
   oz: number;

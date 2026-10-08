@@ -53,11 +53,27 @@ export interface FleeParams {
   speedMul: number;
 }
 
+/**
+ * How close any fish may come to a *stopped* boat — see `nearestTrigger`. Purely the hull's own
+ * footprint: the longest boat is 13.1 m (Midnight Express 43 Open), so its volume reaches ~6.5 m
+ * from centre, and this clears that with a little margin. Deliberately tight — anything larger
+ * empties the water the player fishes and dives in.
+ */
+const HULL_CLEAR_RADIUS = 7.5;
+
+/**
+ * `boatRadius` is the radius for a boat **under way** (`nearestTrigger` only applies it above
+ * 2 kn; a stopped boat uses HULL_CLEAR_RADIUS instead).
+ *
+ * The ordering is behavioural: apex predators barely care about a hull, glides (turtles, rays,
+ * the marine mammals) are unhurried but not stupid, and skittish baitfish scatter furthest. The
+ * old table had skittish (6 m) *less* boat-shy than wary (9 m), which was backwards.
+ */
 const FLEE_PARAMS: Record<FleeClass, FleeParams> = {
-  apex: { boatRadius: 4, boatSpeedRadius: 0.25, diverRadius: 3, spearRadius: 6, speedMul: 1.35 },
-  glide: { boatRadius: 7, boatSpeedRadius: 0.4, diverRadius: 5, spearRadius: 8, speedMul: 1.15 },
-  wary: { boatRadius: 9, boatSpeedRadius: 0.5, diverRadius: 7, spearRadius: 10, speedMul: 2.2 },
-  skittish: { boatRadius: 6, boatSpeedRadius: 0.6, diverRadius: 9, spearRadius: 12, speedMul: 3.2 },
+  apex: { boatRadius: 9, boatSpeedRadius: 0.25, diverRadius: 3, spearRadius: 6, speedMul: 1.35 },
+  glide: { boatRadius: 10, boatSpeedRadius: 0.4, diverRadius: 5, spearRadius: 8, speedMul: 1.15 },
+  wary: { boatRadius: 12, boatSpeedRadius: 0.5, diverRadius: 7, spearRadius: 10, speedMul: 2.2 },
+  skittish: { boatRadius: 14, boatSpeedRadius: 0.6, diverRadius: 9, spearRadius: 12, speedMul: 3.2 },
 };
 
 export function fleeParamsFor(cls: FleeClass): FleeParams {
@@ -75,7 +91,22 @@ export function nearestTrigger(
     const d = Math.hypot(th.x - cx, th.z - cz);
     const radius = th.kind === 'diver' ? p.diverRadius
       : th.kind === 'spear' ? p.spearRadius
-      : (th.speed > 2 ? p.boatRadius + th.speed * p.boatSpeedRadius : p.boatRadius);
+      // A boat under way and a boat sitting still are two different things to a fish, and the
+      // radius has to reflect that or one of the two reads wrong.
+      //
+      // Under way: the behavioural radius, grown with speed. Fish scatter well ahead of a moving
+      // hull.
+      //
+      // Stopped: only the hull's own volume. Fish genuinely do gather under an anchored boat —
+      // that is why anglers fish structure — so scattering them a full `boatRadius` leaves a dead
+      // zone exactly where the player fishes and dives (measured: a diver entering the water at
+      // the boat found zero spearable fish within 11 m). But they must not be *inside* the hull,
+      // which is what the old always-on radius failed at from the other direction: it was 4-9 m
+      // against hulls up to 13.1 m long, so fish swam through the boat in plain view.
+      //
+      // HULL_CLEAR_RADIUS is physical, not behavioural — an apex predator and a baitfish are
+      // equally unable to occupy the same space as a hull — so it is not per-class.
+      : (th.speed > 2 ? p.boatRadius + th.speed * p.boatSpeedRadius : HULL_CLEAR_RADIUS);
     if (d < radius && d < bestD) { best = th; bestD = d; }
   }
   return best;
