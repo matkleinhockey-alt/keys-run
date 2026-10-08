@@ -28,6 +28,10 @@ export interface MinimapContact {
   z: number;
   /** World heading, radians — same convention and sign as `BoatState.h`. */
   h: number;
+  /** Stable per-connection slot id (net/protocol.ts). The minimap itself does not need it, but
+   * race mode scores remote players as entrants and needs an id that survives between frames —
+   * see game/race/index.ts. Optional so an offline/test caller can omit it. */
+  slotId?: number;
 }
 
 export interface Minimap {

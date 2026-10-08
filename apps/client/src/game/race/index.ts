@@ -14,7 +14,7 @@
  */
 import * as THREE from 'three';
 import {
-  MARATHON_COURSE, createRace, startRace, abortRace, stepRace, standings,
+  MARATHON_COURSE, createRace, startRace, abortRace, stepRace, standings, syncRacers,
   buoyPos, courseLength, RACE_LAPS,
   type RaceState, type RacerPose,
 } from '@keysrun/shared/sim/race';
@@ -40,8 +40,19 @@ export interface RaceMode {
   /** Start if idle, abort if running — what the button and the hotkey both call. */
   toggle(): void;
   isActive(): boolean;
-  /** Once a frame with the player's boat position. */
-  update(dt: number, t: number, boat: { x: number; z: number }): void;
+  /**
+   * Once a frame with the player's boat position and, if connected, every other player's.
+   *
+   * Remote players are entered automatically: the course is deterministic and their positions are
+   * already replicated, so each client scores the identical checkpoint logic over the same buoy
+   * table and arrives at the same standings without any new network message.
+   *
+   * ⚠ What this does *not* do is synchronise the **start**. Each player presses their own button
+   * and runs their own clock, so the ordering is honest but the elapsed times are only comparable
+   * if you set off together. A shared countdown needs a server-coordinated message, which is
+   * phase-5 work (docs/ARCHITECTURE.md) — flagged here rather than faked.
+   */
+  update(dt: number, t: number, boat: { x: number; z: number }, remotes?: readonly RemoteRacer[]): void;
   state(): RaceState;
   /** Verification-only: each AI boat's live position/speed/arc-length. */
   debugOpponents(): Array<{ id: string; name: string; x: number; z: number; speed: number; s: number }>;
@@ -49,6 +60,11 @@ export interface RaceMode {
 }
 
 const PLAYER = 'player';
+/** Id prefix for a networked opponent, keyed by its stable connection slot. */
+const remoteId = (slotId: number): string => `net${slotId}`;
+
+/** The slice of a remote boat race mode needs — see `RaceMode.update`. */
+export interface RemoteRacer { slotId?: number; x: number; z: number }
 
 function fmtTime(s: number): string {
   const m = Math.floor(s / 60);
@@ -61,8 +77,8 @@ export function createRaceMode(deps: RaceModeDeps): RaceMode {
   const field: RaceField = createRaceField();
   deps.scene.add(buoys.group, field.group);
 
-  const ids = [PLAYER, ...field.opponents.map((o) => o.id)];
-  let race: RaceState = createRace(ids, RACE_LAPS);
+  const baseIds = [PLAYER, ...field.opponents.map((o) => o.id)];
+  let race: RaceState = createRace(baseIds, RACE_LAPS);
 
   const nameOf = new Map<string, string>([[PLAYER, 'You'], ...field.opponents.map((o) => [o.id, o.name] as const)]);
 
@@ -73,7 +89,8 @@ export function createRaceMode(deps: RaceModeDeps): RaceMode {
   hud.style.display = 'none';
   deps.wrap.appendChild(hud);
 
-  const poses: RacerPose[] = ids.map((id) => ({ id, x: 0, z: 0 }));
+  // Rebuilt per frame because the networked field is not fixed — see `update`.
+  let poses: RacerPose[] = baseIds.map((id) => ({ id, x: 0, z: 0 }));
 
   function playerProgress(): RaceState['racers'][number] | undefined {
     return race.racers.find((r) => r.id === PLAYER);
@@ -92,6 +109,7 @@ export function createRaceMode(deps: RaceModeDeps): RaceMode {
     const me = playerProgress();
     const order = standings(race);
     const myPlace = order.findIndex((r) => r.id === PLAYER) + 1;
+    const fieldSize = race.racers.length;
     const rows = order.map((r, i) => {
       const t = r.finishT !== null ? fmtTime(r.finishT) : `L${r.lap + 1}`;
       return `<li${r.id === PLAYER ? ' class="me"' : ''}><b>${i + 1}</b> ${nameOf.get(r.id) ?? r.id} <span>${t}</span></li>`;
@@ -100,7 +118,7 @@ export function createRaceMode(deps: RaceModeDeps): RaceMode {
     const markName = me ? MARATHON_COURSE[me.next].name : '';
     hud.innerHTML = `
       <div class="raceTop">
-        <span class="racePlace">P${myPlace}<i>/${ids.length}</i></span>
+        <span class="racePlace">P${myPlace}<i>/${fieldSize}</i></span>
         <span class="raceLap">Lap ${Math.min(RACE_LAPS, (me?.lap ?? 0) + 1)}<i>/${RACE_LAPS}</i></span>
         <span class="raceClock">${fmtTime(race.clock)}</span>
       </div>
@@ -135,16 +153,32 @@ export function createRaceMode(deps: RaceModeDeps): RaceMode {
 
   function isActive(): boolean { return race.phase !== 'idle'; }
 
-  function update(dt: number, t: number, boat: { x: number; z: number }): void {
+  function update(dt: number, t: number, boat: { x: number; z: number }, remotes: readonly RemoteRacer[] = []): void {
     if (race.phase === 'idle') return;
 
     const released = race.phase === 'racing' || race.phase === 'finished';
     field.update(dt, t, released, deps.particles);
 
+    // Entrants = you + the AI field + every connected player. Reconciled every frame because
+    // players join and drop mid-race; `syncRacers` preserves existing progress and returns the
+    // same reference when the field is unchanged, so the steady state allocates nothing.
+    const netRacers = remotes.filter((r) => r.slotId !== undefined);
+    const ids = [...baseIds, ...netRacers.map((r) => remoteId(r.slotId as number))];
+    race = syncRacers(race, ids);
+
+    if (poses.length !== ids.length) poses = ids.map((id) => ({ id, x: 0, z: 0 }));
+    for (let i = 0; i < ids.length; i++) poses[i].id = ids[i];
+
     poses[0].x = boat.x; poses[0].z = boat.z;
     for (let i = 0; i < field.opponents.length; i++) {
       const o = field.opponents[i];
       poses[i + 1].x = o.x; poses[i + 1].z = o.z;
+    }
+    for (let i = 0; i < netRacers.length; i++) {
+      const p = poses[baseIds.length + i];
+      p.x = netRacers[i].x; p.z = netRacers[i].z;
+      const id = p.id;
+      if (!nameOf.has(id)) nameOf.set(id, `Player ${netRacers[i].slotId}`);
     }
 
     race = stepRace(race, poses, dt);

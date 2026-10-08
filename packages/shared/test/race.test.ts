@@ -4,7 +4,7 @@ import { shoreInfo } from '../src/world/chain.js';
 import {
   MARATHON_COURSE, BUOY_RADIUS, RACE_COUNTDOWN_S,
   buoyPos, coursePoints, courseLength, createRace, startRace, abortRace, stepRace,
-  raceProgress, standings,
+  raceProgress, standings, syncRacers,
   type RaceState,
 } from '../src/sim/race.js';
 
@@ -181,5 +181,51 @@ describe('field scoring', () => {
     const p = buoyPos(MARATHON_COURSE[0]);
     s = stepRace(s, [{ id: 'present', x: p.x, z: p.z }], DT);
     expect(s.racers.find((r) => r.id === 'missing')?.next).toBe(0);
+  });
+});
+
+describe('a field that changes mid-race (networked players joining and dropping)', () => {
+  it('returns the same reference when the field is unchanged', () => {
+    const s = release(createRace(['player', 'ai0']));
+    expect(syncRacers(s, ['player', 'ai0'])).toBe(s);
+  });
+
+  it('adds a late joiner at the start of the course without disturbing anyone', () => {
+    let s = release(createRace(['player'], 2));
+    for (let i = 0; i < 4; i++) {
+      const p = buoyPos(MARATHON_COURSE[i]);
+      s = stepRace(s, [{ id: 'player', x: p.x, z: p.z }], DT);
+    }
+    const before = s.racers.find((r) => r.id === 'player');
+    s = syncRacers(s, ['player', 'net7']);
+    const after = s.racers.find((r) => r.id === 'player');
+    expect(after).toEqual(before);                       // existing progress untouched
+    expect(s.racers.find((r) => r.id === 'net7')?.next).toBe(0); // genuinely behind
+  });
+
+  it('drops a departed player and leaves no hole in the places', () => {
+    let s = release(createRace(['a', 'b', 'c'], 1));
+    s = driveLaps(s, 'a', 1);
+    s = driveLaps(s, 'b', 1);
+    expect(s.racers.find((r) => r.id === 'a')?.place).toBe(1);
+    expect(s.racers.find((r) => r.id === 'b')?.place).toBe(2);
+    // The winner disconnects — second place must become first, not stay 2 with a gap at 1.
+    s = syncRacers(s, ['b', 'c']);
+    expect(s.racers.find((r) => r.id === 'b')?.place).toBe(1);
+    expect(s.finished).toBe(1);
+    expect(s.racers.map((r) => r.id)).toEqual(['b', 'c']);
+  });
+
+  it('keeps scoring correctly after the field changes', () => {
+    let s = release(createRace(['player'], 1));
+    s = syncRacers(s, ['player', 'net3']);
+    s = driveLaps(s, 'net3', 1);
+    expect(s.racers.find((r) => r.id === 'net3')?.place).toBe(1);
+    expect(s.racers.find((r) => r.id === 'player')?.finishT).toBeNull();
+  });
+
+  it('preserves entrant order so the pose array and the racer list stay aligned', () => {
+    const s = syncRacers(release(createRace(['player', 'ai0'])), ['player', 'ai0', 'net1', 'net2']);
+    expect(s.racers.map((r) => r.id)).toEqual(['player', 'ai0', 'net1', 'net2']);
   });
 });
