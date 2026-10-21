@@ -63,6 +63,8 @@ function toLDR(r: number, g: number, b: number, exposure: number, out: Float64Ar
 
 export interface OffscreenRig {
   scene: THREE.Scene;
+  /** Scratch canvas for alpha compositing the subject over a live backdrop — see `readback`. */
+  layer?: HTMLCanvasElement;
   camera: THREE.PerspectiveCamera;
   rt: THREE.WebGLRenderTarget;
   w: number;
@@ -166,7 +168,21 @@ export function resyncRigSize(rig: OffscreenRig, canvasId: string): boolean {
   return true;
 }
 
-export function readback(renderer: THREE.WebGLRenderer, rig: OffscreenRig): void {
+/**
+ * A live backdrop to show behind the card's subject: the game's own canvas, composited underneath
+ * in 2D rather than re-rendered as a second scene.
+ *
+ * Re-rendering the world into the offscreen target was tried first and is the wrong shape for this
+ * problem — it needs a second camera matched to the card's aspect, it interacts with the renderer
+ * state readback is already juggling, and it pays to draw the whole world twice for a 640x300
+ * thumbnail. Copying the frame that was just drawn gives exactly what the player is looking at,
+ * for the cost of one `drawImage`.
+ */
+export interface Backdrop {
+  /** The live WebGL canvas (`renderer.domElement`). */
+  canvas: HTMLCanvasElement;
+}
+export function readback(renderer: THREE.WebGLRenderer, rig: OffscreenRig, behind?: Backdrop): void {
   const prevCol = renderer.getClearColor(new THREE.Color()), prevA = renderer.getClearAlpha();
   const prevT = renderer.getRenderTarget(), prevAuto = renderer.autoClear, prevSh = renderer.shadowMap.enabled;
   const exposure = renderer.toneMappingExposure; // read live — matches core/scene.ts without duplicating its value
@@ -195,10 +211,37 @@ export function readback(renderer: THREE.WebGLRenderer, rig: OffscreenRig): void
       dst[di] = encodeSRGB(ldr[0]);
       dst[di + 1] = encodeSRGB(ldr[1]);
       dst[di + 2] = encodeSRGB(ldr[2]);
-      dst[di + 3] = 255;
+      // Preserve the rendered alpha. This used to be forced to 255, which made every pixel of the
+      // card opaque — so a transparent background still blitted as solid black and nothing could
+      // ever show behind the subject. That one line is why the live-boat backdrop appeared to
+      // "render black" when it was in fact never visible.
+      dst[di + 3] = src[si + 3];
     }
   }
-  rig.ctx2d.putImageData(rig.img, 0, 0);
+  if (behind) {
+    // Cover-fit the live frame into the card, preserving its aspect — letterboxing a boat inside
+    // a trophy card looks like a bug, cropping it does not.
+    const cw = behind.canvas.width, ch = behind.canvas.height;
+    const scale = Math.max(W / cw, H / ch);
+    const dw = cw * scale, dh = ch * scale;
+    rig.ctx2d.clearRect(0, 0, W, H);
+    rig.ctx2d.drawImage(behind.canvas, (W - dw) / 2, (H - dh) / 2, dw, dh);
+    // The subject carries real alpha now, so it has to go through a layer canvas: putImageData
+    // ignores compositing entirely and would wipe the backdrop out again.
+    if (!rig.layer) {
+      rig.layer = document.createElement('canvas');
+      rig.layer.width = W; rig.layer.height = H;
+    } else if (rig.layer.width !== W || rig.layer.height !== H) {
+      rig.layer.width = W; rig.layer.height = H;
+    }
+    const lctx = rig.layer.getContext('2d');
+    if (lctx) {
+      lctx.putImageData(rig.img, 0, 0);
+      rig.ctx2d.drawImage(rig.layer, 0, 0);
+    }
+  } else {
+    rig.ctx2d.putImageData(rig.img, 0, 0);
+  }
 }
 
 // ---- environment ------------------------------------------------------------------------------

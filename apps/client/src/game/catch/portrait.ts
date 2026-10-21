@@ -63,7 +63,7 @@ import { makeFishMesh } from '../fishing/fish-mesh.js';
 import { makeWetFishMaterial } from '../fishing/fish-skin.js';
 import { buildPulleyBlock } from './pulley.js';
 import { isHoldable } from './display-mode.js';
-import { buildOffscreenRig, readback, buildGradientEnv, type OffscreenRig, resyncRigSize } from './render-pipeline.js';
+import { buildOffscreenRig, readback, buildGradientEnv, type OffscreenRig, type Backdrop, resyncRigSize } from './render-pipeline.js';
 import { buildFigure, type Figure } from './figure.js';
 import { beamBetween } from '../../entities/boat/hull.js';
 
@@ -85,7 +85,10 @@ interface PortraitRig extends OffscreenRig {
 
 export interface Portrait {
   show(color: string, lenM: number, elongated?: boolean, weightLb?: number): void;
-  render(renderer: THREE.WebGLRenderer, t: number): void;
+  /** `behind` is the live world (scene + the camera you are actually looking through). When
+   * supplied the card shows the real boat floating on the water behind the catch instead of the
+   * painted studio gradient. */
+  render(renderer: THREE.WebGLRenderer, t: number, behind?: Backdrop): void;
   clear(): void;
 }
 
@@ -405,7 +408,12 @@ export function createPortrait(canvasId: string): Portrait {
     // shapes foreshorten badly at that angle, so they stay nearer profile. Side-stepping (holding
     // the perpendicular distance at `dv` and only offsetting sideways) rather than orbiting keeps
     // the near tip from creeping closer than the fit allows.
-    const azimuth = elongated ? 0.12 : 0.40;
+    // Square-on, not swung round to a three-quarter view. A trophy shot shows the fish broadside
+    // — that is how every weigh-station photo and every ID chart presents one, and it is what the
+    // length on the card actually refers to. The old 0.40 rad (~23 deg) foreshortened the fish and
+    // read as a staged camera move rather than a photo of the catch. Kept slightly off zero so the
+    // captain's shoulders and the hang rig still have some depth rather than going flat.
+    const azimuth = elongated ? 0.04 : 0.08;
     // Which world axis the fish's nose-to-tail length actually runs along differs by path: the
     // plain (pre-captain) framing never rotated the mesh, so length ran along its native Z: a
     // small azimuth (X-dominant camera offset, below) sits perpendicular to that — the least-
@@ -429,14 +437,17 @@ export function createPortrait(canvasId: string): Portrait {
     r.last = -1;
   }
 
-  function render(renderer: THREE.WebGLRenderer, t: number): void {
+  function render(renderer: THREE.WebGLRenderer, t: number, behind?: Backdrop): void {
     const r = rig;
     if (!r || !r.mesh) return;
     if (t - r.last < 0.12) return; // ~8fps is plenty for a slowly turning fish
     r.last = t;
     if (!r.scene.environment) r.scene.environment = ensureEnv(renderer);
+    // The painted backdrop only applies when there is no real world to show behind the catch.
+    const live = behind;
+    r.scene.background = live ? null : (r.scene.background ?? buildBackdrop());
     r.pivot.rotation.set(Math.sin(t * 1.3) * 0.05, Math.sin(t * 0.7) * 0.45, Math.sin(t * 1.1) * 0.06);
-    readback(renderer, r);
+    readback(renderer, r, live);
   }
 
   function clear(): void {
