@@ -408,6 +408,7 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
 
   function debugBlowCount(): number { return blowCount; }
 
+
   /** Appends one `SpearTargetLite` per live member of `state` within `radius` of
    * `(originX,originY,originZ)` to `out` — the per-member half of `spearTargetsNear` below.
    * Skips species with no `SPECIES` weight/fight-table entry (ambient-only — e.g. angelfish;
@@ -515,6 +516,16 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
     const out: SpearTargetLite[] = [];
     const schoolR2 = (radius + SCHOOL_QUERY_MARGIN) * (radius + SCHOOL_QUERY_MARGIN);
     for (const state of residents.values()) {
+      const dx = state.cx - x, dz = state.cz - z;
+      if (dx * dx + dz * dz > schoolR2) continue;
+      pushSchoolTargets(state, x, y, z, radius, out);
+    }
+    // The near-field layer (spawn.ts) is where essentially every fish inside spear range lives —
+    // residents and roamers are the sparse long-range layers, which on their own put ZERO fish
+    // within 25 m of a diver. Omitting it here is what made spearfishing impossible: the gun's
+    // target list was empty even with a schoolmaster 1.8 m off the muzzle, so every shot passed
+    // through fish that were plainly visible.
+    for (const state of nearField.values()) {
       const dx = state.cx - x, dz = state.cz - z;
       if (dx * dx + dz * dz > schoolR2) continue;
       pushSchoolTargets(state, x, y, z, radius, out);

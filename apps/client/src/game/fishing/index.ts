@@ -40,6 +40,8 @@ export interface FishingSystem {
   render(t: number, boat: BoatState, sw: number, ch: number): void;
   setDrag(v: number): void;
   reelIn(msg?: string): void;
+  /** Returns the rod to idle after a catch card is dismissed — see update.ts's `clearCaught`. */
+  clearCaught(): void;
   dispose(): void;
 }
 
@@ -80,7 +82,7 @@ export function createFishing(deps: FishingSystemDeps): FishingSystem {
     visuals.dispose();
   }
 
-  return { update, render, setDrag: logic.setDrag, reelIn: logic.reelIn, dispose };
+  return { update, render, setDrag: logic.setDrag, reelIn: logic.reelIn, clearCaught: logic.clearCaught, dispose };
 }
 
 const tipWorld = new THREE.Vector3();

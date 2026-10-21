@@ -165,6 +165,9 @@ export interface BoatSpecRef {
 }
 
 export interface CatchFlowDeps {
+  /** Called once the catch card has been fully dismissed (kept, released, or the dive card
+   * closed). The rod's state machine needs this to leave `'caught'` — see `finishCatch`. */
+  onCatchFinished?(): void;
   scene: THREE.Scene;
   getModel(): BoatModel;
   getBoatSpec(): BoatSpecRef;
@@ -269,6 +272,11 @@ export function createCatchFlow(deps: CatchFlowDeps) {
     portrait.clear();
     photo = null;
     current = null;
+    // The rod's state machine parks in 'caught' when a fish lands and nothing else ever brings it
+    // back — see fishing/update.ts's `clearCaught`. Fired here, at the single point every exit
+    // from the card funnels through (keep, release, and the dive-card path), rather than wired to
+    // each button separately, so a future fourth exit cannot forget it.
+    deps.onCatchFinished?.();
   }
 
   function keepFish(): void {

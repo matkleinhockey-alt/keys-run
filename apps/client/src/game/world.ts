@@ -385,7 +385,10 @@ export function initWorld(wrap: HTMLElement): World {
   window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyP') profiler.toggle();
     // R starts a buoy race, or abandons one in progress — same toggle the 🏁 button calls.
-    if (e.code === 'KeyR') raceMode.toggle();
+    // R is already the rod's reel-in key (game/fishing/input.ts) and these are two separate
+    // keydown listeners, so an unguarded binding here fired BOTH — reeling in and starting a race
+    // on the same press. Race mode only takes R when the rod is idle and you are not diving.
+    if (e.code === 'KeyR' && FishF.state === 'idle' && diver.mode !== 'diver') raceMode.toggle();
     if (e.code === 'KeyG') applyQuality(QUALITY_TIERS[(QUALITY_TIERS.indexOf(quality.tier) + 1) % QUALITY_TIERS.length]);
   });
   document.getElementById('btnQuality')?.addEventListener('click', () => {
@@ -430,6 +433,10 @@ export function initWorld(wrap: HTMLElement): World {
   // shared landing path both it and entities/speargun (once the diver lands) feed into for the
   // catch card / cooler / weigh-in.
   const catchFlow = createCatchFlow({
+    // `fishing` is constructed below and closes over `catchFlow`, so this is deliberately a
+    // late-bound arrow rather than a direct reference: by the time a catch card can be dismissed
+    // both exist. Without it the rod stays stuck in 'caught' and you can never cast again.
+    onCatchFinished: () => fishing.clearCaught(),
     scene,
     getModel: () => model,
     getBoatSpec: () => ({ id: boatSpec.id, brand: boatSpec.brand, name: boatSpec.name }),
@@ -1078,6 +1085,22 @@ export function initWorld(wrap: HTMLElement): World {
      * `getSpearTargets()` places one capsule 2 m directly along the diver's current aim, so the
      * very next `fire()` lands — the gun's own 11 m range/25 m/s flight still runs for real. */
     setSyntheticTarget(t: { key: string; weight: number } | null): void { debugSyntheticTarget = t; },
+    /** Verification-only: what the gun can currently hit. The one number that distinguishes
+     * "aim is off" from "there is nothing to aim at" — see game/race/... no: see
+     * entities/fish/index.ts's `spearTargetsNear`. */
+    targets(): Array<{ id: string | number; key: string; x: number; y: number; z: number; radius: number; dist: number }> {
+      const s = diver.state;
+      if (!s) return [];
+      return getSpearTargets().map((t) => ({
+        id: t.id, key: t.key,
+        x: (t.ax + t.bx) / 2, y: (t.ay + t.by) / 2, z: (t.az + t.bz) / 2, radius: t.radius,
+        dist: +Math.hypot((t.ax + t.bx) / 2 - s.x, (t.ay + t.by) / 2 - s.y, (t.az + t.bz) / 2 - s.z).toFixed(2),
+      }));
+    },
+    diverMode(): string { return diver.mode; },
+    /** Verification-only: the render camera's world position — the shot's true origin reference
+     * (the muzzle hangs off this, not off the diver's body centre). */
+    camPos(): { x: number; y: number; z: number } { return { x: camera.position.x, y: camera.position.y, z: camera.position.z }; },
     forceReloadReady(): void { speargun.debugForceReloadReady(); },
     /** Verification-only: what aim assist would lock onto right now, and how many targets the gun
      * can actually see. These are the gun's OWN view (muzzle origin, `deps.getTargets()`), which is

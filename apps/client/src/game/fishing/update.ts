@@ -147,6 +147,31 @@ export function createFishingLogic(deps: FishingDeps) {
 
   function lose(msg: string): void { reelIn(msg); }
 
+  /**
+   * Returns the rod to `idle` once the catch card has been dismissed (kept or released).
+   *
+   * Nothing used to do this. `land()` parks the state machine in `'caught'`, and the only thing
+   * that ever sets `'idle'` is `reelIn()` — which every caller explicitly guards off while caught
+   * (`F.state !== 'idle' && F.state !== 'caught'`, world.ts). So after keeping or releasing a
+   * fish the rod stayed in `'caught'` forever: `onAction` fell through to the `'caught'` branch,
+   * called `onActionWhileCaught` -> `releaseFish()`, which bailed immediately because `current`
+   * was already null. Casting again was impossible without reloading.
+   *
+   * Deliberately NOT `reelIn()`: that also kicks `camState.shake`, which would jolt the camera
+   * every time a card closes. This only undoes what `land()` did.
+   */
+  function clearCaught(): void {
+    if (F.state !== 'caught') return; // spear catches never enter this state machine — no-op
+    F.state = 'idle';
+    F.key = null;
+    F.charging = false;
+    F.caughtT = 0;
+    $('castbar')?.classList.add('hidden');
+    setRod(false);
+    visuals.bobber.visible = false;
+    visuals.fishLine.visible = false;
+  }
+
   function land(): void {
     const key = F.key!, weight = F.weight, fx = F.fx, fz = F.fz, zone = F.zone;
     F.state = 'caught';
@@ -296,7 +321,7 @@ export function createFishingLogic(deps: FishingDeps) {
   renderDrag();
 
   return {
-    startCharge, releaseCast, cast, reelIn, setHook, setDrag,
+    startCharge, releaseCast, cast, reelIn, clearCaught, setHook, setDrag,
     onAction, onActionUp, update, actionInput,
   };
 }
