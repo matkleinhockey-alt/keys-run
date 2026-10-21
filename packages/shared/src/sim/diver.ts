@@ -31,6 +31,7 @@
  */
 
 import { clamp } from '../internal/math.js';
+import { steadyCurrentAt, surgeAt } from '../world/current.js';
 
 // ---------------------------------------------------------------------------------------------
 // Tuning constants (exported so tests and the client HUD/tuning can read the same numbers the
@@ -74,7 +75,9 @@ export const SHALLOW_BLACKOUT_MIN_ASCENT = 0.15;
  * burn — sprint-kicking or fighting a fish drains you faster"). */
 export const EXERTION_AIR_GAIN = 1.2;
 
-/** Base fin-kick acceleration (m/s^2) and the sprint multiplier on top of it. */
+/** Base fin-kick acceleration (m/s^2) and the sprint multiplier on top of it. This is the MEAN over
+ * a kick cycle — the thrust itself arrives in pulses (see `kickPulse`), whose average is exactly
+ * this, so cruise speed and the exertion/air model are unchanged by the kick cadence. */
 export const SWIM_KICK_ACCEL = 2.6;
 export const SPRINT_MULT = 1.9;
 
@@ -82,8 +85,61 @@ export const SPRINT_MULT = 1.9;
  * as its own control alongside look-to-steer, so looking straight up/down isn't the only way up. */
 export const VERTICAL_KICK_ACCEL = 2.2;
 
-/** Water drag, applied as `v *= max(0, 1 - WATER_DRAG*dt)` each step. */
-export const WATER_DRAG = 1.6;
+/** Kicking backwards is a sculling motion, not a fin stroke: ~45% of forward thrust. */
+export const BACK_KICK_FRACTION = 0.45;
+
+/**
+ * Drag, in the diver's own frame. The previous model was one linear `v *= 1 - 1.6 dt` on all axes:
+ * terminal speed came out right (~1.6 m/s) but everything else felt wrong — stop kicking and you
+ * were stationary within a second (a 1 m glide), and a strafe or a turn slid exactly as freely as
+ * a forward swim because drag knew nothing about which way the body points.
+ *
+ *  - ALONG the body (streamlined): small linear term plus a quadratic one. The quadratic term is
+ *    what sets a firm top speed; the small linear term is why a coast tails off slowly (~3 m of
+ *    glide from cruise, vs 1 m) so swimming has momentum and stopping is something you do.
+ *  - ACROSS the body (the diver presented sideways): ~5x the linear coefficient and a larger
+ *    quadratic one. Sideslip dies in ~0.6 s, so changing heading carves a curve instead of
+ *    skating, and strafing is a modest trim move (~1 m/s) rather than a second throttle.
+ *
+ * Applied implicitly (`v /= 1 + k dt`), unconditionally stable at the 30 Hz step, and acts on the
+ * velocity RELATIVE to the water (see `waterVelocity`) so a diver who stops kicking ends up
+ * drifting with the current rather than stuck against it.
+ */
+export const DRAG_AXIAL_LIN = 0.3;
+export const DRAG_AXIAL_QUAD = 0.7;
+export const DRAG_LATERAL_LIN = 1.5;
+export const DRAG_LATERAL_QUAD = 1.2;
+export const VERTICAL_LATERAL_DRAG_SCALE = 0.6;
+
+/**
+ * Fin-kick cadence. A fin stroke is a pulse, not a constant push: thrust arrives in a ~1.1 s
+ * cycle (0.6 s sprinting) as a half-sine burst over a weak glide-phase floor, so the diver surges
+ * with each kick and eases between them. `KICK_FLOOR + KICK_PEAK/4` = 1 so the cycle average is
+ * exactly the nominal `SWIM_KICK_ACCEL` (mean of max(0,sin)^2 over a cycle is 1/4).
+ */
+export const KICK_PERIOD = 1.1;
+export const KICK_PERIOD_SPRINT = 0.6;
+const KICK_FLOOR = 0.35;
+const KICK_PEAK = 4 * (1 - KICK_FLOOR);
+
+/** Thrust multiplier at kick phase `phase` (0..1). Mean over a cycle is exactly 1. */
+export function kickPulse(phase: number): number {
+  const s = Math.max(0, Math.sin(phase * Math.PI * 2));
+  return KICK_FLOOR + KICK_PEAK * s * s;
+}
+
+/**
+ * Fraction of the water's velocity the diver actually feels. Real divers hanging off a reef wall
+ * get pushed by the current but not by all of it — a body is a small sail and the bottom boundary
+ * layer slows the water near the seabed. `COUPLING` is the open-water share; the factor ramps from
+ * `BOUNDARY_MIN` at the floor to 1 by `BOUNDARY_H` metres above it, so hugging a rock to line up
+ * a shot is calm and drifting up into open water gets you carried. Both numbers are tuning, not
+ * hydrodynamics: at the Florida Current's 1.15 m/s a full-strength push would out-run the cruise
+ * speed and make the offshore edge simply unswimmable.
+ */
+export const CURRENT_COUPLING = 0.75;
+export const BOUNDARY_MIN = 0.3;
+export const BOUNDARY_H = 4;
 
 export const EXERTION_RISE_RATE = 2.5;
 export const EXERTION_FALL_RATE = 0.6;
@@ -123,16 +179,29 @@ export function airBurnRate(depth: number, exertion: number): number {
 }
 
 /**
- * Deterministic depth-dependent current (m/s, horizontal). Pure function of position/depth/time
- * — no RNG, no module state — so prediction replay and the determinism test below are exact.
- * Magnitude grows with depth (doc gives no exact curve for this; this is a gentle, capped ramp
- * that makes the deep wall feel different from the flats without fighting the player on the
- * shallow bands where fin control should feel precise).
+ * Velocity of the water the diver is in (m/s, horizontal), as the diver feels it.
+ *
+ * This used to be a private, made-up field (`0.05..0.15 m/s` pointing wherever a slow sine said) —
+ * unrelated to world/current.ts, which models the Florida Current, the tide and wave surge and is
+ * what the weeds, marine snow and fish already lean on. A diver in the same water as the weeds
+ * must be pushed by the same flow, or the current is something you watch rather than something
+ * that happens to you. So this samples the real field: steady (current + tide) plus surge, with
+ * surge attenuated by the diver's OWN depth below the surface (orbital motion dies with depth
+ * below the waves — world/current.ts's `surgeAt` is passed water depth for the weeds on the
+ * floor; a diver mid-water wants distance from the surface), then scaled by `CURRENT_COUPLING`
+ * and the near-floor boundary layer. `floorY` is the seabed height under the diver.
+ *
+ * Pure function of (x,y,z,t,floorY) — no RNG, no module state — so prediction replay and the
+ * determinism tests stay exact.
  */
-export function currentAt(x: number, z: number, depth: number, t: number): { x: number; z: number } {
-  const mag = 0.05 + 0.1 * Math.min(depth, 40) / 40;
-  const dir = Math.sin(x * 0.0011 + z * 0.0008 + t * 0.015) * Math.PI * 2;
-  return { x: Math.cos(dir) * mag, z: Math.sin(dir) * mag };
+export function waterVelocity(x: number, y: number, z: number, t: number, floorY: number): { x: number; z: number } {
+  const steady = steadyCurrentAt(x, z, t);
+  const surge = surgeAt(x, z, t, Math.max(0, -y));
+  const h = Math.max(0, y - floorY);
+  const s = clamp(h / BOUNDARY_H, 0, 1);
+  const boundary = BOUNDARY_MIN + (1 - BOUNDARY_MIN) * s * s * (3 - 2 * s);
+  const k = CURRENT_COUPLING * boundary;
+  return { x: (steady.vx + surge.vx) * k, z: (steady.vz + surge.vz) * k };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -190,6 +259,12 @@ export interface DiverState {
   air: number;
   /** Smoothed 0..1 exertion level — see EXERTION_RISE_RATE/EXERTION_FALL_RATE. */
   exertion: number;
+  /** Fin-kick cycle phase 0..1 (see `kickPulse`). Advances only while a kick input is held and
+   * resets to 0 when idle, so every fresh kick starts on the rising edge of a stroke. The camera
+   * reads it to surge/bob with the stroke; nothing else depends on it. */
+  kickPhase: number;
+  /** A swim/vertical kick input is held this step. */
+  kicking: boolean;
   /** depth >= NARCOSIS_DEPTH. The renderer decides what "subtle warp, reticle sway" means. */
   narcosis: boolean;
   /** True from the instant air hits zero (or shallow-water blackout fires) until the caller
@@ -210,6 +285,8 @@ export function createDiverState(x: number, y: number, z: number, yaw: number): 
     yaw, pitch: 0,
     air: AIR_MAX,
     exertion: 0,
+    kickPhase: 0,
+    kicking: false,
     narcosis: false,
     blackedOut: false,
     blackoutT: 0,
@@ -222,33 +299,52 @@ const NO_INPUT: DiverInput = {
   lookYaw: 0, lookPitch: 0,
 };
 
-/** legacy-style inline helper: integrates kicks (if `allowKicks`), buoyancy/gravity, current, drag
- * and position + seafloor/world-bounds collision. Mutates `state` in place — `state` is always
+/** Integrates kicks (if `allowKicks`), buoyancy/gravity, drag against the moving water, and
+ * position + seafloor/world-bounds collision. Mutates `state` in place — `state` is always
  * `next` (the fresh copy stepDiver already made), never the caller's original. */
 function integrateMotion(state: DiverState, input: DiverInput, env: DiverEnv, dt: number, allowKicks: boolean): void {
+  const cp = Math.cos(state.pitch);
+  const fx = -Math.sin(state.yaw) * cp;
+  const fy = Math.sin(state.pitch);
+  const fz = -Math.cos(state.yaw) * cp;
+
   if (allowKicks) {
-    const fx = -Math.sin(state.yaw) * Math.cos(state.pitch);
-    const fy = Math.sin(state.pitch);
-    const fz = -Math.cos(state.yaw) * Math.cos(state.pitch);
     const rx = Math.cos(state.yaw);
     const rz = -Math.sin(state.yaw);
 
+    // Thrust direction. Forward and backward are weighted separately (a back-kick is a scull, not a
+    // stroke) before the sum is normalised, so W+S cancel and S alone is gentle.
     let kx = 0, ky = 0, kz = 0;
     if (input.fwd) { kx += fx; ky += fy; kz += fz; }
-    if (input.back) { kx -= fx; ky -= fy; kz -= fz; }
+    if (input.back) { kx -= fx * BACK_KICK_FRACTION; ky -= fy * BACK_KICK_FRACTION; kz -= fz * BACK_KICK_FRACTION; }
     if (input.right) { kx += rx; kz += rz; }
     if (input.left) { kx -= rx; kz -= rz; }
     const mag = Math.hypot(kx, ky, kz);
-    if (mag > 1e-6) { kx /= mag; ky /= mag; kz /= mag; }
+    // Normalise only when over unit length: a lone back-kick keeps its reduced magnitude instead
+    // of being scaled back up to a full stroke.
+    if (mag > 1) { kx /= mag; ky /= mag; kz /= mag; }
 
     const sprintK = input.sprint ? SPRINT_MULT : 1;
-    const accel = SWIM_KICK_ACCEL * sprintK;
+    const swimming = mag > 1e-6 || input.ascend || input.descend;
+    state.kicking = swimming;
+    if (swimming) {
+      const period = input.sprint ? KICK_PERIOD_SPRINT : KICK_PERIOD;
+      state.kickPhase = (state.kickPhase + dt / period) % 1;
+    } else {
+      state.kickPhase = 0;
+    }
+    const pulse = kickPulse(state.kickPhase);
+    const accel = SWIM_KICK_ACCEL * sprintK * pulse;
     state.vx += kx * accel * dt;
     state.vy += ky * accel * dt;
     state.vz += kz * accel * dt;
 
-    if (input.ascend) state.vy += VERTICAL_KICK_ACCEL * sprintK * dt;
-    if (input.descend) state.vy -= VERTICAL_KICK_ACCEL * sprintK * dt;
+    const vAccel = VERTICAL_KICK_ACCEL * sprintK * pulse;
+    if (input.ascend) state.vy += vAccel * dt;
+    if (input.descend) state.vy -= vAccel * dt;
+  } else {
+    state.kicking = false;
+    state.kickPhase = 0;
   }
 
   // Buoyancy only applies while genuinely submerged; above the surface it's plain gravity. The
@@ -262,13 +358,26 @@ function integrateMotion(state: DiverState, input: DiverInput, env: DiverEnv, dt
     state.vy -= 9.8 * dt;
   }
 
-  const depthForCurrent = Math.max(0, -state.y);
-  const cur = currentAt(state.x, state.z, depthForCurrent, env.t);
-  state.vx += cur.x * dt;
-  state.vz += cur.z * dt;
-
-  const dragK = Math.max(0, 1 - WATER_DRAG * dt);
-  state.vx *= dragK; state.vy *= dragK; state.vz *= dragK;
+  // Drag acts on the velocity RELATIVE TO THE WATER (see `waterVelocity`), split into the part
+  // along the body and the part across it. The water's own velocity is added back afterwards, so
+  // with no kicking the diver settles to the current's speed instead of being held still against
+  // it, and a push from surge is felt as a push.
+  const floorHere = env.seafloor.heightAt(state.x, state.z);
+  const w = waterVelocity(state.x, state.y, state.z, env.t, floorHere);
+  const rvx = state.vx - w.x, rvy = state.vy, rvz = state.vz - w.z;
+  const par = rvx * fx + rvy * fy + rvz * fz;
+  const px = rvx - par * fx, py = rvy - par * fy, pz = rvz - par * fz;
+  const kPar = DRAG_AXIAL_LIN + DRAG_AXIAL_QUAD * Math.abs(par);
+  const kPerp = DRAG_LATERAL_LIN + DRAG_LATERAL_QUAD * Math.hypot(px, py, pz);
+  const dPar = 1 / (1 + kPar * dt);
+  const dPerpH = 1 / (1 + kPerp * dt);
+  // Across-body motion that is VERTICAL is damped less than sideways slip: floating up or
+  // sinking is not the body being dragged broadside the way a strafe is, and at the full lateral
+  // coefficient a duck-dive from the surface crawled at ~0.4 m/s.
+  const dPerpV = 1 / (1 + kPerp * VERTICAL_LATERAL_DRAG_SCALE * dt);
+  state.vx = w.x + par * dPar * fx + px * dPerpH;
+  state.vy = par * dPar * fy + py * dPerpV;
+  state.vz = w.z + par * dPar * fz + pz * dPerpH;
 
   state.x += state.vx * dt;
   state.y += state.vy * dt;

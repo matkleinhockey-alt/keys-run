@@ -23,6 +23,7 @@
  */
 import * as THREE from 'three';
 import { AIR_MAX, type DiverState } from '@keysrun/shared/sim/diver';
+import { beginGesture, moveGesture, type Gesture } from './gesture.js';
 
 const clamp = (v: number, a: number, b: number): number => (v < a ? a : v > b ? b : v);
 
@@ -32,13 +33,16 @@ export interface DiverCamState {
   yaw: number;
   pitch: number;
   mode: DiverCamMode;
+  /** True while a press that has become a LOOK is held (entities/diver/gesture.ts) — an
+   * undecided press, which may yet turn out to be a tap that fires the gun, is not a drag. */
   dragging: boolean;
-  lx: number;
-  ly: number;
+  /** Smoothed yaw rate (rad/s) of the look, for the camera's bank into a turn. */
+  yawRate: number;
+  prevYaw: number;
 }
 
 export function createDiverCamState(yaw = 0): DiverCamState {
-  return { yaw, pitch: -0.1, mode: 'mask', dragging: false, lx: 0, ly: 0 };
+  return { yaw, pitch: -0.1, mode: 'mask', dragging: false, yawRate: 0, prevYaw: yaw };
 }
 
 export function cycleDiverView(cam: DiverCamState): string {
@@ -48,21 +52,31 @@ export function cycleDiverView(cam: DiverCamState): string {
 
 /** Pointer-drag look, gated by `isActive` exactly like entities/diver/input.ts's key handlers —
  * bound/unbound per dive (see controller.ts) rather than left live, so a drag that started while
- * driving the boat never bleeds a diver-mode look delta in. */
+ * driving the boat never bleeds a diver-mode look delta in.
+ *
+ * A press does NOT start a look until it has moved `LOOK_DRAG_PX` (gesture.ts) — the same press
+ * may be a click that entities/speargun/input.ts fires the gun on at release, and the two must
+ * agree on which it is. Only the primary button looks/fires; right/middle presses used to start a
+ * look too, which is how a stray context-menu click rotated the view. */
 export function bindDiverPointerControls(canvas: HTMLCanvasElement, cam: DiverCamState, isActive: () => boolean): () => void {
+  let g: Gesture | null = null;
   const onDown = (e: PointerEvent): void => {
-    if (!isActive()) return;
-    cam.dragging = true; cam.lx = e.clientX; cam.ly = e.clientY;
+    if (!isActive() || e.button !== 0 || g) return;
+    g = beginGesture(e.pointerId, e.clientX, e.clientY);
     canvas.setPointerCapture(e.pointerId);
   };
   const onMove = (e: PointerEvent): void => {
-    if (!isActive() || !cam.dragging) return;
-    const dx = e.clientX - cam.lx, dy = e.clientY - cam.ly;
-    cam.lx = e.clientX; cam.ly = e.clientY;
+    if (!g || e.pointerId !== g.id || !isActive()) return;
+    const { dx, dy } = moveGesture(g, e.clientX, e.clientY);
+    if (g.kind === 'look') cam.dragging = true;
+    if (dx === 0 && dy === 0) return;
     cam.yaw -= dx * 0.0045;
     cam.pitch = clamp(cam.pitch - dy * 0.0045, -1.3, 1.3);
   };
-  const onUp = (): void => { cam.dragging = false; };
+  const onUp = (e: PointerEvent): void => {
+    if (!g || e.pointerId !== g.id) return;
+    g = null; cam.dragging = false;
+  };
   canvas.addEventListener('pointerdown', onDown);
   canvas.addEventListener('pointermove', onMove);
   canvas.addEventListener('pointerup', onUp);
@@ -72,7 +86,7 @@ export function bindDiverPointerControls(canvas: HTMLCanvasElement, cam: DiverCa
     canvas.removeEventListener('pointermove', onMove);
     canvas.removeEventListener('pointerup', onUp);
     canvas.removeEventListener('pointercancel', onUp);
-    cam.dragging = false;
+    g = null; cam.dragging = false;
   };
 }
 

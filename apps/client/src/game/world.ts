@@ -1130,6 +1130,8 @@ export function initWorld(wrap: HTMLElement): World {
       diver.cam.pitch = Math.asin(Math.max(-1, Math.min(1, dy / l)));
     },
     forceReloadReady(): void { speargun.debugForceReloadReady(); },
+    reloadState: () => speargun.getReloadState(),
+    draw(v: boolean): void { speargun.setDrawing(v); },
     /** Verification-only: what aim assist would lock onto right now, and how many targets the gun
      * can actually see. These are the gun's OWN view (muzzle origin, `deps.getTargets()`), which is
      * not the same thing as querying `fishWorld.spearTargetsNear` from the diver's body — the

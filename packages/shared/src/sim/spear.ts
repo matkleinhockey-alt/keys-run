@@ -26,8 +26,26 @@ import type { Rng } from '../rng/index.js';
 
 export const SPEAR_SPEED = 25; // m/s, muzzle speed
 export const SPEAR_RANGE = 11; // m (projectile lifetime, not a hard raycast distance)
-export const SPEAR_RELOAD = 2.5; // s, normal reload
+/** s, the recover/brace phase after a shot: the gun is dead weight while the diver gets the butt
+ * back against the hip and finds the rubbers. Drawing cannot begin until it has elapsed. */
+export const SPEAR_RELOAD = 1.8;
 export const SPEAR_RELOAD_FLOOR = 1.6; // s, hard anti-cheat floor — never fire faster than this
+/** s of uninterrupted, stationary hauling to take the bands from slack to locked on the sear. The
+ * whole reload is therefore at least SPEAR_RELOAD + SPEAR_DRAW_TIME = 4.6 s (was a 2.5 s timer),
+ * and it is the player's hand doing it — see `stepReload`. */
+export const SPEAR_DRAW_TIME = 2.8;
+/** Notches on the draw: a band that has been hauled past a notch holds there when the hand lets
+ * go, instead of springing all the way back. Without them a single interrupted pull (a fish
+ * wandering in, a need to kick) throws away the whole reload, which reads as punishing rather
+ * than as effort. */
+export const SPEAR_DRAW_NOTCHES = 3;
+/** Draw fraction lost per second when the hand is off the bands, down to the last notch passed. */
+export const SPEAR_DRAW_SLIP = 0.45;
+/** Swim speed (m/s) at which the draw rate has fallen to `SPEAR_DRAW_MIN_RATE`. A real diver
+ * braces the butt against the hip and hauls with both arms; kicking along while doing it costs
+ * leverage, so you have to hang still in the water to load quickly. */
+export const SPEAR_DRAW_SWIM_SPEED = 1.4;
+export const SPEAR_DRAW_MIN_RATE = 0.35;
 
 /**
  * Water drag on the shaft, expressed as a time constant for `dv/dt = -SPEAR_DRAG_K * v`
@@ -99,24 +117,64 @@ export function holdChance(impactSpeed: number): number {
  * ------------------------------------------------------------------------------------------ */
 
 export interface GunState {
-  /** Seconds remaining until the next shot is allowed. 0 = loaded. */
+  /** Seconds remaining of the post-shot recover/brace phase. While > 0 the hand cannot draw. */
   reloadT: number;
+  /** 0 = bands slack, 1 = drawn and locked on the sear (loaded). Only the player's hauling moves
+   * it up; it only ever reaches 1 after `reloadT` has reached 0, so the total reload can never be
+   * shorter than SPEAR_RELOAD_FLOOR however the hand input is faked. */
+  draw: number;
 }
 
-export const createGun = (): GunState => ({ reloadT: 0 });
-
-export const canFire = (gun: GunState): boolean => gun.reloadT <= 0;
-
-/** Advances reload cooldown. Pure — returns a new `GunState`. */
-export function stepReload(gun: GunState, dt: number): GunState {
-  if (gun.reloadT <= 0) return gun;
-  return { reloadT: Math.max(0, gun.reloadT - dt) };
+/** What the player's hands are doing this tick. */
+export interface ReloadHand {
+  /** Holding the draw control (R / the touch draw button). */
+  drawing: boolean;
+  /** Diver speed, m/s — kicking while hauling costs leverage (SPEAR_DRAW_SWIM_SPEED). */
+  speed: number;
 }
 
-/** Starts the reload timer after a shot. `reloadS` defaults to the normal 2.5 s; callers
- * enforcing the anti-cheat floor (`SPEAR_RELOAD_FLOOR`) pass that instead — never less. */
+export const IDLE_HAND: ReloadHand = { drawing: false, speed: 0 };
+
+export const createGun = (): GunState => ({ reloadT: 0, draw: 1 });
+
+export const canFire = (gun: GunState): boolean => gun.reloadT <= 0 && gun.draw >= 1;
+
+/** Draw-rate multiplier for a given swim speed: 1 hanging still, falling linearly to
+ * SPEAR_DRAW_MIN_RATE at SPEAR_DRAW_SWIM_SPEED and beyond. */
+export function drawRateFor(speed: number): number {
+  const k = clamp(speed / SPEAR_DRAW_SWIM_SPEED, 0, 1);
+  return 1 - (1 - SPEAR_DRAW_MIN_RATE) * k;
+}
+
+/**
+ * Advances the reload by `dt`. Pure — returns a new `GunState` (or the same object once loaded).
+ *
+ * Phase 1: `reloadT` counts down on its own — the gun cannot be worked yet. Phase 2: while the
+ * hand holds the draw, `draw` climbs at `drawRateFor(speed) / SPEAR_DRAW_TIME` per second; let go
+ * and it slips back toward the last notch passed at SPEAR_DRAW_SLIP per second. The notch is a
+ * floor under the slip only — it never advances the draw by itself.
+ *
+ * Phase boundary: the tick on which `reloadT` expires does not also draw, so the earliest possible
+ * `canFire` is strictly later than SPEAR_RELOAD_FLOOR even with a perfect hand.
+ */
+export function stepReload(gun: GunState, dt: number, hand: ReloadHand = IDLE_HAND): GunState {
+  if (gun.draw >= 1 && gun.reloadT <= 0) return gun;
+  if (gun.reloadT > 0) return { reloadT: Math.max(0, gun.reloadT - dt), draw: gun.draw };
+  let draw = gun.draw;
+  if (hand.drawing) {
+    draw = Math.min(1, draw + (dt / SPEAR_DRAW_TIME) * drawRateFor(hand.speed));
+  } else {
+    const notch = Math.floor(draw * SPEAR_DRAW_NOTCHES + 1e-9) / SPEAR_DRAW_NOTCHES;
+    draw = Math.max(notch, draw - SPEAR_DRAW_SLIP * dt);
+  }
+  return { reloadT: 0, draw };
+}
+
+/** Starts the reload after a shot: slack bands, and a recover phase of `reloadS`. The anti-cheat
+ * floor (`SPEAR_RELOAD_FLOOR`) clamps `reloadS` — a caller can lengthen the recover phase, never
+ * shorten it below the floor. */
 export function startReload(reloadS: number = SPEAR_RELOAD): GunState {
-  return { reloadT: Math.max(SPEAR_RELOAD_FLOOR, reloadS) };
+  return { reloadT: Math.max(SPEAR_RELOAD_FLOOR, reloadS), draw: 0 };
 }
 
 /* ------------------------------------------------------------------------------------------ *

@@ -143,7 +143,12 @@ async function captureSpearfishing(browser) {
     await page.keyboard.up('ArrowDown');
 
     landed = (await page.textContent('#status'))?.includes('LANDED') ?? false;
-    if (!landed) await page.waitForTimeout(2600); // let the gun reload (SPEAR_RELOAD = 2.5 s) before retrying
+    if (!landed) {
+      // reloading is hand-hauled now (hold R; >= 4.6 s of sim time) — hold it through the retry gap
+      await page.keyboard.down('KeyR');
+      await page.waitForTimeout(8000);
+      await page.keyboard.up('KeyR');
+    }
   }
   await page.screenshot({ path: `${OUT}/spear-04-landed.png` });
   console.log('[spear] landed:', landed, '-', await page.textContent('#status'));

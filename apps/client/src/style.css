@@ -257,6 +257,8 @@ body.photoing #gauges,body.photoing #mapbox,body.photoing #scorebox,body.photoin
 #tdFire{left:50%;transform:translateX(-50%);bottom:20px;width:76px;height:76px;font-size:30px;background:var(--sun);color:var(--gulf);border:none}
 #tdHaul{left:50%;transform:translateX(-50%);bottom:112px;background:rgba(242,193,78,.18)}
 #tdHaul.on{background:var(--sun);color:var(--gulf)}
+#tdDraw{left:calc(50% + 62px);bottom:34px;background:rgba(242,193,78,.18)}
+#tdDraw.on{background:var(--sun);color:var(--gulf)}
 
 @media (max-width:760px){
   #diverHud{left:10px;top:10px}

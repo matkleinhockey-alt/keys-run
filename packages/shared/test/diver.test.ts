@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AIR_MAX, NEUTRAL_DEPTH, BUOY_SURFACE_ACCEL, BUOY_MAX_NEGATIVE_ACCEL, NARCOSIS_DEPTH,
   SHALLOW_BLACKOUT_DEPTH, SURFACE_EPS, DIVER_RADIUS,
-  ataAt, buoyancyAccel, airBurnRate, currentAt,
+  ataAt, buoyancyAccel, airBurnRate, waterVelocity, kickPulse, SWIM_KICK_ACCEL, KICK_PERIOD,
   createDiverState, stepDiver,
   type DiverEnv, type DiverInput, type DiverState, type SeafloorSampler,
 } from '../src/sim/diver.js';
@@ -97,15 +97,21 @@ describe('blackout', () => {
   });
 
   it('once blacked out, ignores further swim input (unconscious, drifting only)', () => {
-    const blacked: DiverState = { ...createDiverState(0, -15, 0, 0), air: 0, blackedOut: true, blackoutT: 0.4 };
+    // Hawk Channel at peak flood (t = a quarter tide period): the real current is clearly non-zero.
+    const T = 240;
+    const blacked: DiverState = { ...createDiverState(0, -15, 800, 0), air: 0, blackedOut: true, blackoutT: 0.4 };
     const sprintInput: DiverInput = { ...NO_INPUT, fwd: true, sprint: true };
-    const next = stepDiver(blacked, sprintInput, baseEnv(0), DT);
+    const next = stepDiver(blacked, sprintInput, baseEnv(T), DT);
     expect(next.blackedOut).toBe(true);
     expect(next.blackoutT).toBeCloseTo(0.4 + DT, 10);
     // No fin-kick applied: vx/vz only reflect buoyancy/current/drag, never the sprint input.
-    expect(next.vx).not.toBe(0); // the current still nudges it...
-    const current = currentAt(0, 0, 15, 0);
-    expect(next.vx).toBeCloseTo(current.x * DT * (1 - 1.6 * DT), 6);
+    // ...but the water still carries it: with no kick the velocity relaxes toward the water's own
+    // (same sign, never past it), never toward the sprint direction (-z at yaw 0).
+    const w = waterVelocity(0, -15, 800, T, -1000);
+    expect(Math.abs(w.x)).toBeGreaterThan(0.01);
+    expect(Math.sign(next.vx)).toBe(Math.sign(w.x));
+    expect(Math.abs(next.vx)).toBeLessThan(Math.abs(w.x));
+    expect(Math.abs(next.vz)).toBeLessThan(Math.abs(w.z) + 0.05);
   });
 
   it('shallow-water blackout can fire in the final 5 m of ascent on fumes, even with air > 0', () => {

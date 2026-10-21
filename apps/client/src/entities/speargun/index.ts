@@ -26,12 +26,13 @@ import { mulberry32, type Rng } from '@keysrun/shared/rng';
 import {
   createGun, canFire, stepReload, startReload,
   fire, assistAim, stepSpear, spearFightParamsFor, startSpearFight, stepSpearFight,
-  SPEAR_RELOAD,
+  SPEAR_RELOAD, drawRateFor,
   type GunState, type ShotState, type CapsuleTarget, type SpearFightState, type SpearFightParams, type Vec3,
 } from '@keysrun/shared/sim/spear';
 import { createGunViewModel } from './gun-viewmodel.js';
 import { createShaftVisual, createFloatLineVisual, createMuzzleBubbles } from './shaft.js';
 import { createSpearFightUI } from './fight-ui.js';
+import { createReloadHint } from './reload-hint.js';
 import { createSperedFishVisual } from './speared-fish-visual.js';
 import { toast } from '../../ui/toast.js';
 import { SPECIES } from '@keysrun/shared/content/species';
@@ -77,6 +78,11 @@ export interface Speargun {
   tryFire(diver: DiverAimInput): boolean;
   /** Diver is hauling the speared fish in (the spear's equivalent of the rod's `reeling`). */
   setHauling(v: boolean): void;
+  /** Player's hand is on the bands (R / touch draw button). Reloading is this, held — the gun
+   * never reloads itself (sim/spear.ts `stepReload`). */
+  setDrawing(v: boolean): void;
+  /** Reload progress for the HUD/tests: `draw` 0..1, `recoverLeft` seconds of brace remaining. */
+  getReloadState(): { loaded: boolean; draw: number; recoverLeft: number };
   /** True while a shaft is in flight or a fish is speared — callers can use this the way
    * game/fishing uses `lineOut()`. */
   isActive(): boolean;
@@ -93,12 +99,12 @@ export interface Speargun {
    * direction: hides every visual and drops any in-flight shot/speared fish without resolving it
    * through `landed`/`tornFree`. Safe to call when nothing is active. */
   reset(): void;
-  /** VERIFICATION-ONLY: zeroes the reload timer. Real play never needs this (the 2.5 s reload is
-   * the point) — it exists because this sandbox's fixed-dt accumulator clamps to 0.05 s of
+  /** VERIFICATION-ONLY: loads the gun instantly. Real play never needs this (the 4.6 s+ hauled
+   * reload is the point) — it exists because this sandbox's fixed-dt accumulator clamps to 0.05 s of
    * simulated time per *rendered* frame (game/world.ts's `frame()`), and this sandbox's measured
    * ~2-4 fps means simulated time crawls at roughly a fifth to a tenth of real wall-clock time —
    * a Playwright script's `waitForTimeout(3000)` was observed not being enough real time for a
-   * 2.5 s *simulated* reload to actually clear. Bypassing it here is simpler and more honest than
+   * reload to actually clear. Bypassing it here is simpler and more honest than
    * padding every verification script with multi-minute real-time waits to chase simulated time
    * that will never run at real speed in this environment anyway. */
   debugForceReloadReady(): void;
@@ -137,18 +143,20 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
   const muzzleBubbles = createMuzzleBubbles(deps.scene);
   const speredVisual = createSperedFishVisual(deps.scene);
   const fightUI = createSpearFightUI();
+  const reloadHint = createReloadHint();
 
   let gun: GunState = createGun();
   let shot: ShotState | null = null;
   let speared: Speared | null = null;
   let hauling = false;
+  let drawing = false;
 
   /** Target id the most recent shot's assist locked onto — see `assistTargetId`. */
   let lastAssist: string | number | null = null;
 
   function tryFire(diver: DiverAimInput): boolean {
     if (shot || speared) return false; // one shaft out at a time — see this module's header
-    if (!canFire(gun)) return false;
+    if (!canFire(gun)) { reloadHint.nudge(); return false; }
     if (diver.breath <= 0 || diver.blackedOut) return false;
     // The shot's visual origin is the view model's actual muzzle, not the diver's body position
     // (`diver.position` is still what the fight env below ties the tether to) — same convention
@@ -181,6 +189,10 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
   }
 
   function setHauling(v: boolean): void { hauling = v; }
+  function setDrawing(v: boolean): void { drawing = v; }
+  function getReloadState(): { loaded: boolean; draw: number; recoverLeft: number } {
+    return { loaded: canFire(gun), draw: gun.draw, recoverLeft: gun.reloadT };
+  }
 
   /** The target the last shot's aim assist locked onto, or null. Exposed so a reticle can show a
    * lock — an assist the player cannot see reads as the gun being inaccurate rather than helpful. */
@@ -212,7 +224,12 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
   }
 
   function update(dt: number, t: number, diver: DiverAimInput, sw: number, ch: number): void {
-    gun = stepReload(gun, dt);
+    // The bands can only be worked with the shaft out of the gun and nothing on the line: a fish
+    // being hauled has both hands on the reel line. That is also what makes a fight cost you the
+    // follow-up shot, which is the point of a one-shot gun.
+    const handsFree = !shot && !speared && !diver.blackedOut;
+    const hand = { drawing: drawing && handsFree, speed: diver.speed ?? 0 };
+    gun = stepReload(gun, dt, hand);
     muzzleBubbles.update(dt);
     speredVisual.tick(dt, t);
     if (shot) {
@@ -278,18 +295,32 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
       }
     }
 
-    const reloadFrac = Math.min(1, 1 - gun.reloadT / SPEAR_RELOAD);
-    gunVM.update(dt, reloadFrac, !!speared, diver.speed ?? 0);
+    const loaded = canFire(gun);
+    const reloadView = {
+      loaded,
+      recover: gun.reloadT > 0 ? Math.min(1, 1 - gun.reloadT / SPEAR_RELOAD) : 1,
+      draw: gun.draw,
+      drawing: hand.drawing && !loaded && gun.reloadT <= 0,
+      // How hard the diver is fighting the rubbers right now: 1 hanging still, lower while kicking.
+      effort: drawRateFor(diver.speed ?? 0),
+    };
+    gunVM.update(dt, reloadView, !!speared, diver.speed ?? 0);
+    reloadHint.update(reloadView, gun.reloadT, !!speared || !!shot || !!diver.blackedOut);
   }
 
   function reset(): void {
     shot = null;
+    drawing = false;
+    reloadHint.hide();
     shaftVisual.setVisible(false);
     speredVisual.vanish();
     if (speared) endFight();
   }
 
-  function setViewVisible(v: boolean): void { gunVM.group.visible = v; }
+  function setViewVisible(v: boolean): void {
+    gunVM.group.visible = v;
+    if (!v) { drawing = false; reloadHint.hide(); }
+  }
 
   function debugForceReloadReady(): void { gun = createGun(); }
 
@@ -299,7 +330,8 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
     floatLine.dispose();
     muzzleBubbles.dispose();
     speredVisual.dispose();
+    reloadHint.dispose();
   }
 
-  return { update, tryFire, setHauling, isActive, getFightState, assistTargetId, aimTargetId, reset, debugForceReloadReady, setViewVisible, dispose };
+  return { update, tryFire, setHauling, setDrawing, getReloadState, isActive, getFightState, assistTargetId, aimTargetId, reset, debugForceReloadReady, setViewVisible, dispose };
 }

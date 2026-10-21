@@ -79,9 +79,11 @@ let hauling = false;
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Space') { speargun.tryFire(diver); }
   if (e.code === 'ArrowDown') { hauling = true; speargun.setHauling(true); }
+  if (e.code === 'KeyR') speargun.setDrawing(true); // reloading is hand-hauled now (sim/spear.ts stepReload)
 });
 window.addEventListener('keyup', (e) => {
   if (e.code === 'ArrowDown') { hauling = false; speargun.setHauling(false); }
+  if (e.code === 'KeyR') speargun.setDrawing(false);
 });
 
 let last = performance.now();
