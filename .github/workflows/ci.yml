@@ -26,6 +26,12 @@ env:
   TEST_DATABASE_URL: postgres://keysrun:keysrun_ci_password@localhost:5432/keysrun_test
   CORS_ORIGIN: http://localhost:5173
   NODE_ENV: test
+  # CI builds the client to prove it compiles; it does not deploy it, so it has no
+  # real backend URL to bake in and does not need one. apps/client/vite.config.ts
+  # otherwise refuses to produce a production bundle without VITE_API_URL — see that
+  # file for why (a localhost bundle shipped to prod fails completely silently).
+  # The deploy environment is where those vars must be real; this flag only covers CI.
+  VITE_ALLOW_LOCALHOST_API: '1'
 
 jobs:
   ci:
