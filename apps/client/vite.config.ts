@@ -35,16 +35,26 @@ function assertBackendConfigured(mode: string): void {
   }
   // A page served over https cannot call http:// or ws:// — the browser blocks it as mixed
   // content, with the same silent-looking result as the bug above.
-  for (const [name, value, bad, good] of [
-    ['VITE_API_URL', api!, 'http://', 'https://'],
-    ['VITE_SIM_WS_URL', ws!, 'ws://', 'wss://'],
-  ] as const) {
-    if (value.startsWith(bad)) {
+  //
+  // `VITE_API_URL` may also be a same-origin path like `/api`, which is what the Vercel
+  // deployment uses: vercel.json rewrites `/api/*` to the Railway API, so the browser makes a
+  // same-origin request and CORS never enters into it. That is deliberate — a CORS allowlist has
+  // to be edited for every new origin (preview deployments, a custom domain), and when someone
+  // forgets, the failure is an empty leaderboard with no error anywhere.
+  if (!api!.startsWith('/')) {
+    if (api!.startsWith('http://')) {
       throw new Error(
-        `${name} is ${value}, which a https:// page cannot reach — browsers block mixed content.\n` +
-        `Use ${good} instead.`,
+        `VITE_API_URL is ${api}, which a https:// page cannot reach — browsers block mixed content.\n` +
+        'Use https://, or a same-origin path like /api with a proxy rewrite in front of it.',
       );
     }
+  }
+  if (ws!.startsWith('ws://')) {
+    throw new Error(
+      `VITE_SIM_WS_URL is ${ws}, which a https:// page cannot reach — browsers block mixed content.\n` +
+      'Use wss:// instead. (A WebSocket cannot go through an http rewrite, so this one has to be\n' +
+      "the backend's own public URL.)",
+    );
   }
 }
 

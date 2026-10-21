@@ -250,29 +250,37 @@ the latest deployment shows a green **"Active"** status, not stuck on
    - **Framework Preset:** Vercel may show "Other" since the root directory
      isn't itself a Vite project — that's fine, the explicit `buildCommand`/
      `outputDirectory` above make the preset irrelevant.
-4. **Environment Variables** — these now live in `vercel.json`'s `build.env`,
-   so a fresh Vercel project needs nothing typed into the dashboard:
+4. **Environment Variables** — these live in `vercel.json`'s `build.env`, so a
+   fresh Vercel project needs nothing typed into the dashboard:
 
    | Variable | Value | Why |
    |---|---|---|
-   | `VITE_API_URL` | `https://keys-run-production.up.railway.app` | Base URL the client calls for auth/leaderboard. |
-   | `VITE_SIM_WS_URL` | `wss://sim-production-b2d0.up.railway.app` | WebSocket URL for the world connection. Use `wss://`, not `ws://` — Railway terminates TLS at its edge, and a `https://` page cannot open a `ws://` socket anyway. |
+   | `VITE_API_URL` | `/api` | Same-origin path. `vercel.json`'s `rewrites` proxies `/api/*` through to the Railway API, so the browser never makes a cross-origin request and CORS never applies. |
+   | `VITE_SIM_WS_URL` | `wss://sim-production-b2d0.up.railway.app` | The world WebSocket, direct. A WebSocket upgrade cannot go through an http rewrite, so this one has to be the backend's own public URL. `wss://`, never `ws://` — a `https://` page cannot open an insecure socket. |
 
    They are in the repo rather than the dashboard deliberately. These are
    public URLs, not secrets, and the dashboard is exactly where they got
-   forgotten: the client bundle that was live on `keys-run.vercel.app` for
-   weeks contained `http://localhost:8080`, so every visitor's browser asked
-   *their own machine* for the leaderboard and silently saw an empty board.
-   A dashboard value cannot be code-reviewed, cannot be diffed, and is not
+   forgotten: the client bundle live on `keys-run.vercel.app` for weeks
+   contained `http://localhost:8080`, so every visitor's browser asked *their
+   own machine* for the leaderboard and silently saw an empty board. A
+   dashboard value cannot be code-reviewed, cannot be diffed, and is not
    copied when someone re-creates the project.
 
-   Dashboard variables still win over `build.env` if both are set, so an
-   override for a preview environment keeps working.
+   Dashboard variables still win over `build.env` if both are set, so a
+   per-environment override keeps working.
+
+   **Why the proxy rather than pointing the client straight at the API.** The
+   direct URL works, but only for origins listed in the API's `CORS_ORIGIN`,
+   and that list has to be edited for every new one — each preview deployment,
+   and any custom domain added later. When someone forgets, nothing errors: the
+   browser quietly drops the response and the board renders "Could not reach
+   the leaderboard." Going through `/api` makes the client origin-agnostic, so
+   a custom domain needs no backend change at all.
 
    `apps/client/vite.config.ts` refuses to produce a production bundle when
-   these are missing, or when they use `http://`/`ws://`. That guard is the
-   backstop: this failure is completely silent at runtime, so the only place
-   to catch it is before the artifact exists.
+   these are missing, or when they would be blocked as mixed content. That
+   guard is the backstop: this failure is completely silent at runtime, so the
+   only place to catch it is before the artifact exists.
 
 5. Click **Deploy**.
 
