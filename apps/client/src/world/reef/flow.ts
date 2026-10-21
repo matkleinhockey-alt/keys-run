@@ -30,6 +30,7 @@ export const uSurgeAmp = { value: 0 };
 
 /** Surge period, seconds — matches `SURGE_PERIOD_S` in @keysrun/shared/world/current. */
 const SURGE_PERIOD_S = 7.5;
+const SURGE_VISUAL_GAIN = 1.7;
 
 /**
  * Samples the current at the viewer and republishes it as uniforms. Call once per frame with the
@@ -46,5 +47,9 @@ export function updateFlowUniforms(x: number, z: number, t: number): void {
   const { nx, nz } = chainNormal(x);
   uSurgeAxis.value.set(nx, nz);
   uSurgePhase.value = (t / SURGE_PERIOD_S) * Math.PI * 2;
-  uSurgeAmp.value = SURGE_MAX_SPEED * Math.exp(-Math.max(0, depthAt(x, z)) / SURGE_DECAY_DEPTH);
+  // Water depth under the viewer (the weeds are on the floor, so it is the floor's depth below the
+  // surface that decides how much orbital motion reaches them). The visual gain is a deliberate
+  // exaggeration: the physical peak (0.55 m of displacement scale at the surface) reads as a faint
+  // shimmer on a grass bed from 5 m away; 1.7x makes a surge a clear, whole-bed lean-and-recover.
+  uSurgeAmp.value = SURGE_VISUAL_GAIN * SURGE_MAX_SPEED * Math.exp(-Math.max(0, depthAt(x, z)) / SURGE_DECAY_DEPTH);
 }

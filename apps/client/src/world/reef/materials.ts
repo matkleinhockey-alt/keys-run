@@ -130,7 +130,9 @@ uniform float uFlex;`)
   #endif
   // Travelling-wave phase: 34 m wavelength along the cross-shore axis, matching surgeAt.
   float sPh = uSurgePhase - dot(wRoot.xz, uSurgeAxis) * ${(Math.PI * 2 / 34).toFixed(8)};
-  vec2 surge = uSurgeAxis * (sin(sPh) * uSurgeAmp);
+  // Second harmonic (peaked, asymmetric): a real wave's orbital surge is a sharp forward push and a
+  // slow drift back, not a sine — the lopsided pulse is what reads as "water" rather than a metronome.
+  vec2 surge = uSurgeAxis * ((sin(sPh) + 0.35 * sin(2.0 * sPh + 1.3)) * 0.85 * uSurgeAmp);
   // Steady lean saturates — past about a knot a blade is already flat and cannot lie down
   // further, so an unbounded term would shear it through the seafloor.
   vec2 lean = uFlow / (1.0 + length(uFlow) * 0.75);

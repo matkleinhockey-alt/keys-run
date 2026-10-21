@@ -22,6 +22,7 @@
  */
 import * as THREE from 'three';
 import { zoneAt } from '@keysrun/shared/world/depth';
+import { currentAt } from '@keysrun/shared/world/current';
 import { mulberry32, type Rng } from '@keysrun/shared/rng';
 import {
   createGun, canFire, stepReload, startReload,
@@ -230,7 +231,8 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
     const handsFree = !shot && !speared && !diver.blackedOut;
     const hand = { drawing: drawing && handsFree, speed: diver.speed ?? 0 };
     gun = stepReload(gun, dt, hand);
-    muzzleBubbles.update(dt);
+    const water = currentAt(diver.position.x, diver.position.z, t, Math.max(0, -diver.position.y));
+    muzzleBubbles.update(dt, water.vx, water.vz);
     speredVisual.tick(dt, t);
     if (shot) {
       const targets = deps.getTargets();

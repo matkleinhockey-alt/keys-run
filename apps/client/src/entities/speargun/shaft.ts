@@ -157,7 +157,10 @@ export interface MuzzleBubbles {
    * buoyancy — a loaded band snapping forward through water visibly exhausts a slug of air out
    * the muzzle; this is that puff, not a generic "something happened" effect. */
   burst(pos: Vec3, dir: Vec3): void;
-  update(dt: number): void;
+  /** `flowX/flowZ` (m/s) is the water's velocity at the diver — bubbles are carried downstream by
+   * it instead of rising in a dead-still column, which is what made the current readable on the
+   * one effect the player triggers themselves. */
+  update(dt: number, flowX?: number, flowZ?: number): void;
   dispose(): void;
 }
 
@@ -209,13 +212,14 @@ export function createMuzzleBubbles(scene: THREE.Scene): MuzzleBubbles {
     }
   }
 
-  function update(dt: number): void {
+  function update(dt: number, flowX = 0, flowZ = 0): void {
     for (let i = 0; i < BUBBLE_MAX; i++) {
       const p = parts[i];
       if (!p.on) { alpha[i] = 0; continue; }
       p.life -= dt;
       if (p.life <= 0) { p.on = false; alpha[i] = 0; continue; }
-      p.vx *= 1 - dt * 1.5; p.vz *= 1 - dt * 1.5;
+      // muzzle velocity decays toward the water's own, not toward zero
+      p.vx += (flowX - p.vx) * Math.min(1, dt * 1.5); p.vz += (flowZ - p.vz) * Math.min(1, dt * 1.5);
       p.vy += dt * 0.8; // bubbles accelerate upward (buoyancy), unlike spray falling under gravity
       p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
       pos[i * 3] = p.x; pos[i * 3 + 1] = p.y; pos[i * 3 + 2] = p.z;

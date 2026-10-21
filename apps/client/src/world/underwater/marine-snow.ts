@@ -32,6 +32,15 @@ import { depthAt } from '@keysrun/shared/world/depth';
 import { currentAt } from '@keysrun/shared/world/current';
 
 const BOX = 11; // metres — half-extent of the camera-centred volume particles wrap within
+/**
+ * Snow drifts at this multiple of the true water velocity. 1.0 is the physically exact value and
+ * was invisible in play: the diver is now carried by the same current (sim/diver.ts's
+ * `waterVelocity`, 75% of it in open water, less near the floor), so the relative motion between
+ * you and the specks is only the unfollowed quarter — a few cm/s inshore. A 1.6x gain turns that
+ * into ~0.4x of the flow, readable as a steady stream past the mask without making particulate
+ * visibly outrun the weeds and bubbles that are moving at the real speed.
+ */
+const SNOW_FLOW_GAIN = 1.6;
 
 export interface MarineSnow {
   points: THREE.Points;
@@ -138,9 +147,9 @@ export function createMarineSnow(pixelRatio = 1): MarineSnow {
 
     for (let i = 0; i < MARINE_SNOW_MAX; i++) {
       const o = i * 3;
-      pos[o] += (vel[o] + flow.vx) * dt;
+      pos[o] += (vel[o] + flow.vx * SNOW_FLOW_GAIN) * dt;
       pos[o + 1] += vel[o + 1] * dt;
-      pos[o + 2] += (vel[o + 2] + flow.vz) * dt;
+      pos[o + 2] += (vel[o + 2] + flow.vz * SNOW_FLOW_GAIN) * dt;
       // Wrap each axis back into [-BOX, BOX) *relative to the camera*, independently — the
       // "infinite attached volume" trick: subtract the camera's position, wrap into the box, add
       // it back, so particles only ever appear to drift within BOX of wherever the camera now is.

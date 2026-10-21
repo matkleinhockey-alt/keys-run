@@ -22,6 +22,7 @@ import { EffectPass, type Effect, type EffectComposer } from 'postprocessing';
 import type { QualityTier } from '../../core/quality.js';
 import { createSurfaceTransition, type SurfaceTransition } from './transition.js';
 import { createMarineSnow, type MarineSnow } from './marine-snow.js';
+import { createSeepBubbles, type SeepBubbles } from './seep-bubbles.js';
 import { CausticsEffect } from './caustics.js';
 import { LensWettingEffect } from './lens-wetting.js';
 import { createGodRays, type GodRaysRig } from './godrays.js';
@@ -81,6 +82,8 @@ export function createUnderwaterWorld(deps: UnderwaterDeps): UnderwaterWorld {
   const transition: SurfaceTransition = createSurfaceTransition(camera);
   const marineSnow: MarineSnow = createMarineSnow(renderer.getPixelRatio());
   scene.add(marineSnow.points);
+  const seepBubbles: SeepBubbles = createSeepBubbles(renderer.getPixelRatio());
+  scene.add(seepBubbles.points);
 
   let godRays: GodRaysRig | null = null;
   let lensWetting: LensWettingEffect | null = null;
@@ -206,8 +209,13 @@ export function createUnderwaterWorld(deps: UnderwaterDeps): UnderwaterWorld {
     lensWetting?.setAmounts(transition.wetness(), transition.underwaterAmount());
 
     const cameraDepth = Math.max(0, -camera.position.y);
-    const snowFraction = Math.min(1, cameraDepth / MARINE_SNOW_FULL_DEPTH) * transition.underwaterAmount();
+    // Snow used to scale from 0 at the surface to full at 25 m, which left the shallows — where
+    // most spearfishing happens and where the current is strongest (surge) — with almost no
+    // particulate to read the water's motion from. A floor keeps it present from the first metre;
+    // depth still thickens it.
+    const snowFraction = (0.4 + 0.6 * Math.min(1, cameraDepth / MARINE_SNOW_FULL_DEPTH)) * transition.underwaterAmount();
     marineSnow.update(dt, camera.position, snowFraction, simTime);
+    seepBubbles.update(dt, camera.position, simTime, transition.underwaterAmount());
   }
 
   function attachPostFX(composer: EffectComposer, tier: QualityTier): void {
@@ -273,6 +281,8 @@ export function createUnderwaterWorld(deps: UnderwaterDeps): UnderwaterWorld {
     dispose() {
       scene.remove(marineSnow.points);
       marineSnow.dispose();
+      scene.remove(seepBubbles.points);
+      seepBubbles.dispose();
       if (godRays) { scene.remove(godRays.lightMesh); godRays.dispose(); godRays = null; }
       if (skyHidden) { sky.visible = true; sunDisc.visible = true; scene.background = originalBackground; }
       postEffectPass = null; // the composer that owned it is already being torn down by postfx.dispose()
