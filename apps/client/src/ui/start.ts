@@ -7,6 +7,7 @@
  */
 import type { Boat } from '@keysrun/shared/content/boats';
 import { hullStation, zRake } from '../entities/boat/hull.js';
+import { toast } from './toast.js';
 
 function hex(c: number): string { return '#' + c.toString(16).padStart(6, '0'); }
 
@@ -39,10 +40,25 @@ export function boatSVG(S: Boat): string {
     <path d="M0 ${Y(0)} Q 75 ${Y(0) - 4} 150 ${Y(0)} T 300 ${Y(0)} L300 90 L0 90Z" fill="rgba(127,227,212,.35)"/></svg>`;
 }
 
+/** What the boat cards need to know about the player's money (game/economy/system.ts). Optional:
+ * without it every card is selectable and free, as before. */
+export interface BoatMarket {
+  cash(): number;
+  owns(id: string): boolean;
+  price(id: string): number;
+  /** null = bought (or already owned); otherwise the message to show the player. */
+  buy(id: string): string | null;
+  select(id: string): void;
+  subscribe(f: () => void): () => void;
+}
+
 export interface StartScreenCallbacks {
   onSelectBoat(spec: Boat): void;
   onGo(): void;
+  market?: BoatMarket;
 }
+
+const usd = (n: number): string => '$' + n.toLocaleString('en-US');
 
 export function populateBoatCards(boats: readonly Boat[], initial: Boat, cb: StartScreenCallbacks): void {
   const boatsEl = document.getElementById('boats');
@@ -53,11 +69,39 @@ export function populateBoatCards(boats: readonly Boat[], initial: Boat, cb: Sta
     const b = document.createElement('button');
     b.className = 'bcard';
     b.setAttribute('aria-pressed', S === current ? 'true' : 'false');
+    const mk = cb.market;
     b.innerHTML = boatSVG(S)
       + `<div class="brand">${S.brand}</div><h3>${S.name}</h3>${S.nickname ? `<div class="nick">"${S.nickname}"</div>` : ''}<div class="pw">${S.power} · about ${S.top} kn · ${S.draftFt} draft${S.cat ? ' · catamaran' : ''}</div>`
       + Object.entries(S.stats).map(([k, v]) => `<div class="stat"><span>${k}</span><i><b style="width:${v * 100}%"></b></i></div>`).join('')
-      + `<p>${S.desc}</p>`;
+      + `<p>${S.desc}</p>`
+      + (mk ? '<div class="price"></div>' : '');
+    // Re-run whenever money changes: label and lock state follow the wallet, not the first render.
+    let armed = false, armTimer: ReturnType<typeof setTimeout> | undefined;
+    const paint = (): void => {
+      if (!mk) return;
+      const owned = mk.owns(S.id), pr = mk.price(S.id), el = b.querySelector('.price');
+      b.classList.toggle('locked', !owned);
+      b.setAttribute('aria-label', owned ? `${S.brand} ${S.name}, owned` : `${S.brand} ${S.name}, ${usd(pr)}, ${mk.cash() >= pr ? 'tap to buy' : 'not enough cash'}`);
+      if (el) {
+        el.textContent = owned ? 'Owned' : armed ? `Tap again to buy · ${usd(pr)}` : mk.cash() >= pr ? `Buy · ${usd(pr)}` : `${usd(pr)} · need ${usd(pr - mk.cash())} more`;
+        el.className = 'price ' + (owned ? 'owned' : mk.cash() >= pr ? '' : 'short');
+      }
+    };
+    paint();
+    mk?.subscribe(paint);
     b.addEventListener('click', () => {
+      // An unowned hull buys on a confirming second click if affordable; otherwise the card says why not. Only an
+      // owned hull is ever handed to onSelectBoat, so the world can't be put in a boat unpaid for.
+      if (mk && !mk.owns(S.id)) {
+        // Two taps for a purchase: these are $8k-$125k decisions and a stray click on the grid
+        // shouldn't spend a session's work.
+        if (mk.cash() < mk.price(S.id)) { toast(mk.buy(S.id) ?? ''); return; }
+        if (!armed) { armed = true; paint(); clearTimeout(armTimer); armTimer = setTimeout(() => { armed = false; paint(); }, 4000); return; }
+        clearTimeout(armTimer); armed = false;
+        const refusal = mk.buy(S.id);
+        if (refusal) { toast(refusal); return; }
+      }
+      mk?.select(S.id);
       current = S;
       boatsEl.querySelectorAll('.bcard').forEach((c) => c.setAttribute('aria-pressed', 'false'));
       b.setAttribute('aria-pressed', 'true');

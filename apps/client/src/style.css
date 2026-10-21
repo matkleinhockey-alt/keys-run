@@ -216,6 +216,12 @@ body.photoing #gauges,body.photoing #mapbox,body.photoing #scorebox,body.photoin
 #fishCanvas{display:block;width:min(360px,80vw);height:auto;aspect-ratio:640/300;margin:0 auto 4px;border-radius:10px;background:radial-gradient(ellipse at 50% 60%,rgba(127,227,212,.18),rgba(6,33,59,0) 70%)}
 #card.photo .catch #fishCanvas{flex-basis:100%}
 
+.cpay{color:var(--sun)}
+.cashline{font-family:var(--display);font-weight:800;font-size:22px;color:var(--sun);margin:-10px 0 16px}
+.bcard.locked{opacity:.78}
+.bcard .price{display:inline-block;margin-top:10px;padding:4px 10px;border-radius:999px;border:1.5px solid var(--sun);color:var(--sun);font-weight:800;font-size:14px}
+.bcard .price.owned{border-color:var(--flats);color:var(--flats)}
+.bcard .price.short{border-color:var(--panel-edge);color:var(--muted)}
 .cprice{font-size:13px;font-weight:600;color:#7fe3d4;margin:2px 0}
 #card.photo .cprice{flex-basis:100%;text-align:center;margin:0}
 

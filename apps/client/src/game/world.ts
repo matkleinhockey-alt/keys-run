@@ -59,6 +59,7 @@ import { createFishing } from './fishing/index.js';
 import { createRaceMode } from './race/index.js';
 import { F as FishF, lineOut as fishingLineOut } from './fishing/state.js';
 import { createCatchFlow } from './catch/catch-flow.js';
+import { createEconomySystem } from './economy/system.js';
 import { bindCatchInput } from './catch/input.js';
 
 import { updateHUD } from '../ui/hud.js';
@@ -235,8 +236,9 @@ export function initWorld(wrap: HTMLElement): World {
   const readout: BoatReadout = { x: 0, z: 0, h: 0, speed: 0 };
   const electronics = createElectronics(readout);
 
-  let boatSpec: Boat = BOATS[1]; // legacy's default `let boatSpec = BOATS[1]` (the Grady-White)
-  let model: BoatModel = makeBoat(boatSpec, { lightMats: tod.lightMats, todK: tod.getK(), mfdTex: electronics.mfdTex, gpsTex: electronics.gpsTex, sonTex: electronics.sonTex });
+  const econ = createEconomySystem({ getModel: () => model, onGuestsChanged: () => shadows.applyToSubtree(model.group) });
+  let boatSpec: Boat = econ.startingBoat(); // the last hull you owned and picked; a new wallet is the Grady "Actively Sinking"
+  let model: BoatModel = makeBoat(boatSpec, { wealth: econ.wealthFor(boatSpec.len), lightMats: tod.lightMats, todK: tod.getK(), mfdTex: electronics.mfdTex, gpsTex: electronics.gpsTex, sonTex: electronics.sonTex });
   scene.add(model.group);
 
   const spawnZ = chainZ(SPAWN_X) + SPAWN_DZ;
@@ -440,6 +442,7 @@ export function initWorld(wrap: HTMLElement): World {
     scene,
     getModel: () => model,
     getBoatSpec: () => ({ id: boatSpec.id, brand: boatSpec.brand, name: boatSpec.name }),
+    economy: econ,
   });
   const fishing = createFishing({
     scene,
@@ -608,7 +611,7 @@ export function initWorld(wrap: HTMLElement): World {
   function placeBoat(spec: Boat): void {
     boatSpec = spec;
     scene.remove(model.group);
-    model = makeBoat(spec, { lightMats: tod.lightMats, todK: tod.getK(), mfdTex: electronics.mfdTex, gpsTex: electronics.gpsTex, sonTex: electronics.sonTex });
+    model = makeBoat(spec, { wealth: econ.wealthFor(spec.len), lightMats: tod.lightMats, todK: tod.getK(), mfdTex: electronics.mfdTex, gpsTex: electronics.gpsTex, sonTex: electronics.sonTex });
     scene.add(model.group);
     crewSystem.attachTo(model, spec); // re-applies CSM setup to the new crew group itself (see its onGroupReady hook above)
     shadows.applyToSubtree(model.group);
@@ -625,6 +628,7 @@ export function initWorld(wrap: HTMLElement): World {
   }
 
   populateBoatCards(BOATS, boatSpec, {
+    market: econ.market,
     onSelectBoat(spec) { if (!game.running) placeBoat(spec); else boatSpec = spec; },
     onGo() {
       // legacy `if(F.state!=='idle'&&F.state!=='caught') reelIn();` — switching boats mid-cast

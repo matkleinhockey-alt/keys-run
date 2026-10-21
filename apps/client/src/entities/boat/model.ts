@@ -86,6 +86,10 @@ export interface BoatBuildDeps {
   mfdTex: THREE.Texture;
   gpsTex: THREE.Texture;
   sonTex: THREE.Texture;
+  /** How well-off the player is, from sim/economy's `deckWealth`: sets how many guests are
+   * aboard and whether the underwater lights start on. Optional so the other makeBoat callers
+   * (party boats, harnesses) keep their legacy 3-5 guests. */
+  wealth?: { partyCount: number; underglow: boolean };
 }
 
 export interface Tower { pos: THREE.Vector3; wheel: THREE.Mesh }
@@ -129,6 +133,9 @@ export interface BoatModel {
    * (legacy still builds 3-5 on every hull; kept as-is for fidelity). Animated by
    * `entities/life/deck-party.ts`'s `updateParty`. */
   party: PartyMember[];
+  /** Grow or shrink `party` in place (economy: the dock fills up as the player gets rich, live,
+   * without rebuilding the hull mid-cast). New guests join mid-loop at an even spacing. */
+  setPartySize(n: number): void;
   /** legacy `pole` (index.html:1619-1624): the Midnight Express's dance pole, `null` on every
    * other boat. */
   pole: PoleRig | null;
@@ -753,19 +760,30 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
   const partyPath = createPath([[lane(zc), zc], [lane(-L * 0.1), -L * 0.1], [0, -L * 0.19], [-lane(-L * 0.1), -L * 0.1], [-lane(zc), zc], [0, coolerZForParty - 0.7]]);
   const PARTY_SUITS = [0xe86a92, 0x2bb3a8, 0xf2c14e, 0x15171a, 0xe4572e, 0xffffff];
   const party: PartyMember[] = [];
-  const nP = L > 12 ? 5 : L > 8.5 ? 4 : 3;
-  for (let k = 0; k < nP; k++) {
+  const mkGuest = (k: number): PartyMember => {
     const h = makeHuman({ walker: true, bikini: true, shorts: PARTY_SUITS[k % PARTY_SUITS.length], glasses: k % 2 === 0 });
     g.add(h.group);
-    party.push({ h, path: partyPath, s: k / nP * partyPath.total, ph: Math.random() * 6, mode: k % 3 === 0 ? 'walk' : 'dance', modeT: rand(5, 10) });
-  }
+    // golden-ratio spread along the loop: later arrivals land in the biggest gap without anyone
+    // already aboard being nudged (an even re-spacing teleports the whole party on every payday)
+    return { h, path: partyPath, s: ((k * 0.618034) % 1) * partyPath.total, ph: Math.random() * 6, mode: k % 3 === 0 ? 'walk' : 'dance', modeT: rand(5, 10) };
+  };
+  const setPartySize = (n: number): void => {
+    const want = Math.max(0, Math.floor(n));
+    if (want === party.length) return;
+    while (party.length > want) { const m = party.pop()!; g.remove(m.h.group); }
+    while (party.length < want) party.push(mkGuest(party.length));
+  };
+  setPartySize(deps.wealth ? deps.wealth.partyCount : L > 12 ? 5 : L > 8.5 ? 4 : 3);
+  // Underwater lights default on; the economy turns them off for a broke boat (the player can
+  // still toggle them with the existing key).
+  if (deps.wealth && !deps.wealth.underglow && lights) lights.visible = false;
 
   return {
     group: g, deckY: cs, props, helmPos, helmPose, fishSpot, soleAt,
     wheel: helmWheel, tower, outboards, lights, flags,
     cabin, cabinLight, cabinLight2,
     rodPivot, rodTip: tip, stations, station: 0, captain, crew,
-    party, pole, shower, leds, uwLights, speakerPos: V3(0, topY - 0.3, tz),
+    party, setPartySize, pole, shower, leds, uwLights, speakerPos: V3(0, topY - 0.3, tz),
   };
 }
 
