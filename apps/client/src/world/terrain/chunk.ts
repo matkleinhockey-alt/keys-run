@@ -11,7 +11,7 @@
  */
 import * as THREE from 'three';
 import { WORLD } from '@keysrun/shared/world/depth';
-import { CHUNK_SIZE, seafloorHeightAt, seafloorColorAt } from './heightfield.js';
+import { CHUNK_SIZE, seafloorSampleAt, seafloorColorAt } from './heightfield.js';
 
 const SKIRT_DEPTH = 3; // metres the perimeter drops — comfortably more than any LOD seam's gap
 
@@ -28,9 +28,13 @@ export function buildChunkGeometry(cx: number, cz: number, segs: number): THREE.
   // Pass 1: sample height once per grid vertex; reused below both for position and for
   // neighbour-difference slope shading (no extra depthFast calls needed for that).
   const h = new Float32Array(rows * rows);
+  const relArr = new Float32Array(rows * rows);
+  const smp = { h: 0, rel: 0 };
   for (let j = 0; j < rows; j++) {
     for (let i = 0; i < rows; i++) {
-      h[j * rows + i] = seafloorHeightAt(x0 + i * step, z0 + j * step);
+      seafloorSampleAt(x0 + i * step, z0 + j * step, smp);
+      h[j * rows + i] = smp.h;
+      relArr[j * rows + i] = smp.rel;
     }
   }
 
@@ -48,7 +52,7 @@ export function buildChunkGeometry(cx: number, cz: number, segs: number): THREE.
     const slope = (Math.abs(h[j * rows + iR] - h[j * rows + iL]) / ((iR - iL) * step || 1)
       + Math.abs(h[jU * rows + i] - h[jD * rows + i]) / ((jU - jD) * step || 1)) * 0.5;
     const shade = 1 - Math.min(0.35, slope * 1.4);
-    return seafloorColorAt(x, z, d, shade);
+    return seafloorColorAt(x, z, d, shade, relArr[j * rows + i]);
   };
 
   let vi = 0;

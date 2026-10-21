@@ -12,6 +12,7 @@
 import { depthFast } from '@keysrun/shared/sim/depth-grid';
 import { chainZ } from '@keysrun/shared/world/chain';
 import { HUMPS } from '@keysrun/shared/world/depth';
+import { reliefAt } from '@keysrun/shared/world/relief';
 
 export const CHUNK_SIZE = 64;
 
@@ -45,7 +46,26 @@ const hash2 = (x: number, z: number): number => {
  * function is negligible.
  */
 export function seafloorHeightAt(x: number, z: number): number {
-  return -depthFast(x, z);
+  const d = depthFast(x, z);
+  return -(d - reliefAt(x, z, d));
+}
+
+/**
+ * Height and relief in one pass (one `depthFast`, one `reliefAt`) for the chunk builder, which
+ * needs both per vertex — height for the position, relief for the rock/sand tint. `rel` is metres
+ * the real floor stands above the smooth `depthAt` floor (shared/world/relief.ts).
+ *
+ * Relief is evaluated in closed form per vertex, NOT read from the 10 m `depthFast` grid: a coral
+ * head is 3 m across, and a 10 m grid would average it away (and the grid is pinned to legacy for
+ * the boats, so it must not be rebuilt with rocks in it). The cost is bounded by the LOD — see
+ * lod.ts's ring table — and is skipped entirely (`reliefAt` returns 0 before touching a hash)
+ * over the flats, the bay and everything shallower than ~2.6 m.
+ */
+export function seafloorSampleAt(x: number, z: number, out: { h: number; rel: number }): void {
+  const d = depthFast(x, z);
+  const rel = reliefAt(x, z, d);
+  out.h = -(d - rel);
+  out.rel = rel;
 }
 
 /**
@@ -106,7 +126,7 @@ function isReefy(x: number, dz: number, d: number): boolean {
  * is an optional 0..1 darkening factor (1 = unchanged); chunk.ts derives it from local slope so
  * steep faces — the reef wall itself — pick up a bit of built-in ambient occlusion.
  */
-export function seafloorColorAt(x: number, z: number, d: number, shade = 1): RGB {
+export function seafloorColorAt(x: number, z: number, d: number, shade = 1, rel = 0): RGB {
   const dz = z - chainZ(x);
   const n = Math.sin(x * 0.05) * Math.cos(z * 0.043) + Math.sin(x * 0.013 + z * 0.021);
   let c = L3(SAND, GRASS, clamp(n * 0.6 + 0.4 - (d < 1 ? 0.6 : 0), 0, 1) * (dz < 0 ? 0.9 : 0.55));
@@ -118,6 +138,20 @@ export function seafloorColorAt(x: number, z: number, d: number, shade = 1): RGB
     const base = d >= 15 ? LEDGE_ROCK : RUBBLE;
     const rc = L3(base, swatch, smoothstep(0.45, 0.85, h));
     c = L3(c, rc, 0.75);
+  }
+  // Relief tint (shared/world/relief.ts): raised ground is rock/coral skeleton, not sand, so it
+  // reads as structure even where lighting is flat; grooves between spurs are bleached clean sand.
+  // The swatch hash is on a coarse cell so a rock is a few patches of colour, not per-vertex noise.
+  if (rel > 0.12) {
+    const rockT = smoothstep(0.12, 0.8, rel);
+    const patch = hash2(Math.floor(x / 3), Math.floor(z / 3));
+    const base = d >= 12 ? LEDGE_ROCK : L3(RUBBLE, LEDGE_ROCK, 0.35 + 0.4 * patch);
+    // live-coral tint on the upper parts of heads and spurs, algae-dark on the low flanks
+    const live: RGB = d < 10 ? CORAL_MUTED[Math.floor(patch * 3.99)] : CORAL_WARM[Math.floor(patch * 3.99)];
+    const rc = L3(base, live, smoothstep(0.9, 2.2, rel) * 0.55);
+    c = L3(c, rc, rockT * 0.85);
+  } else if (rel < -0.25) {
+    c = L3(c, SAND, smoothstep(0.25, 0.9, -rel) * 0.6);
   }
   // Dramatic fade to deep blue — this, plus the un-crushed height, is what makes the reef wall
   // (3.4 m -> 45.4 m over 190 m) actually read as a wall instead of the old flat crush.

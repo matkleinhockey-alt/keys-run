@@ -27,19 +27,14 @@ import { CausticsEffect } from './caustics.js';
 import { LensWettingEffect } from './lens-wetting.js';
 import { createGodRays, type GodRaysRig } from './godrays.js';
 import { MARINE_SNOW_FULL_DEPTH, INSCATTER_COLOR, AMBIENT_HALF_DEPTH } from './depth-bands.js';
-import { depthAt } from '@keysrun/shared/world/depth';
-import { floorY } from '../seafloor.js';
+import { seafloorHeightAt as terrainHeightAt } from '../terrain/heightfield.js';
 
-/** The QA/debug dive hook's seafloor estimate, built from the REAL (not aspirational)
- * `world/seafloor.ts` — read-only import, this agent does not own that file. `floorY` is still
- * the documented-hazard, vertically-*compressed* single-plane formula
- * (`d => -(0.25 + min(d,14) * 0.55)`, docs/ARCHITECTURE.md "Seafloor"): it flattens to y≈-7.95 for
- * any true depth past 14 m. An earlier version of this hook estimated the floor as `-depthAt(x,z)`
- * (the *true*, uncompressed bathymetry) — that is lower (more negative, i.e. "deeper") than the
- * actually-rendered compressed floor at every depth, so the debug camera ended up embedded *below*
- * the real terrain surface at every single capture, seeing nothing but raw fog colour. Reading the
- * real export instead fixes that for any depth the compressed mesh still tracks. */
-const seafloorHeightAt = (x: number, z: number): number => floorY(depthAt(x, z));
+/** The QA/debug dive hook's seafloor estimate: the exact height the terrain mesh and the diver's
+ * ground collision sample (world/terrain/heightfield.ts), relief included. This used to be the
+ * old compressed single-plane `floorY(depthAt)`, which is neither what is drawn nor what is
+ * collided with once the floor has real rock on it — a debug camera placed by it ends up inside a
+ * coral head. */
+const seafloorHeightAt = (x: number, z: number): number => terrainHeightAt(x, z);
 
 export interface UnderwaterDeps {
   scene: THREE.Scene;

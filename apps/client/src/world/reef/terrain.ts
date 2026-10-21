@@ -15,9 +15,18 @@
  * function's body for `return seafloorHeightAt(x, z);` (one line) — every call site in this
  * directory goes through `reefGroundY`, so that is the only edit required.
  */
-import { depthAt } from '@keysrun/shared/world/depth';
+import { seafloorHeightAt } from '../terrain/heightfield.js';
 
-/** Ground height (world Y, metres) to seat a reef instance's base at world (x,z). See header. */
+/**
+ * Ground height (world Y, metres) to seat a reef instance's base at world (x,z).
+ *
+ * The swap the header above anticipated: this now returns the terrain mesh's own height
+ * (`seafloorHeightAt`, relief included), not `-depthAt`. Required since the floor gained rock and
+ * coral relief (shared/world/relief.ts): seated on `-depthAt`, every coral and gorgonian would hang
+ * in mid-water above a groove or sink into the top of an outcrop. It also removes a standing
+ * discrepancy (exact `depthAt` vs the mesh's 10 m `depthFast` grid) that left some instances a few
+ * centimetres off the surface they stand on.
+ */
 export function reefGroundY(x: number, z: number): number {
-  return -depthAt(x, z);
+  return seafloorHeightAt(x, z);
 }

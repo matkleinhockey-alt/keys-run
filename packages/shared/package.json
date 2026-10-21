@@ -14,6 +14,10 @@
       "types": "./dist/world/depth.d.ts",
       "default": "./dist/world/depth.js"
     },
+    "./world/relief": {
+      "types": "./dist/world/relief.d.ts",
+      "default": "./dist/world/relief.js"
+    },
     "./world/current": {
       "types": "./dist/world/current.d.ts",
       "default": "./dist/world/current.js"

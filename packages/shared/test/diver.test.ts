@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AIR_MAX, NEUTRAL_DEPTH, BUOY_SURFACE_ACCEL, BUOY_MAX_NEGATIVE_ACCEL, NARCOSIS_DEPTH,
   SHALLOW_BLACKOUT_DEPTH, SURFACE_EPS, DIVER_RADIUS,
-  ataAt, buoyancyAccel, airBurnRate, waterVelocity, kickPulse, SWIM_KICK_ACCEL, KICK_PERIOD,
+  ataAt, buoyancyAccel, airBurnRate, waterVelocity,
   createDiverState, stepDiver,
   type DiverEnv, type DiverInput, type DiverState, type SeafloorSampler,
 } from '../src/sim/diver.js';

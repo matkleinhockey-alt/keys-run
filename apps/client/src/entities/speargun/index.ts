@@ -229,9 +229,15 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
     // being hauled has both hands on the reel line. That is also what makes a fight cost you the
     // follow-up shot, which is the point of a one-shot gun.
     const handsFree = !shot && !speared && !diver.blackedOut;
-    const hand = { drawing: drawing && handsFree, speed: diver.speed ?? 0 };
-    gun = stepReload(gun, dt, hand);
     const water = currentAt(diver.position.x, diver.position.z, t, Math.max(0, -diver.position.y));
+    // Leverage is lost by KICKING, not by being carried: a diver drifting with the current is
+    // stationary relative to the water. `diver.speed` is over-the-ground, so take off the drift
+    // the water gives a diver who is not kicking (CURRENT_COUPLING of the flow, sim/diver.ts; the
+    // near-floor boundary layer can make the true drift smaller, never larger, so this only ever
+    // under-subtracts) — otherwise sitting in a 0.9 m/s stream would slow every reload.
+    const kickSpeed = Math.max(0, (diver.speed ?? 0) - 0.75 * water.speed);
+    const hand = { drawing: drawing && handsFree, speed: kickSpeed };
+    gun = stepReload(gun, dt, hand);
     muzzleBubbles.update(dt, water.vx, water.vz);
     speredVisual.tick(dt, t);
     if (shot) {
@@ -304,7 +310,7 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
       draw: gun.draw,
       drawing: hand.drawing && !loaded && gun.reloadT <= 0,
       // How hard the diver is fighting the rubbers right now: 1 hanging still, lower while kicking.
-      effort: drawRateFor(diver.speed ?? 0),
+      effort: drawRateFor(kickSpeed),
     };
     gunVM.update(dt, reloadView, !!speared, diver.speed ?? 0);
     reloadHint.update(reloadView, gun.reloadT, !!speared || !!shot || !!diver.blackedOut);
