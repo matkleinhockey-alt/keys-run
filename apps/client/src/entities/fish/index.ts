@@ -23,6 +23,7 @@ import {
   nearFieldForCell, instantiateNearField, nearCellOf, nearKey, NEAR_CELL, NEAR_RADIUS,
 } from './spawn.js';
 import { swimClock } from './swim-clock.js';
+import { fishCapsule } from './hitbox.js';
 import type { SchoolState, Threat } from './types.js';
 import { WORLD_SEED } from '../../state/constants.js';
 
@@ -423,25 +424,7 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
     if (!V) return;
     const catchable = isCatchable(state.type);
     const r2 = radius * radius;
-    const Hh = V.h || V.len * 0.17, W = V.w || V.len * 0.16;
-    // Spear hitbox, NOT the fish's true girth.
-    //
-    // The anatomically-correct half-girth is brutal as a target: a 0.42 m yellowtail is 0.12 m
-    // tall and 0.07 m wide, giving a 6 cm capsule radius. Six centimetres, on a fish that is also
-    // undulating (swim.ts bakes a per-vertex wiggle of up to 0.1x body length into the VAT, so the
-    // drawn silhouette sways around this instance origin without the capsule knowing), shot from a
-    // first-person gun that sways with the diver's breathing — it is essentially unhittable, which
-    // is exactly the complaint.
-    //
-    // So: a forgiveness multiplier plus a floor. The floor is what rescues small schooling fish;
-    // SPEAR_FORGIVENESS keeps big slow targets proportionally generous without making a goliath
-    // grouper a barn door. This is a deliberate gameplay hitbox — hitboxes being larger than the
-    // art is normal — and it is applied here, once, so both the shot test (sim/spear.ts's
-    // stepSpear) and the aim assist agree on the same volume. They must: a reticle that locks onto
-    // something the shaft then misses is worse than no assist at all.
-    const SPEAR_MIN_RADIUS = 0.22;
-    const SPEAR_FORGIVENESS = 1.45;
-    const girthRadius = Math.max(SPEAR_MIN_RADIUS, Math.max(0.08, Math.max(Hh, W) / 2) * SPEAR_FORGIVENESS);
+
     for (let i = 0; i < state.members.length; i++) {
       const m = state.members[i];
       // NOTE: there used to be an `if (m.slot < 0) continue` here, meaning "skip members with no
@@ -460,16 +443,12 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
       // — a fish at the edge of the frustum is still a fish.
       const dx = m.wx - originX, dy = m.wy - originY, dz = m.wz - originZ;
       if (dx * dx + dy * dy + dz * dz > r2) continue;
-      // Body-axis capsule from this member's *own* live render transform (render.ts writes
-      // exactly these fields onto the InstancedMesh this same frame — see this file's header on
-      // `FishMember` and `spearTargetsNear`'s own doc comment): local -Z is the nose end
-      // (body.ts's loft runs t=0 (head) at z=-L/2 to t=1 (tail) at z=+L/2), and for a 'YXZ' Euler
-      // (pitch,yaw,roll) the world-space nose direction is the same forward-vector formula
-      // `game/world.ts`'s diver aim/camera code already uses for the identical Euler order.
-      const fwdX = -Math.sin(m.yaw) * Math.cos(m.pitch);
-      const fwdY = Math.sin(m.pitch);
-      const fwdZ = -Math.cos(m.yaw) * Math.cos(m.pitch);
-      const half = (V.len * m.worldScale) / 2;
+      // The capsule is built by hitbox.ts from this member's own live render transform (the same
+      // fields render.ts wrote onto the InstancedMesh this frame) plus the swim clock, so it
+      // follows the drawn body including the VAT swim bend. See that file for what the previous
+      // inline construction got wrong, and test/fish-hitbox.test.ts for the measured agreement with
+      // the real mesh (precision 0.24 -> 0.50 at recall 0.975 -> 0.86).
+      const cap = fishCapsule(V, m, swimClock.value);
       const id = `${state.id}#${i}`;
       // Lead is DISABLED: `vx/vy/vz` are reported as zero, so `assistAim` skips its lead branch
       // and aims at the fish's current position.
@@ -503,9 +482,9 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
         // `roamCounter`), stable only within one running client, same pre-existing limitation the
         // old per-school stand-in had.
         weight: S.min + (S.max - S.min) * hashUnit(id),
-        ax: m.wx + fwdX * half, ay: m.wy + fwdY * half, az: m.wz + fwdZ * half,
-        bx: m.wx - fwdX * half, by: m.wy - fwdY * half, bz: m.wz - fwdZ * half,
-        radius: girthRadius * m.worldScale,
+        ax: cap.ax, ay: cap.ay, az: cap.az,
+        bx: cap.bx, by: cap.by, bz: cap.bz,
+        radius: cap.radius,
         vx, vy, vz,
         catchable,
       });

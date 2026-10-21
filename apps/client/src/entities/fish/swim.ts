@@ -39,7 +39,21 @@ export interface SwimProfile {
   uShn: number;
 }
 
-const SWIM_ANG_BASE = 7.5;
+export const SWIM_ANG_BASE = 7.5;
+
+/** Peak lateral displacement (geometry units, before instance scale) of the swim wave at body
+ * fraction `u` (0 nose .. 1 tail) — the closed form `computeSwimProfile` bakes per vertex for
+ * lateral swimmers (`wig[i]`), exported so the spear hitbox (hitbox.ts) follows the same wave the
+ * VAT draws instead of re-deriving it. test/fish-hitbox.test.ts pins the two together. */
+export function lateralSwimAmp(V: CreatureVis, u: number): number {
+  const ampK = V.kind === 'tuna' ? 0.05 : V.kind === 'shark' ? 0.08 : 0.1;
+  const w = Math.pow(Math.max(0, u - 0.28) / 0.72, 2);
+  return w * V.len * ampK;
+}
+
+/** The cycle angle the vertex shader feeds the VAT lookup (materials.ts `swTheta`) — sin() is
+ * periodic, so no wrap is needed to evaluate it on the CPU. */
+export const swimPhaseAt = (swimT: number, angSpeed: number, instancePhase: number): number => swimT * angSpeed + instancePhase;
 
 /** legacy `addSwimAttrs` (index.html:2425-2438), split from its target (a live GPU attribute) —
  * see this module's header. */
