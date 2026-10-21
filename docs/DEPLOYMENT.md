@@ -250,22 +250,29 @@ the latest deployment shows a green **"Active"** status, not stuck on
    - **Framework Preset:** Vercel may show "Other" since the root directory
      isn't itself a Vite project — that's fine, the explicit `buildCommand`/
      `outputDirectory` above make the preset irrelevant.
-4. **Environment Variables** (expand that section on the same screen, or add
-   them later under Settings → Environment Variables):
+4. **Environment Variables** — these now live in `vercel.json`'s `build.env`,
+   so a fresh Vercel project needs nothing typed into the dashboard:
 
    | Variable | Value | Why |
    |---|---|---|
-   | `VITE_API_URL` | `https://<your-api-domain>.up.railway.app` | Base URL the client calls for auth/leaderboard. |
-   | `VITE_SIM_WS_URL` | `wss://<your-sim-domain>.up.railway.app` | WebSocket URL for the world connection. Use `wss://`, not `ws://` — Railway terminates TLS at its edge. |
+   | `VITE_API_URL` | `https://keys-run-production.up.railway.app` | Base URL the client calls for auth/leaderboard. |
+   | `VITE_SIM_WS_URL` | `wss://sim-production-b2d0.up.railway.app` | WebSocket URL for the world connection. Use `wss://`, not `ws://` — Railway terminates TLS at its edge, and a `https://` page cannot open a `ws://` socket anyway. |
 
-   > **Note for whoever wires up the networking client code:** as of this
-   > commit, nothing in `apps/client/src` actually reads
-   > `import.meta.env.VITE_API_URL` or `VITE_SIM_WS_URL` yet — there's no
-   > networking client there to read them. This section, and
-   > `apps/client/.env.example`, exist so the variable names and values are
-   > already settled and sitting in both dashboards by the time that code
-   > lands — it should need zero deploy-config changes, just
-   > `import.meta.env.VITE_API_URL` calls in the source.
+   They are in the repo rather than the dashboard deliberately. These are
+   public URLs, not secrets, and the dashboard is exactly where they got
+   forgotten: the client bundle that was live on `keys-run.vercel.app` for
+   weeks contained `http://localhost:8080`, so every visitor's browser asked
+   *their own machine* for the leaderboard and silently saw an empty board.
+   A dashboard value cannot be code-reviewed, cannot be diffed, and is not
+   copied when someone re-creates the project.
+
+   Dashboard variables still win over `build.env` if both are set, so an
+   override for a preview environment keeps working.
+
+   `apps/client/vite.config.ts` refuses to produce a production bundle when
+   these are missing, or when they use `http://`/`ws://`. That guard is the
+   backstop: this failure is completely silent at runtime, so the only place
+   to catch it is before the artifact exists.
 
 5. Click **Deploy**.
 
@@ -291,12 +298,30 @@ find the new deployment, **⋯** → **"Promote to Production."**
 
 ### 2.4 Close the loop on `CORS_ORIGIN`
 
-Now that you have the real Vercel URL, go back to Railway's `api` service →
-Variables → edit `CORS_ORIGIN` to the real value, e.g.:
+The `api` service (Railway service name `keys-run`) only answers browsers from
+origins listed in its `CORS_ORIGIN` variable, comma-separated. Every client
+origin you actually serve must be in it — a missing one does not error on the
+server; the browser simply drops the response, and the leaderboard renders
+"Could not reach the leaderboard."
+
+Current value:
 
 ```
-https://keys-run.vercel.app
+http://localhost:5173,http://localhost:4173,https://client-production-88ca.up.railway.app,https://keys-run.vercel.app
 ```
+
+To check one without guessing, ask for a preflight and look for the
+`access-control-allow-origin` header coming back:
+
+```sh
+curl -s -i -X OPTIONS https://keys-run-production.up.railway.app/leaderboard/overall \
+  -H "Origin: https://keys-run.vercel.app" \
+  -H "Access-Control-Request-Method: GET" | grep -i access-control-allow-origin
+```
+
+No header in the response means that origin is **not** allowed. (A 204 on its
+own means nothing — a disallowed origin gets a 204 too, just without the
+header.)
 
 (Comma-separate multiple origins if you add a custom domain later —
 `apps/api/src/env.ts` splits on `,`.) Saving the variable triggers a redeploy
