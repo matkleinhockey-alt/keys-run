@@ -18,7 +18,7 @@
  */
 import { clamp, lerp, rand } from '../core/math.js';
 import type { Boat } from '@keysrun/shared/content/boats';
-import type { RemoteEngineSource, GullSite } from './interfaces.js';
+import type { RemoteEngineSource, GullSite, PartySite } from './interfaces.js';
 
 // ---------------------------------------------------------------------------------------------
 // Engine voice profiles (legacy index.html:3063-3066)
@@ -151,6 +151,8 @@ export interface AudioFrameInputs {
   racers?: readonly RemoteEngineSource[];
   ghosts?: readonly RemoteEngineSource[];
   gullSites?: readonly GullSite[];
+  /** Moored party boats within earshot — see `updateParties`. */
+  parties?: readonly PartySite[];
 }
 
 export function createAudioEngine() {
@@ -840,6 +842,106 @@ export function createAudioEngine() {
     if (best) gull(best.x + rand(-10, 10), best.z + rand(-10, 10));
   }
 
+  // -------------------------------------------------------------------------------------------
+  // Moored party boats (entities/life/party-boats.ts)
+  // -------------------------------------------------------------------------------------------
+
+  /**
+   * One boat's stereo, as heard from somewhere else on the water.
+   *
+   * Synthesized rather than played, for a reason that is acoustics and not laziness: over a
+   * couple of hundred metres of open water the high end of a song is simply gone — absorbed and
+   * scattered — and what reaches you is the kick drum, the bass, and voices. So that is what this
+   * makes: a positional low-passed bed (muffled music + crowd) plus a kick on the beat, with the
+   * hats only audible once you are close enough to tie up alongside. A real music stream would
+   * cost a download, would not survive the distance filter anyway, and could not be positioned
+   * per boat.
+   */
+  interface PartyVoice {
+    p: PannerNode;
+    src: AudioBufferSourceNode;
+    f: BiquadFilterNode;
+    g: GainNode;
+    /** Beats elapsed, fractional — integer crossings fire the drums. */
+    beat: number;
+    /** Whoop/cheer cooldown, seconds. */
+    cheerT: number;
+  }
+
+  const partyVoices = new Map<string, PartyVoice>();
+  /** Beyond this the boat is silent — a kick drum carries a long way over flat water, but not
+   * across the whole chart. */
+  const PARTY_EARSHOT = 340;
+
+  function makePartyVoice(): PartyVoice {
+    const c = ctx!;
+    const p = audPanner();
+    p.refDistance = 30;
+    p.rolloffFactor = 0.95;
+    const src = audNoiseSrc();
+    // The bed: the bottom end of the music plus the wash of a crowd, which at this distance are
+    // the same band. Narrow-ish lowpass with a little resonance so it reads as "a song through a
+    // hull" rather than as plain noise.
+    const f = c.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.value = 420;
+    f.Q.value = 1.6;
+    const g = c.createGain();
+    g.gain.value = 0;
+    src.connect(f); f.connect(g); g.connect(p);
+    return { p, src, f, g, beat: Math.random() * 4, cheerT: rand(4, 14) };
+  }
+
+  function disposePartyVoice(v: PartyVoice): void {
+    try { v.src.stop(); } catch { /* already stopped */ }
+    try { v.src.disconnect(); v.f.disconnect(); v.g.disconnect(); v.p.disconnect(); } catch { /* already gone */ }
+  }
+
+  function updateParties(dt: number, sites: readonly PartySite[] | undefined, lx: number, lz: number): void {
+    const live = new Set<string>();
+    for (const site of sites ?? []) {
+      const d = Math.hypot(site.x - lx, site.z - lz);
+      if (d > PARTY_EARSHOT) continue;
+      live.add(site.id);
+      let v = partyVoices.get(site.id);
+      if (!v) { v = makePartyVoice(); partyVoices.set(site.id, v); }
+      // Distance shapes both level and timbre: further away loses the top of the bed as well as
+      // the volume, which is what makes crossing the last 100 m toward a raft-up feel like the
+      // music coming into focus rather than just getting louder.
+      const near = clamp(1 - d / PARTY_EARSHOT, 0, 1);
+      const vol = near * near;
+      audPos(v.p, site.x, 1.2, site.z);
+      v.g.gain.setTargetAtTime(0.075 * vol, ctx!.currentTime, 0.25);
+      v.f.frequency.setTargetAtTime(260 + 900 * near, ctx!.currentTime, 0.3);
+
+      const beforeBeat = Math.floor(v.beat);
+      v.beat += dt * (site.bpm / 60);
+      const afterBeat = Math.floor(v.beat);
+      const pos: [number, number, number] = [site.x, 1.2, site.z];
+      for (let b = beforeBeat + 1; b <= afterBeat; b++) {
+        // Four-on-the-floor kick, which is both what is actually playing on these boats and the
+        // one part of it that travels.
+        audBurst({ tone: 64, toneTo: 38, dur: 0.26, gain: 0.5 * vol, att: 0.004, wave: 'sine', pos, ref: 34 });
+        // Hats and a clap only inside ~110 m — see this section's header on why the top end is
+        // gone before that.
+        if (near > 0.68) {
+          if (b % 2 === 1) audBurst({ type: 'highpass', freq: 7000, dur: 0.045, gain: 0.05 * vol, pos, ref: 22 });
+          if (b % 4 === 2) audBurst({ type: 'bandpass', freq: 1900, q: 1.1, dur: 0.1, gain: 0.07 * vol, pos, ref: 22 });
+        }
+      }
+      v.cheerT -= dt;
+      if (v.cheerT <= 0) {
+        v.cheerT = rand(7, 22);
+        // Somebody on board, carrying further than the music does because that is what a shout
+        // does. Bandpassed noise sweeping up: a whoop, not a word.
+        if (near > 0.3) audBurst({ type: 'bandpass', freq: 700, freqTo: 1500, q: 2.2, dur: 0.45, gain: 0.3 * vol, att: 0.05, pos, ref: 40 });
+      }
+    }
+    for (const [id, v] of partyVoices) {
+      if (!live.has(id)) { disposePartyVoice(v); partyVoices.delete(id); }
+    }
+  }
+
   /** Drop any remote-engine bookkeeping whose id wasn't present in this frame's
    * traffic/racer/buddy/ghost lists at all (as opposed to merely far away, which `updateTraffic`
    * already disposes) — e.g. a traffic boat that's been despawned/recycled. Call once per frame
@@ -869,6 +971,7 @@ export function createAudioEngine() {
     updateRacers(input.racers, input.dt, input.t, input.listener.x, input.listener.z, lvx, lvz);
     updateGhosts(input.ghosts, input.dt);
     updateGulls(input.dt, input.gullSites, input.listener.x, input.listener.z);
+    updateParties(input.dt, input.parties, input.listener.x, input.listener.z);
 
     const liveIds = new Set<string>();
     if (input.buddy) liveIds.add(input.buddy.id);
@@ -892,6 +995,8 @@ export function createAudioEngine() {
 
   function dispose(): void {
     player?.dispose();
+    for (const v of partyVoices.values()) disposePartyVoice(v);
+    partyVoices.clear();
     for (const sy of remoteSynths.values()) sy.dispose();
     remoteSynths.clear();
     try { ctx?.close(); } catch { /* already closed */ }

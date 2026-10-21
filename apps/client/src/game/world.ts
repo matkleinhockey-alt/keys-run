@@ -755,6 +755,11 @@ export function initWorld(wrap: HTMLElement): World {
         if (!spearActiveNow && prevSpearActive && !shotHadFight) {
           const p1 = { x: shotOx, y: shotOy, z: shotOz };
           const p2 = { x: shotOx + shotDx * SPEAR_RANGE, y: shotOy + shotDy * SPEAR_RANGE, z: shotOz + shotDz * SPEAR_RANGE };
+          // Caelen is in the same ray's way (entities/life/caelen.ts's `resolveSpearShot`): he is
+          // deliberately NOT a `SpearTarget`, so aim assist never helps you hit him and the gun
+          // never tries to start a fight with a seagull — he just owns a capsule and an opinion,
+          // and this is the one place a resolved shaft segment is already in hand.
+          life.caelenShot(p1, p2);
           for (const fish of fishWorld.spearTargetsNear(shotOx, shotOy, shotOz, SPEAR_RANGE + SPEAR_NEAR_MISS_MARGIN)) {
             const { distSq } = closestDistSqSegmentSegment(
               p1, p2, { x: fish.ax, y: fish.ay, z: fish.az }, { x: fish.bx, y: fish.by, z: fish.bz },
@@ -945,6 +950,9 @@ export function initWorld(wrap: HTMLElement): World {
       boat: { x: renderState.x, y: renderState.y, z: renderState.z, h: renderState.h, speed: renderState.speed, air: renderState.air },
       camera, viewport: { w: wrap.clientWidth, h: wrap.clientHeight }, rendererEl: renderer.domElement,
       trimV: renderState.trimV, lineOut: fishingLineOut(), fishCaught: FishF.state === 'caught',
+      diver: diver.mode === 'diver' && diverState
+        ? { active: true, x: diverState.x, y: diverState.y, z: diverState.z }
+        : null,
     });
     legacyBuddyStub.on = life.isBuddyOn();
     camera.getWorldDirection(camFwd);
@@ -959,7 +967,7 @@ export function initWorld(wrap: HTMLElement): World {
         running: game.running,
       },
       sw, ch, reel: reelAudioState(), buddy: remoteEngines.buddy, traffic: remoteEngines.traffic, racers: remoteEngines.racers,
-      gullSites: life.gullSites(),
+      gullSites: life.gullSites(), parties: life.partySites(),
     }, speakerSink);
     if (btnMusicEl) btnMusicEl.textContent = audio.music.label();
 
@@ -1101,6 +1109,26 @@ export function initWorld(wrap: HTMLElement): World {
     /** Verification-only: the render camera's world position — the shot's true origin reference
      * (the muzzle hangs off this, not off the diver's body centre). */
     camPos(): { x: number; y: number; z: number } { return { x: camera.position.x, y: camera.position.y, z: camera.position.z }; },
+    /** Verification-only: the diver's live aim direction (unit) — the other half of `camPos`, and
+     * what lets a script close the loop on aiming at something before it fires. */
+    aimDir(): { x: number; y: number; z: number } { return { x: diverAim.aimDir.x, y: diverAim.aimDir.y, z: diverAim.aimDir.z }; },
+    /**
+     * VERIFICATION-ONLY: points the diver's look straight at a world point, the way a player
+     * would with the mouse (entities/diver/camera.ts's drag sets the same two fields).
+     *
+     * Why this exists rather than scripting the drag: a Playwright harness tracking a *moving*
+     * target through pointer drags has to read the aim back, and `diverAim.aimDir` only refreshes
+     * inside the fixed-step loop — at this sandbox's ~3 fps the read is a frame stale, so a
+     * closed loop converges to a constant lag instead of onto the target (measured: a steady
+     * 12.6 deg, exactly one pass of Caelen's orbit). This skips the mouse and nothing else: the
+     * shot still goes through `tryFire` -> `stepSpear` -> the real resolution path.
+     */
+    setLook(x: number, y: number, z: number): void {
+      const dx = x - camera.position.x, dy = y - camera.position.y, dz = z - camera.position.z;
+      const l = Math.hypot(dx, dy, dz) || 1;
+      diver.cam.yaw = Math.atan2(-dx, -dz);
+      diver.cam.pitch = Math.asin(Math.max(-1, Math.min(1, dy / l)));
+    },
     forceReloadReady(): void { speargun.debugForceReloadReady(); },
     /** Verification-only: what aim assist would lock onto right now, and how many targets the gun
      * can actually see. These are the gun's OWN view (muzzle origin, `deps.getTargets()`), which is
@@ -1110,6 +1138,11 @@ export function initWorld(wrap: HTMLElement): World {
     aimTargetId(): string | number | null { return speargun.aimTargetId(diverAim); },
     assistTargetId(): string | number | null { return speargun.assistTargetId(); },
     gunTargetCount(): number { return getSpearTargets().length; },
+    /** Verification-only: Caelen's live capsule (null while he's sulking) and how long he's gone
+     * for. He is not in `targets()` by design — see `life.caelenShot`'s call site in `frame()`. */
+    caelen(): { hitbox: ReturnType<ReturnType<typeof createLifeSystems>['caelenDebugHitbox']>; awayFor: number } {
+      return { hitbox: life.caelenDebugHitbox(), awayFor: +life.caelenAwayFor().toFixed(1) };
+    },
     reset(): void { speargun.reset(); },
   };
 

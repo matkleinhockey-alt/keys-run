@@ -5,8 +5,9 @@
  *
  * Owns: go-fast racers (racers.ts), ambient boat traffic (traffic.ts), pelican flocks
  * (pelicans.ts), hotspots/weedlines/rigs (hotspots.ts), the fishing buddy (buddy.ts), Luigi mode
- * (luigi.ts), Caelen (caelen.ts), and driving the player's own boat's deck party/pole/shower
- * (deck-party.ts) plus the idle animation (blink/head-sway/hair-whip) for every human riding the
+ * (luigi.ts), Caelen (caelen.ts), the moored party boats off the beaches (party-boats.ts), and
+ * driving the player's own boat's deck party/pole/shower (deck-party.ts) plus the idle animation
+ * (blink/head-sway/hair-whip) for every human riding the
  * player's boat — `entities/boat/model.ts` builds `captain`/`crew`/`party` directly (not through
  * a `HumanRegistry`), so nothing else calls their `update()` every frame.
  *
@@ -33,12 +34,13 @@ import { createPelicanFlocks, type PelicanFlocks } from './pelicans.js';
 import { createHotspotWorld, type HotspotWorld, type GullSite } from './hotspots.js';
 import { createFishingBuddy, type FishingBuddy } from './buddy.js';
 import { createLuigiMode, type LuigiMode } from './luigi.js';
-import { createCaelen, type Caelen } from './caelen.js';
+import { createCaelen, type Caelen, type CaelenDiverInput, type CaelenShotResult } from './caelen.js';
+import { createPartyBoats, type PartyBoats } from './party-boats.js';
 import { updateParty } from './deck-party.js';
 import type { BoatModel, BoatBuildDeps } from '../boat/model.js';
 import type { LightMatEntry } from '../../core/time-of-day.js';
 import type { ParticleSystem } from '../../world/particles.js';
-import type { RemoteEngineSource } from '../../audio/interfaces.js';
+import type { RemoteEngineSource, PartySite } from '../../audio/interfaces.js';
 
 export interface LifeDeps extends BoatBuildDeps {
   lightMats: LightMatEntry[];
@@ -72,15 +74,29 @@ export interface LifeFrameInputs {
   lineOut: boolean;
   /** `F.state==='caught'`. */
   fishCaught: boolean;
+  /** Where the player is when they're in the water, or null/absent when aboard — Caelen drops
+   * onto a tight orbit around a diver (entities/life/caelen.ts explains why). */
+  diver?: CaelenDiverInput | null;
 }
 
 export interface LifeSystems {
   update(inputs: LifeFrameInputs): void;
   engineSources(): { traffic: RemoteEngineSource[]; racers: RemoteEngineSource[]; buddy: RemoteEngineSource | undefined };
   gullSites(): GullSite[];
+  /** Moored party boats within earshot, for `audio/engine.ts`'s `updateParties` — pass straight
+   * into `audio.update`'s `parties`. */
+  partySites(): readonly PartySite[];
   isLuigiOn(): boolean;
   toggleBuddy(): void;
   isBuddyOn(): boolean;
+  /** Tests one resolved spear shot against Caelen and applies his reaction — see
+   * entities/life/caelen.ts's `resolveSpearShot`. `game/world.ts` calls this with the same ray it
+   * already captures for the fish near-miss spook. */
+  caelenShot(p1: { x: number; y: number; z: number }, p2: { x: number; y: number; z: number }): CaelenShotResult;
+  /** Seconds until Caelen comes back, 0 when he's here. */
+  caelenAwayFor(): number;
+  /** VERIFICATION-ONLY: Caelen's live capsule, or null while he's away. */
+  caelenDebugHitbox(): ReturnType<Caelen['debugHitbox']>;
   /** One-time arrays for `stubs.ts`'s `installWorldLife` — see this module's header, point 4. */
   legacySnapshot(): { rigs: ReadonlyArray<unknown>; weeds: ReadonlyArray<unknown>; hotspots: ReadonlyArray<unknown>; traffic: ReadonlyArray<unknown>; racers: ReadonlyArray<unknown> };
   dispose(): void;
@@ -94,6 +110,7 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
   const buddy: FishingBuddy = createFishingBuddy(scene, deps);
   const luigi: LuigiMode = createLuigiMode({ hypeCallout: deps.hypeCallout, particles: deps.particles });
   const caelen: Caelen = createCaelen(scene, { sayCaelenLine: deps.sayCaelenLine });
+  const partyBoats: PartyBoats = createPartyBoats(scene);
 
   return {
     update(inputs) {
@@ -104,7 +121,8 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
       pelicans.update(dt, t, boat, cameraXZ, deps.particles);
       hotspotWorld.update(dt, t, boat, cameraXZ, deps.particles);
       buddy.update(dt, t, boat, playerBoatId, camera, viewport, deps.particles);
-      caelen.update(dt, t, boat, camera, viewport);
+      caelen.update(dt, t, boat, camera, viewport, inputs.diver ?? null);
+      partyBoats.update(dt, t, camera.position, deps.particles, deps.currentTodK);
 
       // the player's own deck party/pole/shower, plus idle animation for every human aboard
       // (captain/crew/party aren't in a HumanRegistry — see this module's header).
@@ -121,9 +139,13 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
       return { traffic: trafficFleet.engineSources(), racers: racerFleet.engineSources(), buddy: buddy.engineSource() };
     },
     gullSites(): GullSite[] { return hotspotWorld.gullSites(); },
+    partySites(): readonly PartySite[] { return partyBoats.sites(); },
     isLuigiOn(): boolean { return luigi.isOn(); },
     toggleBuddy(): void { buddy.toggle(); },
     isBuddyOn(): boolean { return buddy.isOn(); },
+    caelenShot(p1, p2): CaelenShotResult { return caelen.resolveSpearShot(p1, p2); },
+    caelenAwayFor(): number { return caelen.awayFor(); },
+    caelenDebugHitbox() { return caelen.debugHitbox(); },
     legacySnapshot() {
       return {
         rigs: hotspotWorld.listRigs(), weeds: hotspotWorld.listWeeds(), hotspots: hotspotWorld.listHotspots(),
@@ -133,6 +155,7 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
     dispose(): void {
       luigi.dispose();
       caelen.dispose();
+      partyBoats.dispose();
       buddy.dispose();
     },
   };

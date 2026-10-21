@@ -67,3 +67,22 @@ export interface GullSite {
   x: number;
   z: number;
 }
+
+/**
+ * A moored party boat, as much as the audio engine needs to put a stereo full of muffled music
+ * across the water at it — satisfied directly by `entities/life/party-boats.ts`'s `PartyBoat`.
+ *
+ * Deliberately not a `RemoteEngineSource`: these boats are tied up with the motors off, and what
+ * you hear from one is a kick drum, a bass bed and people. See `engine.ts`'s `updateParties` for
+ * why that is synthesized rather than played as music — in short, at 150 m over open water the
+ * only part of a song that survives is the bottom end, and that is cheap to make convincing.
+ */
+export interface PartySite {
+  /** Stable key, so the lazily-created voice persists across frames. */
+  id: string;
+  x: number;
+  z: number;
+  /** Tempo of whatever they have on, BPM. Per-boat (not one global tempo) so two boats rafted
+   * together never lock into an unnaturally tight groove. */
+  bpm: number;
+}
