@@ -2,7 +2,7 @@
  * Keyboard/button bindings for the catch flow (legacy index.html:4083-4126, 4165): K keeps the
  * current catch in the cooler, Space (rod fishing's existing action key, via
  * game/fishing/update.ts's `onActionWhileCaught`) and the card's own "Release" button release
- * it, Q opens the cooler panel (Escape or Q again closes it), and E weighs in at a marina dock.
+ * it, the card's "Tag & release" button tags and releases it (game/catch/tags.ts), Q opens the cooler panel (Escape or Q again closes it), and E weighs in at a marina dock.
  * game/fishing/input.ts owns Space/R/V (the rod); this module owns everything catch/cooler-
  * related, per that file's header comment.
  */
@@ -32,15 +32,18 @@ export function bindCatchInput(flow: CatchFlow, getBoat: () => BoatState): () =>
 
   const btnKeep = $('btnKeep');
   const btnRelease = $('btnRelease');
+  const btnTag = $('btnTag');
   const btnCooler = $('btnCooler');
   const btnCoolerClose = $('btnCoolerClose');
   const tDock = $('tDock');
   const onKeep = (): void => flow.keepFish();
   const onRelease = (): void => flow.releaseFish();
+  const onTag = (): void => flow.tagAndRelease();
   const onOpenCooler = (): void => flow.openCoolerPanel();
   const onDock = (): void => flow.weighIn(getBoat());
   btnKeep?.addEventListener('click', onKeep);
   btnRelease?.addEventListener('click', onRelease);
+  btnTag?.addEventListener('click', onTag);
   btnCooler?.addEventListener('click', onOpenCooler);
   btnCoolerClose?.addEventListener('click', closeCooler);
   tDock?.addEventListener('click', onDock);
@@ -49,6 +52,7 @@ export function bindCatchInput(flow: CatchFlow, getBoat: () => BoatState): () =>
     window.removeEventListener('keydown', onKeyDown);
     btnKeep?.removeEventListener('click', onKeep);
     btnRelease?.removeEventListener('click', onRelease);
+    btnTag?.removeEventListener('click', onTag);
     btnCooler?.removeEventListener('click', onOpenCooler);
     btnCoolerClose?.removeEventListener('click', closeCooler);
     tDock?.removeEventListener('click', onDock);

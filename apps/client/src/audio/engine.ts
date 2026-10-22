@@ -609,6 +609,33 @@ export function createAudioEngine() {
     setTimeout(() => { try { p.disconnect(); } catch { /* already gone */ } }, 800);
   }
 
+  /**
+   * The boat dog (entities/life/dog.ts). Non-positional: it is standing on the deck you are on,
+   * so the listener is effectively on top of it and panning it would just make it wander in the
+   * stereo field — same reasoning as `caelenSquawk`.
+   *
+   * A small dog's bark is a short noisy burst with a fast pitch drop, not a tone, so this is a
+   * band-passed noise hit with a sharp attack. Two syllables at a slight pitch offset, because a
+   * single one reads as a cough.
+   */
+  function bark(): void {
+    if (!ready || !on || !ctx) return;
+    const c = ctx, t0 = c.currentTime;
+    for (const [delay, f0, f1, gain] of [[0, 900, 420, 0.085], [0.17, 820, 380, 0.062]] as const) {
+      const t = t0 + delay;
+      const src = c.createBufferSource(); src.buffer = noise;
+      const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.6;
+      bp.frequency.setValueAtTime(f0, t);
+      bp.frequency.exponentialRampToValueAtTime(f1, t + 0.1);
+      const g = c.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(gain, t + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+      src.connect(bp); bp.connect(g); g.connect(requireBus());
+      src.start(t, Math.random() * 1.2); src.stop(t + 0.2);
+    }
+  }
+
   // -------------------------------------------------------------------------------------------
   // Per-frame update (legacy `AUD.update`, index.html:3158-3215)
   // -------------------------------------------------------------------------------------------
@@ -1009,7 +1036,7 @@ export function createAudioEngine() {
 
   return {
     init, setPlayerBoat, startEngines, stopEngines, toggleMute, isMuted, isReady, audioContext, masterBus,
-    splash, slam, cast, nibble, strike, snap, land, gull, caelenSquawk,
+    splash, slam, cast, nibble, strike, snap, land, gull, caelenSquawk, bark,
     update, bindVisibilitySuspend, dispose,
     /** Exposed for `music/radio.ts`, which needs to patch into the same `bus`/compressor chain and
      * read `ready`/`on` without this module exporting its whole closure. */

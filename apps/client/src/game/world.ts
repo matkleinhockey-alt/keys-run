@@ -291,6 +291,7 @@ export function initWorld(wrap: HTMLElement): World {
     lightMats: tod.lightMats, todK: tod.getK(), currentTodK: tod.getK,
     mfdTex: electronics.mfdTex, gpsTex: electronics.gpsTex, sonTex: electronics.sonTex,
     particles, bpm: audio.music.bpm, hypeCallout: audio.music.hypeCallout, sayCaelenLine: audio.sayCaelenLine,
+    dogBark: () => audio.engine.bark(),
   });
   installWorldLife(life.legacySnapshot());
   document.getElementById('btnSound')?.addEventListener('click', () => { audio.init(); audio.toggleMute(); });
@@ -455,7 +456,8 @@ export function initWorld(wrap: HTMLElement): World {
     boatInput: input,
     getBoat: () => stateBox.state,
     spots: life.spots,
-    onLanded(fish) { catchFlow.landFish({ key: fish.key, weight: fish.weight, x: fish.fx, z: fish.fz, zone: fish.zone }); },
+    onLanded(fish) { catchFlow.landFish({ key: fish.key, weight: fish.weight, x: fish.fx, z: fish.fz, zone: fish.zone, tag: fish.tag }); },
+    tags: catchFlow.tags,
     onActionWhileCaught() { catchFlow.releaseFish(); },
     // Space doubles as the diver's ascend key (entities/diver/input.ts) and this module's own
     // window-level Space listener has no idea diving exists — see fishing/input.ts's
@@ -1098,6 +1100,7 @@ export function initWorld(wrap: HTMLElement): World {
      * real throttle input to demonstrate — teleport() above always zeroes speed) instead of
      * guessing where it ended up. No normal code path reads this. */
     boatState: () => ({ x: curState.x, z: curState.z, h: curState.h, speed: curState.speed }),
+    dogState: () => life.dogState(),
     /** Verification-only: the diver's speed through the WATER, which is what decides how far fish
      * stand off (entities/fish/behavior.ts's DIVER_BODY_RADIUS ramp). Absolute speed is the wrong
      * number once the current carries the diver, and the two are indistinguishable from outside. */

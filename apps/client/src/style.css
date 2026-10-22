@@ -86,6 +86,7 @@ button:focus-visible{outline:3px solid var(--sun);outline-offset:2px}
 .cbtns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:12px}.cbtns .go{margin-top:0}
 .go.alt{background:var(--flats)} .go:disabled{opacity:.4;cursor:not-allowed}
 .cnote{font-size:12px;color:var(--muted);margin-top:10px;line-height:1.4}
+.ctag{margin-top:10px;padding:8px 10px;border-radius:10px;background:rgba(127,227,212,.1);box-shadow:inset 0 0 0 1px rgba(127,227,212,.3);font-size:12px;line-height:1.45;text-align:left}.ctag b{color:#7fe3d4}.ctag ul{margin:4px 0 0;padding-left:16px}
 .cooler{width:min(440px,100%);padding:24px;text-align:center}.cooler h2{font-family:var(--display);font-weight:900;font-size:40px;margin:0}
 #coolerList{list-style:none;margin:14px 0;padding:0;max-height:46vh;overflow:auto;text-align:left}
 #coolerList li{display:flex;justify-content:space-between;gap:10px;padding:9px 4px;border-bottom:1px solid rgba(255,255,255,.1);font-size:14px}
@@ -224,6 +225,7 @@ body.photoing #gauges,body.photoing #mapbox,body.photoing #scorebox,body.photoin
 .bcard .price.short{border-color:var(--panel-edge);color:var(--muted)}
 .cprice{font-size:13px;font-weight:600;color:#7fe3d4;margin:2px 0}
 #card.photo .cprice{flex-basis:100%;text-align:center;margin:0}
+#card.photo .ctag{flex-basis:100%;margin:0}
 
 /* ---- diver (entities/diver/**) ---- */
 #btnDive{background:none;border:1px solid var(--panel-edge);color:var(--ink);border-radius:10px;padding:7px 10px;font-size:12px;font-weight:600}

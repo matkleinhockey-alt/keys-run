@@ -37,6 +37,7 @@ import { createFishingBuddy, type FishingBuddy } from './buddy.js';
 import { createLuigiMode, type LuigiMode } from './luigi.js';
 import { createCaelen, type Caelen, type CaelenDiverInput, type CaelenShotResult } from './caelen.js';
 import { createPartyBoats, type PartyBoats } from './party-boats.js';
+import { createDog, type Dog } from './dog.js';
 import { updateParty } from './deck-party.js';
 import type { BoatModel, BoatBuildDeps } from '../boat/model.js';
 import type { LightMatEntry } from '../../core/time-of-day.js';
@@ -56,6 +57,9 @@ export interface LifeDeps extends BoatBuildDeps {
    * callout and Caelen's spoken line. */
   hypeCallout(): void;
   sayCaelenLine(): void;
+  /** One short bark for the boat dog (entities/life/dog.ts). Optional — omit it and the dog is
+   * silent; this module owns no audio of its own. */
+  dogBark?(): void;
 }
 
 export interface LifeFrameInputs {
@@ -98,6 +102,8 @@ export interface LifeSystems {
   caelenShot(p1: { x: number; y: number; z: number }, p2: { x: number; y: number; z: number }): CaelenShotResult;
   /** Seconds until Caelen comes back, 0 when he's here. */
   caelenAwayFor(): number;
+  /** VERIFICATION-ONLY: where the boat dog is standing and what it's doing. */
+  dogState(): ReturnType<Dog['debugState']>;
   /** VERIFICATION-ONLY: Caelen's live capsule, or null while he's away. */
   caelenDebugHitbox(): ReturnType<Caelen['debugHitbox']>;
   /** One-time arrays for `stubs.ts`'s `installWorldLife` — see this module's header, point 4. */
@@ -114,6 +120,9 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
   const luigi: LuigiMode = createLuigiMode({ hypeCallout: deps.hypeCallout, particles: deps.particles });
   const caelen: Caelen = createCaelen(scene, { sayCaelenLine: deps.sayCaelenLine });
   const partyBoats: PartyBoats = createPartyBoats(scene);
+  // The dog belongs to the player, not to the hull, so it is built here once and re-parents
+  // itself to whatever boat model it is handed — switching boats rebuilds the model entirely.
+  const dog: Dog = createDog({ bark: deps.dogBark });
 
   return {
     update(inputs) {
@@ -125,6 +134,8 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
       hotspotWorld.update(dt, t, boat, cameraXZ, deps.particles);
       buddy.update(dt, t, boat, playerBoatId, camera, viewport, deps.particles);
       caelen.update(dt, t, boat, camera, viewport, inputs.diver ?? null);
+      // A fish coming over the gunwale is the dog's whole day.
+      dog.update(dt, t, model, boatLen, boat, fishCaught);
       partyBoats.update(dt, t, camera.position, deps.particles, deps.currentTodK);
 
       // the player's own deck party/pole/shower, plus idle animation for every human aboard
@@ -153,6 +164,7 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
     isBuddyOn(): boolean { return buddy.isOn(); },
     caelenShot(p1, p2): CaelenShotResult { return caelen.resolveSpearShot(p1, p2); },
     caelenAwayFor(): number { return caelen.awayFor(); },
+    dogState() { return dog.debugState(); },
     caelenDebugHitbox() { return caelen.debugHitbox(); },
     legacySnapshot() {
       return {
@@ -164,6 +176,7 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
       luigi.dispose();
       caelen.dispose();
       partyBoats.dispose();
+      dog.dispose();
       buddy.dispose();
     },
   };

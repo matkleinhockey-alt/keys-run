@@ -169,7 +169,11 @@ function buildMembers(seed: number, cx: number, cz: number, V: CreatureVis, coun
     // without being a cartoon. Across a species with a 4x weight spread (tarpon, 40-160 lb) that
     // is a 1.59x length difference, which is plainly visible alongside its schoolmates.
     const sizeU = hashCell(seed, cx, cz, SALT.MEMBER_SCALE + i);
-    const baseScale = VSC * Math.cbrt(0.55 + 1.35 * sizeU);
+    // Widened from cbrt(0.55 + 1.35u). That was the honest cube-root mapping of a species'
+    // weight range, but within one school it spans only 1.5x in length, and at the distance you
+    // actually pick a target that is not a readable difference — the whole point is being able to
+    // say "that one" at a glance. 2.0x reads clearly and is still a shape a fish can be.
+    const baseScale = VSC * Math.cbrt(0.35 + 2.3 * sizeU);
     members.push({
       ox: Math.cos(ang) * r, oz: Math.sin(ang) * r, oy, swimPhase, sizeU,
       scale: memberScale(baseScale, V, originX, originZ),

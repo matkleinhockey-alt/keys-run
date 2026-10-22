@@ -11,7 +11,7 @@ import type { ParticleSystem } from '../../world/particles.js';
 import type { CamState, FpState } from '../../entities/camera.js';
 import { createFishingVisuals } from './visuals.js';
 import { createRodViewModel } from './rod-viewmodel.js';
-import { createFishingLogic, type LandedFish } from './update.js';
+import { createFishingLogic, type FishingDeps, type LandedFish } from './update.js';
 import { bindFishingInput } from './input.js';
 import { F, lineOut, fishingActive } from './state.js';
 import { NO_SPOTS, type SpotQuery } from './spot.js';
@@ -32,6 +32,8 @@ export interface FishingSystemDeps {
   spots?: SpotQuery;
   onLanded(fish: LandedFish): void;
   onActionWhileCaught(): void;
+  /** Tag-and-release registry — see update.ts's `FishingDeps.tags`. */
+  tags?: FishingDeps['tags'];
   /** True while the fishing Space/cast input should be ignored (game/world.ts passes
    * `diver.mode === 'diver'` — Space doubles as the diver's ascend key, and this module's
    * window-level listener has no idea diving exists; see input.ts's `isSuspended` doc comment). */
@@ -64,6 +66,7 @@ export function createFishing(deps: FishingSystemDeps): FishingSystem {
     spots: deps.spots ?? NO_SPOTS,
     onLanded: deps.onLanded,
     onActionWhileCaught: deps.onActionWhileCaught,
+    tags: deps.tags,
   });
   const unbindInput = bindFishingInput(logic, deps.fp, deps.getBoat, deps.isSuspended);
 

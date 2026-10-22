@@ -76,7 +76,7 @@ export type SchoolEvent =
  * the spirit of the server-replication note in docs/ARCHITECTURE.md's netcode section:
  * "immutable descriptors ... sent once at spawn, never in snapshots"). */
 /** How far a school will notice a motionless diver, metres. */
-const CURIOUS_RANGE = 30;
+const CURIOUS_RANGE = 36;
 /**
  * Diver speed (m/s) at which curiosity is gone. The diver is carried by the current even when not
  * kicking, so this cannot be a hair-trigger: a first attempt faded curiosity linearly to zero at
@@ -88,7 +88,7 @@ const CURIOUS_MAX_SPEED = 0.75;
 const CURIOUS_FULL_SPEED = 0.35;
 /** Hardest the patch leans toward a diver, 0..1 of the way there. Under 1 on purpose: a school
  * that fully adopted the diver as its anchor would follow them around the reef. */
-const CURIOUS_PULL = 0.85;
+const CURIOUS_PULL = 0.92;
 
 export function stepSchool(state: SchoolState, V: CreatureVis, ctx: SchoolCtx): SchoolEvent[] {
   const { t, dt, threats } = ctx;

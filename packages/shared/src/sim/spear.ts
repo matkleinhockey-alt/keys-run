@@ -25,7 +25,17 @@ import type { Rng } from '../rng/index.js';
  * ------------------------------------------------------------------------------------------ */
 
 export const SPEAR_SPEED = 25; // m/s, muzzle speed
-export const SPEAR_RANGE = 11; // m (projectile lifetime, not a hard raycast distance)
+/**
+ * Effective range, m (projectile lifetime, not a hard raycast distance).
+ *
+ * Raised from 11 m. 11 was defensible on paper — it is about what a real band gun does — but in
+ * play it put the fish you could see outside the range you could shoot, which reads as the gun
+ * being broken rather than the shot being long. Note this constant is load-bearing beyond the
+ * cutoff: `SPEAR_DRAG_K` is defined in terms of it, so the shaft still retains 60% of muzzle
+ * speed at maximum range and `holdChance` still makes the far edge unreliable rather than free.
+ * A longer shot is also a longer flight, so leading matters more, which aim assist already does.
+ */
+export const SPEAR_RANGE = 18;
 /** s, the recover/brace phase after a shot: the gun is dead weight while the diver gets the butt
  * back against the hip and finds the rubbers. Drawing cannot begin until it has elapsed. */
 export const SPEAR_RELOAD = 1.8;

@@ -30,6 +30,7 @@ import {
   index,
   uniqueIndex,
   real,
+  serial,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
@@ -178,4 +179,47 @@ export const auditFlags = pgTable('audit_flags', {
   resolvedAt: timestamp('resolved_at', { withTimezone: true }),
 }, (t) => [
   index('audit_flags_user_id_idx').on(t.userId),
+]);
+
+/**
+ * Tag-and-release registry: one row per tagged individual fish, shared by
+ * every player. `weight_lb`/`x`/`z`/`last_seen_at` are where and how big it
+ * was the last time anyone had it in hand; its weight *now* is derived on
+ * read from that plus elapsed time (packages/shared/src/sim/tagging.ts's
+ * `grownWeight`), so nothing has to tick the table.
+ *
+ * Same honesty caveat as `catches` (routes/catches.ts): tagging is a client
+ * assertion. The recapture route never takes a client weight, though — a
+ * recaptured fish's weight is always the server's grown value.
+ */
+export const taggedFish = pgTable('tagged_fish', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tagNo: serial('tag_no').notNull(),
+  speciesKey: text('species_key').notNull(),
+  weightLb: numeric('weight_lb', { precision: 7, scale: 2 }).notNull(),
+  x: real('x').notNull(),
+  z: real('z').notNull(),
+  status: text('status').notNull().default('at_large'),
+  taggedBy: uuid('tagged_by').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('tagged_fish_tag_no_idx').on(t.tagNo),
+  index('tagged_fish_species_at_large_idx').on(t.speciesKey).where(sql`${t.status} = 'at_large'`),
+]);
+
+/** Append-only life history of a tagged fish: the tagging, then every time
+ * someone landed it (released again, or harvested — which retires the tag). */
+export const tagEvents = pgTable('tag_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tagId: uuid('tag_id').notNull().references(() => taggedFish.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  kind: text('kind').notNull(),
+  weightLb: numeric('weight_lb', { precision: 7, scale: 2 }).notNull(),
+  x: real('x').notNull(),
+  z: real('z').notNull(),
+  zone: text('zone').notNull(),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('tag_events_tag_id_at_idx').on(t.tagId, t.at),
 ]);

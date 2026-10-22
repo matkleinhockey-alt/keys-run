@@ -98,6 +98,10 @@
       "types": "./dist/sim/economy.d.ts",
       "default": "./dist/sim/economy.js"
     },
+    "./sim/tagging": {
+      "types": "./dist/sim/tagging.d.ts",
+      "default": "./dist/sim/tagging.js"
+    },
     "./proto": {
       "types": "./dist/proto/index.d.ts",
       "default": "./dist/proto/index.js"

@@ -16,6 +16,7 @@ import { chooseFish, fightParamsFor, scaledLenM, startFight, stepFight, type Fig
 import { xoshiro128ss } from '@keysrun/shared/rng';
 import { SPECIES } from '@keysrun/shared/content/species';
 import type { Tackle } from '@keysrun/shared/content/tackle';
+import type { TaggedFish } from '@keysrun/shared/sim/tagging';
 import { clamp, lerp, rand } from '../../core/math.js';
 import { toast } from '../../ui/toast.js';
 import { F } from './state.js';
@@ -31,6 +32,8 @@ export interface LandedFish {
   fx: number;
   fz: number;
   zone: string;
+  /** Non-null when this was a tagged fish being recaptured. */
+  tag: TaggedFish | null;
 }
 
 export interface FishingDeps {
@@ -51,6 +54,11 @@ export interface FishingDeps {
   getTackle?(): Tackle;
   /** legacy's `case 'caught': if (now-caughtT>1600) releaseFish();` — delegated to game/catch. */
   onActionWhileCaught(): void;
+  /** Tag-and-release registry (game/catch/tags.ts). Omitted = every fish is untagged. */
+  tags?: {
+    prefetch(x: number, z: number): void;
+    pickRecapture(key: string, x: number, z: number, rng: () => number): TaggedFish | null;
+  };
 }
 
 /** This port's client-local roll stream for immediate feedback — see sim/fight.ts's header.
@@ -96,7 +104,8 @@ export function createFishingLogic(deps: FishingDeps) {
     deps.rodVM.lineTip(model, deps.fp.on).getWorldPosition(tmpTarget);
     F.from = { x: tmpTarget.x, y: tmpTarget.y, z: tmpTarget.z };
     F.castT = 0; F.castDur = 0.5 + power * 0.9; F.castH = 3 + power * 14;
-    F.state = 'casting'; F.key = null;
+    F.state = 'casting'; F.key = null; F.tag = null;
+    deps.tags?.prefetch(F.to.x, F.to.z);
     setRod(true);
     visuals.bobber.visible = true;
     deps.rodVM.whip();
@@ -104,7 +113,7 @@ export function createFishingLogic(deps: FishingDeps) {
 
   function reelIn(msg?: string): void {
     visuals.hideHooked();
-    F.state = 'idle'; F.key = null; F.charging = false;
+    F.state = 'idle'; F.key = null; F.tag = null; F.charging = false;
     $('castbar')?.classList.add('hidden');
     setRod(false);
     visuals.bobber.visible = false;
@@ -122,14 +131,17 @@ export function createFishingLogic(deps: FishingDeps) {
     const hump = nearHump(F.bob.x, F.bob.z);
     const fish = chooseFish(F.zone, F.bob, { hotspot: !!F.hs, hump }, clientRng);
     F.key = fish.key; F.sp = SPECIES[fish.key]; F.weight = fish.weight;
+    // A tagged fish in range may be this one — then it fights at its own grown weight.
+    F.tag = deps.tags?.pickRecapture(fish.key, F.bob.x, F.bob.z, clientRng) ?? null;
+    if (F.tag) F.weight = +F.tag.weightLb.toFixed(1);
     F.fx = fish.x; F.fz = fish.z; F.ofx = fish.ofx; F.ofz = fish.ofz;
-    visuals.showHooked(F.sp.color, scaledLenM(fish.key, fish.weight));
+    visuals.showHooked(F.sp.color, scaledLenM(fish.key, F.weight));
   }
 
   function missFish(msg: string): void {
     $('strike')?.classList.add('hidden');
     visuals.hideHooked();
-    F.key = null; F.state = 'waiting';
+    F.key = null; F.tag = null; F.state = 'waiting';
     F.biteT = rand(4, 8) * (F.hs ? 0.5 : 1);
     toast(msg);
   }
@@ -169,7 +181,7 @@ export function createFishingLogic(deps: FishingDeps) {
   function clearCaught(): void {
     if (F.state !== 'caught') return; // spear catches never enter this state machine — no-op
     F.state = 'idle';
-    F.key = null;
+    F.key = null; F.tag = null;
     F.charging = false;
     F.caughtT = 0;
     $('castbar')?.classList.add('hidden');
@@ -179,14 +191,15 @@ export function createFishingLogic(deps: FishingDeps) {
   }
 
   function land(): void {
-    const key = F.key!, weight = F.weight, fx = F.fx, fz = F.fz, zone = F.zone;
+    const key = F.key!, weight = F.weight, fx = F.fx, fz = F.fz, zone = F.zone, tag = F.tag;
+    F.tag = null;
     F.state = 'caught';
     F.caughtT = performance.now();
     visuals.hideHooked();
     setRod(false);
     $('fight')?.classList.add('hidden');
     F.fight = null; F.fightParams = null;
-    deps.onLanded({ key, weight, fx, fz, zone });
+    deps.onLanded({ key, weight, fx, fz, zone, tag });
   }
 
   function onAction(boat: BoatState): void {
@@ -247,7 +260,7 @@ export function createFishingLogic(deps: FishingDeps) {
         // biteT is untouched by the spot: the `* 0.4` is the whole frenzy bite-speed payoff and
         // the only knob, so it stays in one place.
         F.biteT = rand(4, 10) * (F.hs ? 0.4 : 1);
-        F.key = null;
+        F.key = null; F.tag = null;
         const cm = Math.round(Math.hypot(F.bob.x - boat.x, F.bob.z - boat.z)) + ' m cast ';
         toast(spot.kind === 'frenzy' ? cm + 'into the bait — fish on the surface!' : cm + 'into the ' + F.zone.toLowerCase() + '.');
       }

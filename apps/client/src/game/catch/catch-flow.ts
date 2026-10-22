@@ -31,6 +31,8 @@ import { createCooler, meatLine, nearMarina, type CoolerFish } from './cooler.js
 import { createPortrait } from './portrait.js';
 import type { Backdrop } from './render-pipeline.js';
 import { createUnderwaterTrophy } from './underwater-trophy.js';
+import { RECAPTURE_RELEASE_BONUS, TAG_RELEASE_BONUS } from '@keysrun/shared/sim/tagging';
+import { createTagRegistry, describeTag, type TaggedFish } from './tags.js';
 import { placeHoldingCaptain, placePresentingCaptain, type DeckCaptainHandle } from './deck-figure.js';
 
 function $(id: string): HTMLElement | null { return document.getElementById(id); }
@@ -46,6 +48,9 @@ export interface CaughtFishInfo {
    * the speargun (the underwater grip-and-grin, see underwater-trophy.ts). Optional/defaults to
    * 'rod' so game/fishing's existing call site (which predates this field) needs no change. */
   source?: 'rod' | 'spear';
+  /** Set when the rod hooked a tagged individual (game/catch/tags.ts) — the card then shows its
+   * history, and keeping or releasing it is reported back to the tag registry. */
+  tag?: TaggedFish | null;
 }
 
 interface SessionStats {
@@ -186,6 +191,7 @@ export function createCatchFlow(deps: CatchFlowDeps) {
   // is ever "shown" at a time (a rod catch and a speared catch can't both be the current catch).
   const trophy = createUnderwaterTrophy('fishCanvas');
   const released: ReleasedFish[] = [];
+  const tags = createTagRegistry();
 
   let photo: PhotoHandle | null = null;
   let lastPts = 0;
@@ -265,12 +271,42 @@ export function createCatchFlow(deps: CatchFlowDeps) {
     const keepBtn = $('btnKeep') as HTMLButtonElement | null;
     if (keepBtn) keepBtn.disabled = choice.disabled;
     setText('cNote', choice.note);
+    showTagInfo(fish);
 
     $('card')?.classList.remove('hidden');
     $('card')?.classList.toggle('dive', currentSource === 'spear');
     document.body.classList.add('photoing');
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     updateScore();
+  }
+
+  /** The tag block and the tag-specific buttons: a recaptured fish shows its history and its
+   * Release becomes "release & report"; an untagged rod catch offers Tag & release (a speared fish
+   * is dead, so it can't be tagged). */
+  function showTagInfo(fish: CaughtFishInfo): void {
+    const tagEl = $('cTag');
+    if (tagEl) {
+      tagEl.replaceChildren();
+      if (fish.tag) {
+        const { headline, lines } = describeTag(fish.tag);
+        const h = document.createElement('b');
+        h.textContent = headline;
+        const ul = document.createElement('ul');
+        for (const line of lines) { const li = document.createElement('li'); li.textContent = line; ul.append(li); }
+        tagEl.append(h, ul);
+      }
+      tagEl.classList.toggle('hidden', !fish.tag);
+    }
+    const tagBtn = $('btnTag');
+    if (tagBtn) {
+      tagBtn.classList.toggle('hidden', !!fish.tag || fish.source === 'spear');
+      // A fish you can't keep (CR_ONLY, or no cooler room) makes tagging the headline choice.
+      tagBtn.classList.toggle('alt', !($('btnKeep') as HTMLButtonElement | null)?.disabled);
+    }
+    setText('btnRelease', fish.tag ? 'Release & report tag' : 'Release');
+    if (fish.tag && !($('btnKeep') as HTMLButtonElement | null)?.disabled) {
+      setText('cNote', `Keeping it retires tag ${fish.tag.code}; releasing it reports the recapture and lets it keep growing.`);
+    }
   }
 
   function finishCatch(): void {
@@ -303,12 +339,44 @@ export function createCatchFlow(deps: CatchFlowDeps) {
     const fish: CoolerFish = { name: S.name, key: current.key, weight: current.weight, inches: lastStats!.inches, sex: lastStats!.sex, pts: lastPts };
     cooler.keepFish(fish);
     toast(`${S.name} is on ice. ${cooler.cooler.length} fish in the cooler.`);
+    if (current.tag) {
+      const code = current.tag.code;
+      void tags.reportLanded(current.tag, landing(current), true).then((t) => {
+        if (t) toast(`Tag ${code} reported — that fish's story ends in your cooler.`);
+      });
+    }
     finishCatch();
   }
 
+  function landing(fish: CaughtFishInfo): { x: number; z: number; zone: string } {
+    return { x: fish.x, z: fish.z, zone: fish.zone };
+  }
+
+  /** Release, reporting the recapture if it carries a tag. */
   function releaseFish(): void {
     if (!current || performance.now() - caughtAt < 600) return;
-    const bonus = Math.round(lastPts * 0.25);
+    if (!current.tag) { releaseWith(0.25, (b) => `Released! +${b} conservation bonus.`); return; }
+    const code = current.tag.code;
+    void tags.reportLanded(current.tag, landing(current), false).then((t) => {
+      if (t) toast(`Recapture of ${code} logged — ${t.events.length} landings on record.`);
+    });
+    releaseWith(RECAPTURE_RELEASE_BONUS, (b) => `Released ${code} again! +${b} tag-report bonus.`);
+  }
+
+  /** Put a fresh tag in an untagged rod catch and let it go. It joins the shared registry, keeps
+   * growing, and anyone who hooks it later sees that you tagged it. */
+  function tagAndRelease(): void {
+    if (!current || performance.now() - caughtAt < 600) return;
+    if (current.tag || currentSource === 'spear') return;
+    const name = SPECIES[current.key].name;
+    void tags.tagAndRelease(current.key, current.weight, landing(current)).then((t) => {
+      toast(t ? `Tag ${t.code} is swimming. You'll hear about it if anyone lands that ${name}.` : 'Couldn’t log the tag — the fish was still released.');
+    });
+    releaseWith(TAG_RELEASE_BONUS, (b) => `Tagged and released! +${b} conservation bonus.`);
+  }
+
+  function releaseWith(bonusFrac: number, message: (bonus: number) => string): void {
+    const bonus = Math.round(lastPts * bonusFrac);
     session.score += bonus;
     updateScore();
     if (photo?.fish) {
@@ -328,7 +396,7 @@ export function createCatchFlow(deps: CatchFlowDeps) {
       // `photo.parent.remove(photo.fish)` becomes a harmless no-op (three.js `remove()` on a
       // non-child is a silent no-op) rather than double-handling it, so `photo` is left as-is.
     }
-    toast('Released! +' + bonus + ' conservation bonus.');
+    toast(message(bonus));
     finishCatch();
   }
 
@@ -395,7 +463,7 @@ export function createCatchFlow(deps: CatchFlowDeps) {
   // `THREE.WebGLRenderer` instance across `page.evaluate`'s serialization boundary. No normal
   // code path reads `window.__catchPortraitDebug`.
   (window as unknown as { __catchPortraitDebug?: unknown }).__catchPortraitDebug = {
-    land(key: string, weight: number): void { landFish({ key, weight, x: 0, z: 0, zone: 'Reef' }); },
+    land(key: string, weight: number, tag?: TaggedFish): void { landFish({ key, weight, x: 0, z: 0, zone: 'Reef', tag }); },
     /** Same idea, for the underwater trophy card (underwater-trophy.ts) — `source: 'spear'`
      * routes `landFish` to `trophy.show` instead of the boat-deck photo. */
     landSpeared(key: string, weight: number): void { landFish({ key, weight, x: 0, z: 0, zone: 'Reef', source: 'spear' }); },
@@ -406,7 +474,7 @@ export function createCatchFlow(deps: CatchFlowDeps) {
   };
 
   return {
-    session, cooler, landFish, finishCatch, keepFish, releaseFish, updateReleased, renderPortrait, updateScore,
+    session, cooler, tags, landFish, finishCatch, keepFish, releaseFish, tagAndRelease, updateReleased, renderPortrait, updateScore,
     openCoolerPanel, weighIn, updateTouchDock,
     get current() { return current; },
   };

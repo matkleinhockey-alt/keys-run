@@ -9,6 +9,7 @@
  */
 import type { FightState, FightParams } from '@keysrun/shared/sim/fight';
 import type { SpeciesDef } from '@keysrun/shared/content/species';
+import type { TaggedFish } from '@keysrun/shared/sim/tagging';
 
 export type FishFightState = 'idle' | 'casting' | 'waiting' | 'nibble' | 'bite' | 'fight' | 'caught';
 
@@ -32,6 +33,9 @@ export interface FishingState {
   sp: SpeciesDef | null;
   key: string | null;
   weight: number;
+  /** Set when the rolled fish is a tagged individual (game/catch/tags.ts) — `weight` is then its
+   * grown weight, not a fresh roll. */
+  tag: TaggedFish | null;
   /** Mirrors the active `FightState.x/z` once hooked — camera.ts reads these directly. */
   fx: number;
   fz: number;
@@ -60,7 +64,7 @@ export function createFishingState(): FishingState {
     bob: { x: 0, y: 0, z: 0 }, from: { x: 0, y: 0, z: 0 }, to: { x: 0, y: 0, z: 0 },
     castT: 0, castDur: 0.7, castH: 10,
     biteT: 0, win: 0,
-    zone: '', hs: null, sp: null, key: null, weight: 0,
+    zone: '', hs: null, sp: null, key: null, weight: 0, tag: null,
     fx: 0, fz: 0, ofx: 0, ofz: 0,
     drag: 3,
     charging: false, charge: 0, chargeT: 0,
