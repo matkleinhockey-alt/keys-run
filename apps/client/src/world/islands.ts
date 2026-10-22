@@ -131,6 +131,9 @@ function buildVegetation(group: THREE.Group): VegetationResult {
       const ang = hashCell(WORLD_SEED, idx, k, SALT.MANGROVE_ANG) * Math.PI * 2;
       const w = islandWorld(I, Math.cos(ang) * I.a * 0.985, Math.sin(ang) * I.b * 0.985);
       if (I.mainland && (Math.abs(w[0]) > 5200 || inCity(w[0], w[1]))) continue;
+      // the rim in front of Boot Key Harbor City is its beach and seawall, not a mangrove thicket: they stood right against
+      // the promenade rail as black boulders and were the first thing you saw from the water (the polish pass's skyline capture)
+      if (inTownFootprint(w[0], w[1], 34)) continue;
       mg.push({ x: w[0], z: w[1], y: Math.max(0.2, landH(w[0], w[1])), s: lerp(3, 6, hashCell(WORLD_SEED, idx, k, SALT.MANGROVE_SIZE)) });
     }
   });

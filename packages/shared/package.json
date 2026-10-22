@@ -22,6 +22,10 @@
       "types": "./dist/world/town.d.ts",
       "default": "./dist/world/town.js"
     },
+    "./world/town-life": {
+      "types": "./dist/world/town-life.d.ts",
+      "default": "./dist/world/town-life.js"
+    },
     "./content/venues": {
       "types": "./dist/content/venues.d.ts",
       "default": "./dist/content/venues.js"
@@ -141,6 +145,22 @@
     "./content/cosmetics": {
       "types": "./dist/content/cosmetics.d.ts",
       "default": "./dist/content/cosmetics.js"
+    },
+    "./sim/slots": {
+      "types": "./dist/sim/slots.d.ts",
+      "default": "./dist/sim/slots.js"
+    },
+    "./sim/reels": {
+      "types": "./dist/sim/reels.d.ts",
+      "default": "./dist/sim/reels.js"
+    },
+    "./world/casino": {
+      "types": "./dist/world/casino.d.ts",
+      "default": "./dist/world/casino.js"
+    },
+    "./sim/handgun": {
+      "types": "./dist/sim/handgun.d.ts",
+      "default": "./dist/sim/handgun.js"
     }
   },
   "scripts": {

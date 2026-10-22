@@ -22,10 +22,11 @@
  * Register: this game has a bikini deck party, a Luigi mode and a seagull who calls you a loser.
  * The strip club is a neon sign, a rope and a bouncer with opinions. Atmosphere over anatomy.
  */
+import { TACKLE, TACKLE_PRICE, tackleKey } from './tackle.js';
 
 export type VenueId =
   | 'tackle' | 'guns' | 'bar' | 'club' | 'diner'
-  | 'dive' | 'liquor' | 'gifts' | 'pawn' | 'laundromat' | 'icecream' | 'motel' | 'convenience';
+  | 'dive' | 'liquor' | 'gifts' | 'pawn' | 'laundromat' | 'icecream' | 'motel' | 'convenience' | 'casino';
 
 export type EffectKind = 'gear' | 'consumable' | 'buff' | 'cosmetic' | 'sink' | 'service';
 
@@ -90,11 +91,17 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       'Live shrimp are in the tank by the door. Pilchards are in the freezer. Dignity is not in stock.',
       'You want the good braid or the braid you can afford?',
     ],
-    blurb: 'Rods, reels, leader, live bait and bagged ice, run by a man who has opinions about every one of them. This is where better tackle will be bought.',
+    blurb: 'Rods, reels, line, leader, live bait and bagged ice, run by a man who has opinions about every one of them. The braid on the back wall is the line your fight is normalised against: heavier line, bigger fish landed.',
     sells: [
       // PRICE 240 -> 2,400. lineMul 1.35 on the starter braid50 = 67 lb. Measured (playthrough-economy.mjs, 30 sim-min): Hawk
       // +1%, Reef +1%, Offshore +21% ($21.0k -> $25.4k). It is an offshore tool: ~$1.3k per effective session there, so
       // 2,400 pays back in ~2 offshore sessions (~5 if you stay inshore). At 240 it was 4 minutes of income.
+      // The line ladder itself (content/tackle.ts). A rung replaces the outfit the fight is
+      // normalised against, where the rod and reel below multiply whatever rung you are on, so the
+      // two roads stack: braid80 + heavy + lever lands between braid80 and braid130. Prices come
+      // from TACKLE_PRICE, and a test holds the shop and that table together.
+      item('line-braid80', TACKLE.find((t) => t.id === 'braid80')!.name, 'Steps the fight up from 50 lb line to 80 lb. Offshore trophies stop breaking you off.', TACKLE_PRICE.braid80, 'gear', tackleKey('braid80')),
+      item('line-braid130', TACKLE.find((t) => t.id === 'braid130')!.name, 'The billfish rig: 130 lb line, 150 lb leader. Overkill inshore, the difference offshore.', TACKLE_PRICE.braid130, 'gear', tackleKey('braid130')),
       item('rod-heavy', 'Heavy-action trolling rod', 'Stops a run the stock rod cannot. Changes the fight sim\'s line strength.', 2_400, 'gear', 'rod.heavy'),
       // PRICE 520 -> 4,000. reelMul 1.3 + lineMul 1.05. The best single rod-side buy: Hawk +13%, Reef +11%, Offshore +25%
       // (faster retrieve = more fish per minute AND fewer losses). ~$0.8k per effective session blended, so 4,000 is a ~5-session
@@ -116,7 +123,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       'Browsing is free. Dropping things is not.',
       'We do spearguns, flare guns and a very good lecture on both.',
     ],
-    blurb: 'A proper Keys gun counter, bars on the windows and a flag out front. In this game it is where the harpoon gun gets its upgrades: longer range, faster shafts, and a reel that does not fight back.',
+    blurb: 'A proper Keys gun counter, bars on the windows and a flag out front. In this game it is where the harpoon gun gets its upgrades: longer range, faster shafts, and a reel that does not fight back. It also sells ammunition for the boat pistol, which is for plinking at gulls and the occasional ballyhoo and is a different kind of hobby.',
     sells: [
       item('spear-shaft', 'Stainless spear shafts (3)', 'Replacement shafts for the diver\'s speargun.', 45, 'consumable', 'spear.shafts'),
       // PRICE 380 -> 2,200. +6 m on SPEAR_RANGE 18 is +33% reach = ~1.8x the water a shot covers. Spear income is not in the
@@ -125,7 +132,15 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       // PRICE 210 -> 1,400. Tether x0.6 saves fish that would otherwise strip the tether; a landing aid, not a rate boost, so
       // cheaper than the long gun but a real purchase (~1/3 of a session).
       item('spear-reel', 'Reel-line conversion', 'A fish on the spear runs less far before you can haul.', 1_400, 'gear', 'spear.reel'),
-      item('flare', 'Marine flare kit', 'Required by the Coast Guard, loved by everyone else.', 38, 'consumable', 'safety.flare'),
+      // The boat pistol (sim/handgun.ts). The pistol itself is NOT sold: every boat in the Keys has one in the
+      // console, and the mode is the feature - selling the gun would put it behind a paywall nobody asked for.
+      // What the counter sells is what makes it cost something: a box of 50 is $75 ($1.50 a round, i.e. a
+      // 12-round magazine is $18 - a visible slice of a minute's income, not a session's), and two upgrades
+      // priced in the spear gear's band (a tighter group / a longer mag are comfort, not a rate boost).
+      item('pistol-ammo', '9 mm range ammo (50)', 'A box for the boat pistol. Fish, gulls and the horizon not included.', 75, 'consumable', 'handgun.ammo'),
+      item('pistol-extmag', 'Extended magazine', 'Six more rounds before you have to stop and reload.', 1_100, 'gear', 'handgun.extmag'),
+      item('pistol-dot', 'Red-dot sight', 'A tighter group at range, for people who do not like gulls laughing.', 1_600, 'gear', 'handgun.dot'),
+      item('flare', 'Marine flare kit', 'Three parachute flares, fired from the pistol grip (Z). Required by the Coast Guard, best after sunset.', 38, 'consumable', 'safety.flare'),
     ],
     enterable: true,
   },
@@ -136,7 +151,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       'Fish story? Take a stool. The good ones get a free round. The bad ones get a free round anyway.',
       'You smell like bait and sunscreen. Welcome home.',
     ],
-    blurb: 'Weathered boards, a tin roof, a jukebox and a bartender called Dot who has seen every sunburn. A round here will one day cost you Luigi-mode steadiness and buy you hype.',
+    blurb: 'Weathered boards, a tin roof, a jukebox and a bartender called Dot who has seen every sunburn. A round here costs you Luigi-mode steadiness and buys you hype, for seven minutes.',
     sells: [
       item('beer', 'Cold one', 'Lowers your cast accuracy, raises the crowd\'s opinion of you.', 5, 'buff', 'bar.beer'),
       // SINKS: PRICE 60 -> 250. A sink only works if it costs a visible slice of a session. 60 was ~15 seconds of income. 250 = 1 effective minute.
@@ -164,6 +179,21 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
     ],
     enterable: true,
   },
+  casino: {
+    id: 'casino', name: 'Gaff & Gill Casino', tagline: 'Slots · Tarpon · Free coffee, tipped',
+    greeting: [
+      'Welcome to the Gaff & Gill. The house always wins. The house is also a fish.',
+      'Reels on the left, cashiers on the right, the exit is wherever you left your boat.',
+      'Feeling lucky? The marlin is. It has been on that reel for years and has never once been caught.',
+      'Odds are printed on every machine. Nobody reads them. Please read them.',
+    ],
+    blurb: 'Carpet the colour of a reef flat, neon the colour of a marlin, and thirty slot machines that all pay the same 90.5 cents on the dollar. Bets run $5 to $100. It is a place to spend money, not to make it: the fish do that.',
+    // Nothing on the shelves on purpose: the casino sells chances, not items, and a shelf entry
+    // that took your money and did nothing is the failure test/shop.test.ts exists to stop. The
+    // machines settle through game/casino/ (sim/slots.ts), never through sim/shop.ts.
+    sells: [],
+    enterable: true,
+  },
   diner: {
     id: 'diner', name: 'Salty Dog Diner', tagline: 'Breakfast all day · Fresh catch · Pie',
     greeting: [
@@ -171,7 +201,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       'The mahi sandwich is the mahi you sold us last week. You are welcome.',
       'Pie of the day is key lime. Pie of every day is key lime.',
     ],
-    blurb: 'Chrome, red vinyl booths and a jukebox that only plays one song. A hot breakfast here will one day steady your hands for the next fight.',
+    blurb: 'Chrome, red vinyl booths and a jukebox that only plays one song. A hot breakfast here steadies your hands for the next fifteen minutes of fighting fish.',
     sells: [
       item('breakfast', 'Fisherman\'s breakfast', 'A buff to line handling for a few minutes.', 14, 'buff', 'diner.breakfast'),
       item('coffee', 'Bottomless coffee', 'A longer, more forgiving strike window.', 3, 'buff', 'diner.coffee'),
@@ -266,7 +296,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
   convenience: {
     id: 'convenience', name: 'Stop-N-Go', tagline: 'Gas · Snacks · Live bait (maybe)',
     greeting: ['Gas pump two is broken. So is pump one.'],
-    blurb: 'Chips, ice and a lot of fluorescent light. Boat fuel and snacks will be sold here.',
+    blurb: 'Chips, ice, snacks and a lot of fluorescent light. Both gas pumps have been broken for years and nobody is in a hurry about it.',
     sells: [
       // DELISTED. There is no fuel tank in sim/boat.ts, and the services agent's reasoning for
       // not inventing one is right: a tank that can run dry strands you mid-ocean, and a tank that

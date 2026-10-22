@@ -24,6 +24,7 @@ import { createStageDancer, type StageDancer } from './dancers.js';
 import { makeHuman } from '../life/human.js';
 import { Zf } from './props.js';
 import type { LightSource } from './build.js';
+import { buildCasinoInterior } from './casino-interior.js';
 
 /**
  * When to build a room and when to draw it, as distance from the camera to the lot's DOORWAY (not its
@@ -95,6 +96,8 @@ export interface Interior {
    * a mixer on real `dt`, not by the box-person's own `update(t, 0)`. */
   dancers: StageDancer[];
   lights: LightSource[];
+  /** Optional per-frame hook while the room is drawn: `cam` is the camera in the town's local frame (x = u, z = -v). */
+  animate?(t: number, cam: THREE.Vector3): void;
   dispose(): void;
 }
 
@@ -109,6 +112,7 @@ export interface Interior {
 const STAND_Y: Readonly<Record<string, number>> = { 'club-stage': 0.96 };
 
 export function buildInterior(lot: Lot, kit: TownKit): Interior {
+  if (lot.id === 'casino') return buildCasinoInterior(lot, kit); // its own file: a neon room that must not touch this one's lights
   const group = new THREE.Group();
   group.name = `interior-${lot.id}`;
   const look = ROOMS[lot.id];

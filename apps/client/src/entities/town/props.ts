@@ -6,36 +6,56 @@
  * Positions come from `world/town.ts` — this file decides what a palm looks like, never where it is.
  */
 import { PAD_Y, type Car } from '@keysrun/shared/world/town';
+import { palmTrunkAt } from '@keysrun/shared/world/town-life';
 import type { GeoBatch } from './batch.js';
 
 /** Local-frame helper: (u, v) -> (x, z). */
 export const Zf = (v: number): number => -v;
 
-const TRUNK = 0xb8976c, TRUNK_DARK = 0x9a7c56;
-const FROND = [0x62b84a, 0x72c855, 0x52a640, 0x82d45f];
+const TRUNK = 0xaa9577, TRUNK_DARK = 0x8c7758;
+const FROND = [0x4f9a3c, 0x62b04a, 0x73c15a, 0x58a443];
 
-/** A palm in a stone planter. Deterministic from (u,v) so rebuilds never reshuffle the street. */
+/**
+ * A palm in a stone planter. Deterministic from (u,v) so rebuilds never reshuffle the street.
+ *
+ * The trunk used to be three vertical cylinders, each stepped sideways from the one below: a stack of
+ * offset drums with a visible shelf at every joint (see the "alley" capture in the polish report). It
+ * is now a smooth curve of six tilted segments, tapering, along `palmTrunkAt` from the shared module,
+ * which is also the curve the squirrels climb, so the animal is on the trunk that is drawn.
+ */
 export function palm(solid: GeoBatch, u: number, v: number, h: number, planter = true): void {
+  const p = { u, v, h };
   const x = u, z = Zf(v);
   let y = PAD_Y;
   if (planter) { solid.span(x - 0.9, x + 0.9, y, y + 0.45, z - 0.9, z + 0.9, 0xa49c8c); solid.span(x - 0.75, x + 0.75, y + 0.45, y + 0.5, z - 0.75, z + 0.75, 0x3b2a1c); y += 0.5; }
   const seed = Math.abs(Math.sin(u * 12.9898 + v * 78.233) * 43758.5453) % 1;
-  const lean = (seed - 0.5) * 0.9, hh = 6.4 * h;
-  // trunk: three tapering segments, each shifted along the lean, so it curves instead of standing like a pole
-  let px = x, pz = z;
-  for (let i = 0; i < 3; i++) {
-    const seg = hh / 3, r0 = 0.3 - i * 0.05, r1 = 0.26 - i * 0.05;
-    solid.cyl(px, y, pz, r1, r0, seg, i % 2 ? TRUNK : TRUNK_DARK, 6);
-    y += seg; px += lean * 0.55; pz += lean * 0.25;
+  const N = 6;
+  let top = palmTrunkAt(p, 0);
+  for (let i = 0; i < N; i++) {
+    const a = palmTrunkAt(p, i / N), b = palmTrunkAt(p, (i + 1) / N);
+    const dx = b.u - a.u, dy = b.y - a.y, dz = -(b.v - a.v), len = Math.hypot(dx, dy, dz);
+    // an axis along (dx,dy,dz): about z first, then x (the batch's YXZ order)
+    solid.cyl((a.u + b.u) / 2, (a.y + b.y) / 2 - len / 2, -(a.v + b.v) / 2, b.r, a.r, len * 1.04, i % 2 ? TRUNK : TRUNK_DARK, 7, { rx: Math.atan2(dz, dy), rz: -Math.asin(dx / len) });
+    top = b;
   }
-  // crown: a fan of drooping fronds
-  const n = 8;
+  void y;
+  const cx = top.u, cy = top.y, cz = -top.v;
+  // crown: a fan of fronds that rise off the trunk and then droop, three blades each, greens that vary frond to frond
+  const n = 11;
   for (let k = 0; k < n; k++) {
-    const a = (k / n) * Math.PI * 2 + seed * 3;
-    const len = 3.1 + ((k * 7) % 3) * 0.35;
-    solid.box(px + Math.sin(a) * len * 0.42, y - 0.18, pz + Math.cos(a) * len * 0.42, 0.7, 0.07, len, FROND[k % 4], { ry: a, rx: -0.55 });
+    const ang = (k / n) * Math.PI * 2 + seed * 3, len = 3.2 + ((k * 7) % 3) * 0.35, seg = len / 3;
+    let px = cx, py = cy - 0.02, pz = cz;
+    const col = FROND[(k + Math.floor(seed * 4)) % 4];
+    for (let j = 0; j < 3; j++) {
+      const pitch = [0.5, 0.05, -0.55][j] - (k % 3) * 0.08; // up, level, drooping
+      const dx = Math.sin(ang) * Math.cos(pitch), dy = Math.sin(pitch), dz = Math.cos(ang) * Math.cos(pitch);
+      solid.box(px + dx * seg / 2, py + dy * seg / 2, pz + dz * seg / 2, [0.95, 0.8, 0.55][j], 0.05, seg * 1.04, j === 2 && k % 2 ? 0x8fa347 : col, { ry: ang, rx: -pitch });
+      px += dx * seg; py += dy * seg; pz += dz * seg;
+    }
   }
-  solid.ball(px, y + 0.05, pz, 0.28, 0x5a4a2a, 1, 6);
+  // two dead fronds hanging under the crown, and the coconuts
+  for (const k of [1, 5]) solid.box(cx + Math.sin(k) * 0.5, cy - 0.7, cz + Math.cos(k) * 0.5, 0.3, 1.3, 0.04, 0x8a6a3a, { ry: k, rx: 0.2 });
+  solid.ball(cx - 0.1, cy - 0.22, cz + 0.1, 0.17, 0x5a4a2a, 1, 6); solid.ball(cx + 0.15, cy - 0.26, cz - 0.08, 0.15, 0x6a5a30, 1, 6); solid.ball(cx, cy - 0.3, cz + 0.2, 0.14, 0x4f4226, 1, 6);
 }
 
 /** Street lamp: returns the world-ish (local) position of the lamp head for the light pool. */
@@ -104,10 +124,46 @@ export function car(b: GeoBatch, c: Car): void {
     P.box(-0.5, 0.86, 0.5, 1.0, 0.3, 0.6, 0xe9d6c0); P.box(-0.5, 0.86, -0.5, 1.0, 0.3, 0.6, 0xe9d6c0);
     P.box(-2.4, 0.95, 0, 0.35, 0.18, 1.7, body); // tail fins: it is a Cadillac
     wheel(1.55, 0.95); wheel(1.55, -0.95); wheel(-1.5, 0.95); wheel(-1.5, -0.95);
+  } else if (c.kind === 'van') {
+    // a work van: tall, square, a ladder on the roof and a sliding door line down the side
+    P.box(0, 1.0, 0, 4.9, 1.35, 1.95, body);
+    P.box(2.0, 1.45, 0, 0.9, 0.55, 1.9, GLASS);
+    P.box(1.3, 1.1, 0.985, 0.04, 0.9, 0.02, 0x00000a); P.box(1.3, 1.1, -0.985, 0.04, 0.9, 0.02, 0x00000a);
+    P.box(-0.2, 0.5, 0, 4.9, 0.08, 1.99, 0x2a2d30);
+    for (const lz of [-0.55, 0.55]) P.box(-0.2, 1.74, lz, 3.6, 0.05, 0.05, 0xb9bec2);
+    for (let i = 0; i < 7; i++) P.box(-1.8 + i * 0.55, 1.745, 0, 0.04, 0.04, 1.15, 0xb9bec2);
+    wheel(1.55, 0.95); wheel(1.55, -0.95); wheel(-1.5, 0.95); wheel(-1.5, -0.95);
+  } else if (c.kind === 'wagon') {
+    // an old woodie: long roof, wood panels down the flanks
+    P.box(0, 0.62, 0, 4.9, 0.5, 1.9, body);
+    P.box(-0.35, 1.12, 0, 3.0, 0.5, 1.78, body); P.box(-0.35, 1.14, 0, 2.9, 0.4, 1.82, GLASS);
+    for (const lz of [-0.96, 0.96]) { P.box(0, 0.66, lz, 4.6, 0.28, 0.03, 0xc9a063); P.box(-0.35, 1.16, lz * 0.94, 2.8, 0.06, 0.03, 0xc9a063); }
+    P.box(-0.35, 1.42, 0, 2.6, 0.04, 1.5, 0x6b4a2b);
+    wheel(1.5, 0.92); wheel(1.5, -0.92); wheel(-1.45, 0.92); wheel(-1.45, -0.92);
+  } else if (c.kind === 'cart') {
+    // a golf cart: the only legal way to get anywhere in the lower Keys at 15 mph
+    P.box(0.1, 0.42, 0, 2.5, 0.28, 1.15, body);
+    P.box(-0.55, 0.78, 0, 0.8, 0.5, 1.05, 0xe9d6c0); P.box(0.4, 0.62, 0, 0.8, 0.14, 1.05, 0xe9d6c0);
+    for (const lx of [-0.9, 0.95]) for (const lz of [-0.55, 0.55]) P.box(lx, 1.12, lz, 0.04, 1.0, 0.04, 0xe8ebee);
+    P.box(0.0, 1.66, 0, 2.2, 0.06, 1.3, 0xf2f2ee);
+    P.box(1.3, 0.55, 0, 0.12, 0.3, 0.9, body);
+    for (const [lx, lz] of [[0.85, 0.6], [0.85, -0.6], [-0.75, 0.6], [-0.75, -0.6]] as const) { P.cyl(lx, 0.22, lz, 0.22, 0.14, TYRE); }
   } else {
     P.box(0, 0.6, 0, 4.7, 0.5, 1.85, body);
     P.box(-0.2, 1.1, 0, 2.5, 0.5, 1.7, body); P.box(-0.2, 1.12, 0, 2.4, 0.4, 1.74, GLASS);
     wheel(1.45, 0.9); wheel(1.45, -0.9); wheel(-1.4, 0.9); wheel(-1.4, -0.9);
+  }
+  // what every car has and these did not: a plate, a bumper, and (on some) a kayak on the roof, because Marathon
+  const hash = [...c.id].reduce((a, ch) => a + ch.charCodeAt(0), 0);
+  if (c.kind !== 'cart') {
+    P.box(-2.41, 0.5, 0, 0.02, 0.15, 0.34, 0xf4f1e6); P.box(-2.415, 0.55, 0, 0.02, 0.025, 0.3, 0xe48a2c);
+    P.box(-2.4, 0.32, 0, 0.09, 0.12, 1.8, 0x2a2d30); P.box(2.4, 0.32, 0, 0.09, 0.12, 1.8, 0x2a2d30);
+    P.box(2.41, 0.5, 0, 0.02, 0.15, 0.34, 0xf4f1e6);
+  }
+  if ((c.kind === 'suv' || c.kind === 'wagon') && hash % 2 === 0) {
+    for (const lx of [-0.9, 0.8]) P.box(lx, c.kind === 'suv' ? 1.66 : 1.46, 0, 0.06, 0.05, 1.2, 0x2a2d30);
+    P.box(-0.1, c.kind === 'suv' ? 1.78 : 1.58, 0.1, 3.4, 0.17, 0.56, [0xe4572e, 0xf2c14e, 0x2bb3a8][hash % 3]);
+    P.box(1.5, c.kind === 'suv' ? 1.78 : 1.58, 0.1, 0.3, 0.12, 0.3, [0xe4572e, 0xf2c14e, 0x2bb3a8][hash % 3]);
   }
   P.box(2.38, 0.62, 0.7, 0.06, 0.16, 0.34, 0xfff4c8); P.box(2.38, 0.62, -0.7, 0.06, 0.16, 0.34, 0xfff4c8);
   P.box(-2.38, 0.62, 0.7, 0.06, 0.14, 0.3, 0xa11b1b); P.box(-2.38, 0.62, -0.7, 0.06, 0.14, 0.3, 0xa11b1b);

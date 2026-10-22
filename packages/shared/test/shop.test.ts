@@ -3,6 +3,7 @@
  * collapses into one `Modifiers` bag instead of each system asking about item ids.
  */
 import { describe, expect, it } from 'vitest';
+import { STARTER_TACKLE, TACKLE_KEY_PREFIX, ownedTackle, tackleById } from '../src/content/tackle.js';
 import { VENUES } from '../src/content/venues.js';
 import {
   buy, emptyInventory, modifiersFor, useOne, countOf, has, pruneBuffs, buffActive,
@@ -25,6 +26,27 @@ describe('the shelf', () => {
   const DELISTED: Readonly<Record<string, string>> = {
     fuel: 'No fuel tank exists in sim/boat.ts. A tank that can run dry strands the player; one that cannot is a gauge that never matters.',
   };
+
+  it('no venue advertises something for "one day" — the copy promises only what ships', () => {
+    // The complaint this comes from: the town was full of things described as coming later, which
+    // reads as a broken game rather than a roadmap. Two blurbs went on saying a round / a hot
+    // breakfast "will one day" do something for months after both buffs were actually wired, and
+    // the Stop-N-Go promised fuel that is deliberately delisted. Prose is the one part of a shop
+    // nothing else type-checks, so it gets a guard of its own.
+    // "will be <anything>" is deliberately broad: the tackle shop's own blurb read "this is where
+    // better tackle will be bought" for as long as the ladder went unsold, and a narrower pattern
+    // let exactly that through when this guard was first written.
+    const FUTURE = /\bwill (?:one day|soon|be)\b|\bone day\b|\bcoming (?:soon|later)\b|\bnot yet\b/i;
+    for (const v of Object.values(VENUES)) {
+      for (const [field, text] of [['blurb', v.blurb], ['tagline', v.tagline]] as const) {
+        expect(FUTURE.test(text), `${v.id} ${field} promises something later: "${text}"`).toBe(false);
+      }
+      for (const s of v.sells) {
+        if (s.status !== 'live') continue;
+        expect(FUTURE.test(s.blurb), `${v.id}/${s.id} blurb promises something later`).toBe(false);
+      }
+    }
+  });
 
   it('every item is for sale, priced, and maps to an effect — or is delisted on purpose', () => {
     for (const v of Object.values(VENUES)) {
@@ -51,7 +73,18 @@ describe('the shelf', () => {
     for (const v of Object.values(VENUES)) {
       for (const s of v.sells) {
         if (s.effect.kind !== 'gear' && s.effect.kind !== 'buff') continue;
-        const m = modifiersFor(own([v.id, s.id]), 0);
+        const inv = own([v.id, s.id]);
+        // A line rung does not act through the modifier bag and must not: the bag is what the rod
+        // and reel MULTIPLY the rung by, so folding a rung in there would count it twice. Its
+        // effect is that it replaces the outfit the fight is normalised against, so that is what
+        // gets checked — the guarantee ("it does something for your money") is the same one.
+        if (s.effect.key.startsWith(TACKLE_KEY_PREFIX)) {
+          const got = ownedTackle(inv.gear);
+          expect(got.id, `${v.id}/${s.id} did not become the rung in use`).toBe(s.effect.key.slice(TACKLE_KEY_PREFIX.length));
+          expect(got.lineLb, `${v.id}/${s.id} is not an upgrade on the starter`).toBeGreaterThan(tackleById(STARTER_TACKLE).lineLb);
+          continue;
+        }
+        const m = modifiersFor(inv, 0);
         expect(JSON.stringify(m), `${v.id}/${s.id} (${s.effect.key}) is inert`).not.toBe(JSON.stringify(NO_MODIFIERS));
       }
     }
