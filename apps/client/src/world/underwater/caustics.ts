@@ -43,6 +43,24 @@ import * as THREE from 'three';
 import { Effect, EffectAttribute, BlendFunction } from 'postprocessing';
 import { CAUSTICS_FULL_DEPTH, CAUSTICS_GONE_DEPTH } from './depth-bands.js';
 
+/**
+ * How strong the additive caustic term is at its brightest, how far it reaches, and where the
+ * falloff starts.
+ *
+ * `GAIN` was 0.55 and is the single number that made the whole underwater world look washed out:
+ * an unconditional additive 0.55 * (0.65, 0.95, 1.0) on EVERY underwater pixel is most of a stop
+ * of exposure, applied after the fog has already lifted distant pixels toward the haze colour.
+ * 0.26, gated by facing and distance below, puts a visible moving pattern on the sand without
+ * touching the contrast of anything in the water column.
+ *
+ * The reach is deliberately shorter than the depth-band visibility table: caustics are the one
+ * thing you see on the ground right in front of you, and a pattern still crawling over a shape at
+ * the edge of visibility reads as a bug, not as light.
+ */
+const CAUSTICS_GAIN = 0.26;
+const CAUSTICS_NEAR_M = 6;
+const CAUSTICS_REACH_M = 22;
+
 const fragmentShader = /* glsl */ `
 uniform mat4 uwcCameraWorld;
 uniform float uwcTanHalfFovY;
@@ -82,7 +100,27 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth,
   if (band <= 0.001) { outputColor = inputColor; return; }
 
   float pat = uwcPattern(worldPos.xz * 0.6, time);
-  outputColor = vec4(inputColor.rgb + vec3(0.65, 0.95, 1.0) * pat * band * 0.55, inputColor.a);
+
+  // Caustics land on surfaces FACING UP. Projecting on world XZ alone put the same lift on the
+  // seafloor, on a reef wall and on the flank of a fish — and a fish spans so little XZ that its
+  // whole body took one value, a flat wash rather than a moving pattern. The geometric normal is
+  // free here: worldPos is already reconstructed per pixel, so its screen-space derivatives give
+  // the facing of whatever is drawn, with no normal buffer and no change to any material.
+  // Screen-space derivatives are core in GLSL ES 3.00, which is what postprocessing compiles to.
+  vec3 gn = normalize(cross(dFdx(worldPos), dFdy(worldPos)));
+  float up = abs(gn.y);                       // abs, not max: winding flips with facing
+  float facing = 0.25 + 0.75 * up * up;       // floor so a wall catches a little, not nothing
+
+  // ...and they have to fade with DISTANCE, or they do not obey the water. This is added in screen
+  // space AFTER the fog chunk has already faded distant pixels to the inscatter haze, so without
+  // this a fish at 25 m received exactly the same lift as one at arm's length and came out
+  // brighter than the water it was supposed to be disappearing into. Everything underwater was
+  // bleached to a pale cut-out at every quality tier that runs post-processing; at Low, which has
+  // no composer, the same fish kept its blue-green back and gold flanks.
+  float dist = length(viewPos);
+  float reach = 1.0 - smoothstep(${CAUSTICS_NEAR_M.toFixed(1)}, ${CAUSTICS_REACH_M.toFixed(1)}, dist);
+
+  outputColor = vec4(inputColor.rgb + vec3(0.65, 0.95, 1.0) * pat * band * facing * reach * ${CAUSTICS_GAIN.toFixed(3)}, inputColor.a);
 }
 `;
 
