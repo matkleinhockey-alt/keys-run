@@ -33,3 +33,12 @@
 #tlAct{right:16px;bottom:96px;background:var(--sun);color:var(--gulf);border:none;font:800 22px var(--display)}
 #tlBoat{right:16px;bottom:172px;font-size:20px}
 @media (max-width:760px){#landHud{left:10px;top:10px}#landHelp{display:none}}
+
+/* gift shop changing room (changing-room.ts) */
+#landPanel .changing{margin-top:14px;padding-top:10px;border-top:1px solid rgba(255,255,255,.12)}
+#landPanel .changing h3{margin:0 0 8px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--sun)}
+#landPanel .slotrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:8px}
+#landPanel .slotrow>span{flex:0 0 74px;font-size:12px;color:var(--muted)}
+#landPanel .slotrow .wear{display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border-radius:999px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:inherit;font:inherit;font-size:12px;cursor:pointer}
+#landPanel .slotrow .wear.on{background:rgba(255,255,255,.22);border-color:var(--sun);font-weight:700}
+#landPanel .slotrow .wear i{width:10px;height:10px;border-radius:50%;border:1px solid rgba(0,0,0,.4)}

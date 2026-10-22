@@ -31,10 +31,12 @@ import * as THREE from 'three';
 import type { BoatState } from '@keysrun/shared/sim/boat';
 import { DECK_TOP, PAD, PAD_Y, SURFACES, TOWN_FRAME, toLocal, COLLIDERS, groundAt } from '@keysrun/shared/world/town';
 import { VENUES } from '@keysrun/shared/content/venues';
+import { buy, emptyInventory } from '@keysrun/shared/sim/shop';
 import type { LightMatEntry } from '../../core/time-of-day.js';
 import type { BoatModel } from '../boat/model.js';
 import type { CamState, FpState } from '../camera.js';
 import { makeHuman, type Human } from '../life/human.js';
+import { createOutfitSync, wardrobe } from '../life/outfit.js';
 import { createTown, type Town } from '../town/town.js';
 import { animateGait } from '../town/people.js';
 import { createLandController, type LandController, type LandMode } from './controller.js';
@@ -110,6 +112,10 @@ export function createLandSystem(deps: LandDeps): LandSystem {
   let panel: 'none' | 'open' = 'none';
   const visits = new Map<string, number>();
   let lastDockPrompt: string | null = null;
+  // Cosmetics (entities/life/outfit.ts): dresses the walking body and the captain from the shared
+  // Inventory.wearing. Lives here because this facade already owns the body and is handed the model
+  // and the shadow sweep -- which keeps game/world.ts untouched.
+  const outfit = createOutfitSync({ body: () => body, model: () => deps.getModel(), onBuilt: deps.onBuilt });
 
   // ---------------------------------------------------------------- the player's body
   function ensureBody(): Human {
@@ -311,6 +317,14 @@ export function createLandSystem(deps: LandDeps): LandSystem {
     camera: () => ({ near: camera.near, far: camera.far, fov: +camera.fov.toFixed(2), x: +camera.position.x.toFixed(1), y: +camera.position.y.toFixed(1), z: +camera.position.z.toFixed(1) }),
     boatCam: () => ({ yaw: +deps.camState.yaw.toFixed(3), pitchOff: +deps.camState.pitchOff.toFixed(3), zoom: deps.camState.zoom, dYaw: +deps.fpState.dYaw.toFixed(3), dPitch: +deps.fpState.dPitch.toFixed(3), view: deps.fpState.view, pref: deps.fpState.pref }),
     pad: PAD,
+    // verification only: own everything / wear / strip (the till is not wired to the wallet yet)
+    wardrobe: {
+      giveAll: () => { let inv = emptyInventory(); for (const s of VENUES.gifts.sells) inv = buy(inv, 'gifts', s.id, 1e9, 0).inventory; wardrobe.set(inv); },
+      buy: (id: string) => { const r = buy(wardrobe.get(), 'gifts', id, 1e9, 0); wardrobe.set(r.inventory); return r.reason ?? 'ok'; },
+      wear: (k: string) => { wardrobe.wear(k); },
+      takeOff: (s: string) => { wardrobe.takeOff(s); },
+      state: () => wardrobe.get(),
+    },
     colliders: COLLIDERS.length,
   };
 
@@ -343,6 +357,7 @@ export function createLandSystem(deps: LandDeps): LandSystem {
 
     update(dt, t) {
       town.update(dt, t, camera.position);
+      outfit.update(); // two pointer compares per frame; builds nothing unless the outfit changed
       updateDockPrompt();
       if (ctl.mode === 'land') { updateBodyAndRope(); updateHud(); }
     },

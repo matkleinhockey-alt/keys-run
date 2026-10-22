@@ -12,6 +12,7 @@
  * about the venues needs to change.
  */
 import { VENUES, type Venue } from '@keysrun/shared/content/venues';
+import { mountChangingRoom } from './changing-room.js';
 import './land.css';
 
 function $(id: string): HTMLElement | null { return document.getElementById(id); }
@@ -92,6 +93,10 @@ export function createLandHud(touch: boolean): LandHudHandles {
         ? `<ul class="shelf">${v.sells.map((s) => `<li><b>${esc(s.name)}</b><small>${esc(s.blurb)}</small><span class="px">$${s.price}<i>${s.status === 'planned' ? 'stock arriving' : 'in stock'}</i></span></li>`).join('')}</ul>`
         : '<p class="blurb">Nothing on the shelves for you yet.</p>';
       open(`<h2>${esc(v.name)}</h2><div class="vtag">${esc(v.tagline)}</div><p class="say">“${esc(say)}”</p><p class="blurb">${esc(v.blurb)}</p>${shelf}<div class="foot"><span>Nothing is for sale yet — the till opens when the economy does.</span><button type="button" id="landPanelClose">Back outside</button></div>`, cb);
+      // The gift shop also has a changing room (swap / take off what you bought). Mounted after
+      // open() on purpose -- see changing-room.ts.
+      const panel = $('landPanel');
+      if (id === 'gifts' && panel) mountChangingRoom(panel);
     },
     openPlaque(title, text, cb) {
       open(`<h2>${esc(title)}</h2><p class="blurb" style="margin-top:12px">${esc(text)}</p><div class="foot"><span></span><button type="button" id="landPanelClose">Carry on</button></div>`, cb);

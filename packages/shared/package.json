@@ -109,6 +109,14 @@
     "./sim/shop": {
       "types": "./dist/sim/shop.d.ts",
       "default": "./dist/sim/shop.js"
+    },
+    "./sim/wardrobe": {
+      "types": "./dist/sim/wardrobe.d.ts",
+      "default": "./dist/sim/wardrobe.js"
+    },
+    "./content/cosmetics": {
+      "types": "./dist/content/cosmetics.d.ts",
+      "default": "./dist/content/cosmetics.js"
     }
   },
   "scripts": {
