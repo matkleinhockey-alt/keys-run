@@ -162,6 +162,24 @@ def build_stripper():
     bpy.ops.object.mode_set(mode='OBJECT')
     print("stripper weld", nb, "->", len(mesh.data.vertices), "verts")
 
+    # The source material is KHR_materials_unlit (baked-looking, ignores every light), which would
+    # glow like a cut-out in a room whose whole look is its lighting; and an unlit export carries no
+    # normals. Rebuild it as a plain lit Principled material on the SAME texture. Nothing about the
+    # clothes or the texture changes.
+    for mat in mesh.data.materials:
+        nt = mat.node_tree
+        tex_name = next(n.name for n in nt.nodes if n.type == 'TEX_IMAGE')
+        for n in list(nt.nodes):
+            if n.name != tex_name:
+                nt.nodes.remove(n)
+        tex = nt.nodes[tex_name]
+        out = nt.nodes.new('ShaderNodeOutputMaterial')
+        bsdf = nt.nodes.new('ShaderNodeBsdfPrincipled')
+        bsdf.inputs['Roughness'].default_value = 0.85
+        nt.links.new(tex.outputs[0], bsdf.inputs[0])
+        nt.links.new(bsdf.outputs['BSDF'], out.inputs['Surface'])
+        mat.use_backface_culling = False
+
     arm_data = bpy.data.armatures.new("StripperRig")
     arm = bpy.data.objects.new("Armature", arm_data)
     bpy.context.scene.collection.objects.link(arm)
