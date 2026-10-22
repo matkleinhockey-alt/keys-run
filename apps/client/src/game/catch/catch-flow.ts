@@ -172,6 +172,10 @@ export interface CatchFlowDeps {
   scene: THREE.Scene;
   getModel(): BoatModel;
   getBoatSpec(): BoatSpecRef;
+  /** Pays the player for a landed fish (game/economy/system.ts). Optional so harnesses that build
+   * a catch flow without a wallet still work. Called from `landFish` — the one path rod and spear
+   * both take — so every landing pays exactly once, whichever tool landed it. */
+  economy?: { payForCatch(key: string, weight: number): { value: number; trophy: boolean; personalBest: boolean } };
 }
 
 export function createCatchFlow(deps: CatchFlowDeps) {
@@ -217,6 +221,16 @@ export function createCatchFlow(deps: CatchFlowDeps) {
     // may ever be allowed to break the catch card or the frame loop over this.
     try { submitCatch(fish.key, fish.weight); } catch (e) { console.error('submitCatch', e); }
 
+    // Paid on landing, before keep/release: see sim/economy.ts's `stepCatch` for why. Wrapped for
+    // the same reason as submitCatch above.
+    let cashLine = '';
+    try {
+      const pay = deps.economy?.payForCatch(fish.key, fish.weight);
+      if (pay && pay.value > 0) {
+        cashLine = `+$${pay.value.toLocaleString('en-US')}` + (pay.trophy ? ' · trophy' : '') + (pay.personalBest ? ' · personal best' : '');
+      }
+    } catch (e) { console.error('economy', e); }
+
     const fs = fishStats(fish.key, fish.weight);
     lastPts = pts; lastStats = fs; current = fish; caughtAt = performance.now();
     currentSource = fish.source === 'spear' ? 'spear' : 'rod';
@@ -230,6 +244,7 @@ export function createCatchFlow(deps: CatchFlowDeps) {
     const ml = meatLine(fish.key, fish.weight);
     if (priceEl) { priceEl.textContent = ml ? '💲 ' + ml : ''; priceEl.style.display = ml ? '' : 'none'; }
     setText('cPts', pts.toLocaleString());
+    setText('cCash', cashLine);
     setText('cFact', S.fact);
     const bonusEl = $('cBonus');
     if (bonusEl) { bonusEl.textContent = bonus; bonusEl.classList.toggle('hidden', !bonus); }
