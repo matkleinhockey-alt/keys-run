@@ -22,6 +22,7 @@ import * as THREE from 'three';
 import { hashCell } from '@keysrun/shared/rng';
 import { islands, islandWorld, type Island } from '@keysrun/shared/world/chain';
 import { landH, onCourse, creekDist, CREEKS, RUNWAY } from '@keysrun/shared/world/depth';
+import { inTownFootprint } from '@keysrun/shared/world/town';
 import { lerp, rand } from '../core/math.js';
 import { grainTex, normalTex } from '../core/textures.js';
 import { WORLD_SEED, SALT } from '../state/constants.js';
@@ -105,6 +106,7 @@ function buildVegetation(group: THREE.Group): VegetationResult {
       const w = islandWorld(I, lx, lz);
       const h = landH(w[0], w[1]);
       if (h < 1.2 || (I.mainland && (Math.abs(w[0]) > 5200 || w[1] < -3900))) continue;
+      if (inTownFootprint(w[0], w[1], 6)) continue; // Boot Key Harbor City's streets (entities/town)
       if (I.mainland && inCity(w[0], w[1]) && hashCell(WORLD_SEED, idx, k, SALT.PALM_SKIP_CITY) < 0.7) continue;
       palms.push({
         x: w[0], z: w[1], y: h - 0.1,
@@ -121,7 +123,7 @@ function buildVegetation(group: THREE.Group): VegetationResult {
       const lx = Math.cos(ang) * r * I.a, lz = Math.sin(ang) * r * I.b;
       if (onCourse(I, lx, lz) || (Math.abs(lz) < 14 && I.b > 150)) continue;
       const w = islandWorld(I, lx, lz), h = landH(w[0], w[1]);
-      if (h < 1.3 || creekDist(w[0], w[1]) < 12 || I.noHouses || (I.mainland && (inCity(w[0], w[1]) || Math.abs(w[0]) > 5200 || w[1] < -3900))) continue;
+      if (inTownFootprint(w[0], w[1], 10) || h < 1.3 || creekDist(w[0], w[1]) < 12 || I.noHouses || (I.mainland && (inCity(w[0], w[1]) || Math.abs(w[0]) > 5200 || w[1] < -3900))) continue;
       houses.push({ I, x: w[0], z: w[1], y: h, r: -I.th + (hashCell(WORLD_SEED, idx, k, SALT.HOUSE_ROT) < 0.5 ? 0 : Math.PI / 2) });
     }
 

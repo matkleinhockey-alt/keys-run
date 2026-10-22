@@ -50,6 +50,7 @@ import { createDiverModel } from '../entities/diver/model.js';
 import { applyDiverVisuals } from '../entities/diver/visuals.js';
 import { updateDiverCamera } from '../entities/diver/camera.js';
 import { updateDiverHud, showDiverHud, clearBlackoutOverlay } from '../entities/diver/hud.js';
+import { createLandSystem } from '../entities/land/index.js';
 
 import { SPEAR_RANGE, closestDistSqSegmentSegment } from '@keysrun/shared/sim/spear';
 import { createSpeargun, type DiverAimInput, type SpearTarget } from '../entities/speargun/index.js';
@@ -390,7 +391,7 @@ export function initWorld(wrap: HTMLElement): World {
     // R is already the rod's reel-in key (game/fishing/input.ts) and these are two separate
     // keydown listeners, so an unguarded binding here fired BOTH — reeling in and starting a race
     // on the same press. Race mode only takes R when the rod is idle and you are not diving.
-    if (e.code === 'KeyR' && FishF.state === 'idle' && diver.mode !== 'diver') raceMode.toggle();
+    if (e.code === 'KeyR' && FishF.state === 'idle' && diver.mode !== 'diver' && land.mode !== 'land') raceMode.toggle();
     if (e.code === 'KeyG') applyQuality(QUALITY_TIERS[(QUALITY_TIERS.indexOf(quality.tier) + 1) % QUALITY_TIERS.length]);
   });
   document.getElementById('btnQuality')?.addEventListener('click', () => {
@@ -459,9 +460,21 @@ export function initWorld(wrap: HTMLElement): World {
     // Space doubles as the diver's ascend key (entities/diver/input.ts) and this module's own
     // window-level Space listener has no idea diving exists — see fishing/input.ts's
     // `isSuspended` doc comment for the bug this closes (a stray rod cast firing mid-dive).
-    isSuspended: () => diver.mode === 'diver',
+    isSuspended: () => diver.mode === 'diver' || land.mode === 'land',
   });
   bindCatchInput(catchFlow, () => stateBox.state);
+
+  // 13c-2. land mode (entities/land/**, entities/town/**): tie up at a marina, walk Boot Key Harbor
+  // City. A third peer beside the boat and the diver; everything mode-shaped lives in the facade,
+  // and this file touches it only where marked `land.` below. See entities/land/index.ts's header.
+  const land = createLandSystem({
+    scene, camera, canvas: renderer.domElement, sky: sceneCtx.sky, sunDisc: sceneCtx.sunDisc, sunDir,
+    camState, fpState, lightMats: tod.lightMats, getTodK: tod.getK, onBuilt: (g) => shadows.applyToSubtree(g),
+    isTouch: isTouch(), getBoat: () => stateBox.state, getHullLen: () => boatSpec.len, getModel: () => model,
+    refuse: () => (diver.mode === 'diver' ? 'Climb back aboard first.' : FishF.state === 'fight' ? 'Land your fish first.' : catchFlow.current ? 'Finish with your catch first.' : null),
+    prepare: () => { if (FishF.state !== 'idle' && FishF.state !== 'caught') fishing.reelIn(); },
+    toast, gameRunning: () => game.running,
+  });
 
   // 13d. speargun (entities/speargun/**) — first-person harpoon. Fires at whatever
   // `getSpearTargets` below returns and, on a hit, lands through the exact same `catchFlow.
@@ -540,6 +553,7 @@ export function initWorld(wrap: HTMLElement): World {
 
   function toggleDive(): void {
     if (!game.running) return;
+    if (land.mode === 'land') { toast('Back to the boat first (B).'); return; }
     if (diver.mode === 'boat') {
       // legacy-mirroring guard (see the onGo/placeBoat reelIn call above): going overboard with a
       // line out would otherwise leave fishing's state machine holding a rod-tip/bobber reference
@@ -655,6 +669,7 @@ export function initWorld(wrap: HTMLElement): World {
     game.running = false;
     input.fwd = input.back = input.left = input.right = false;
     if (diver.mode === 'diver') { diver.exitToBoat(); setDiveUI(false); }
+    land.exitToBoat();
     const lede = document.getElementById('lede');
     if (lede) lede.textContent = 'Switch boats any time.';
     const go = document.getElementById('btnGo');
@@ -703,6 +718,8 @@ export function initWorld(wrap: HTMLElement): World {
     // and keeps drifting under its own wave/current forces — stepBoat already applies those at
     // zero throttle/steer) but never sees player input. See entities/diver/controller.ts.
     //
+    // Ashore, the same applies for the same reason (entities/land/**): the driver is on the dock.
+    //
     // The reel key is ALSO the astern throttle: game/fishing/update.ts reads `boatInput.back` as
     // "reel" (the rod deliberately reuses the driving keys rather than inventing its own), and
     // `entities/boat/input.ts` maps the same ArrowDown/S to `back`. So reeling a fish in backed
@@ -716,10 +733,13 @@ export function initWorld(wrap: HTMLElement): World {
     // without the boat acting on it, and leaves forward/steering alone so you can still drive
     // after a running fish.
     const rodHasLine = fishingLineOut() || FishF.state === 'caught';
-    const boatInput = diver.mode === 'diver' ? NEUTRAL_BOAT_INPUT
+    const boatInput = diver.mode === 'diver' || land.mode === 'land' ? NEUTRAL_BOAT_INPUT
       : rodHasLine && input.back ? { ...input, back: false }
       : input;
-    const next = stepBoat(stateBox.state, boatInput, env, dt);
+    // `land.holdBoat` pins the hull where it was tied up — it must wrap the stepped state rather
+    // than the input, because a moored boat still has to stop drifting on waves/current, which
+    // stepBoat applies regardless of throttle.
+    const next = land.holdBoat(stepBoat(stateBox.state, boatInput, env, dt));
     stateBox.state = next;
     fishing.update(dt, simTime, next, sw, ch);
     return next.events;
@@ -738,6 +758,7 @@ export function initWorld(wrap: HTMLElement): World {
       prevState = stateBox.state;
       events.push(...fixedStep(DT));
       diverEvents.push(...diver.step(simTime, DT, stateBox.state.x, stateBox.state.z));
+      land.step(DT);
       // entities/speargun/** ticks at this same fixed rate, right alongside the diver physics it
       // reads from — sim/spear.ts's 25 m/s / SPEAR_RANGE maths assumes a steady small dt, the same
       // reason fishing.update() above is driven from fixedStep rather than frame()'s variable dt.
@@ -821,6 +842,7 @@ export function initWorld(wrap: HTMLElement): World {
       setDiveUI(diver.mode === 'diver');
       prevDiverMode = diver.mode;
     }
+    land.syncMode();
 
     // Render interpolates the leftover fraction of a step (docs/ARCHITECTURE.md requirement 2):
     // only the smoothly-varying transform fields are blended between the last two completed
@@ -922,6 +944,8 @@ export function initWorld(wrap: HTMLElement): World {
       sceneCtx.sky.position.copy(camera.position);
       sceneCtx.sunDisc.position.copy(camera.position).addScaledVector(sunDir, 5000);
       sceneCtx.sunDisc.lookAt(camera.position);
+    } else if (land.mode === 'land') {
+      land.updateCamera(clamped, simTime);
     } else {
       updateCamera(clamped, { camera, sky: sceneCtx.sky, sunDisc: sceneCtx.sunDisc, sunDir }, camState, fpState, model, renderState, game.running, boatSpec.len);
       // DEV/VERIFICATION HOOK ONLY — lets a Playwright screenshot script place the camera directly
@@ -946,6 +970,7 @@ export function initWorld(wrap: HTMLElement): World {
     // After the camera's final position for this frame (diver rig, boat rig, or the debug
     // override above) is set, so terrain chunks stream around wherever the viewer actually ended
     // up — otherwise a debug-placed or just-submerged camera would sit over unbuilt seabed.
+    land.update(clamped, simTime);
     seafloor.update(camera.position);
     // Reef chunk residency follows the (now up-to-date) camera position — a no-op unless the
     // viewer crossed into a new 50 m chunk this frame; never a per-frame rebuild.

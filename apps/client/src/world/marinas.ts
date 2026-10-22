@@ -15,6 +15,7 @@ import * as THREE from 'three';
 import { hashCell } from '@keysrun/shared/rng';
 import { chainZ, shoreInfo } from '@keysrun/shared/world/chain';
 import { depthAt, MARINAS, GOLF, type Marina } from '@keysrun/shared/world/depth';
+import { marinaDeckBoxes } from '@keysrun/shared/world/town';
 import { HULLS } from '@keysrun/shared/content/boats';
 import type { DockRect } from '@keysrun/shared/sim/boat';
 import { buildHullGeo } from '../entities/boat/hull.js';
@@ -87,16 +88,12 @@ export function createMarinas(): MarinasResult {
   MARINAS.forEach((M: Marina, mi: number) => {
     const { sx, sz, dir } = M;
     const Z = (o: number) => sz + dir * o;
-    addBox(3, 0.35, 56, sx, 1.25, Z(20), wood, true);
-    addBox(26, 0.35, 3, sx, 1.25, Z(48), wood, true);
+    // The planks come from shared/world/town.ts's `marinaDeckBoxes`, the same boxes a person on foot
+    // is allowed to stand on (land mode) — one source of truth, so the dock you see is the dock you walk.
+    marinaDeckBoxes(M).forEach((b) => addBox(b.w, b.t, b.d, b.cx, b.y, b.cz, wood, true));
     for (let o = -6; o <= 48; o += 6) { piles.push([sx - 1.6, Z(o)], [sx + 1.6, Z(o)]); }
     for (let x = -12; x <= 12; x += 6) piles.push([sx + x, Z(49.6)]);
-    ([14, 26, 38] as const).forEach((o) => {
-      for (const s of [-1, 1]) {
-        addBox(10, 0.3, 1.4, sx + s * 6.5, 1.2, Z(o), wood, true);
-        piles.push([sx + s * 11.4, Z(o)]);
-      }
-    });
+    ([14, 26, 38] as const).forEach((o) => { for (const s of [-1, 1]) piles.push([sx + s * 11.4, Z(o)]); });
     ([[-1, 20], [1, 20], [-1, 32], [1, 32]] as const).forEach(([s, o], k) => {
       if ((k + mi) % 4 === 3) return;
       const c = BOATC[(k + mi) % 4], b = makeDockBoat(c[0], c[1]);

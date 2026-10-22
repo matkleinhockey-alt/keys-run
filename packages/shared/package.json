@@ -18,6 +18,18 @@
       "types": "./dist/world/relief.d.ts",
       "default": "./dist/world/relief.js"
     },
+    "./world/town": {
+      "types": "./dist/world/town.d.ts",
+      "default": "./dist/world/town.js"
+    },
+    "./content/venues": {
+      "types": "./dist/content/venues.d.ts",
+      "default": "./dist/content/venues.js"
+    },
+    "./sim/walker": {
+      "types": "./dist/sim/walker.d.ts",
+      "default": "./dist/sim/walker.js"
+    },
     "./world/current": {
       "types": "./dist/world/current.d.ts",
       "default": "./dist/world/current.js"

@@ -1,0 +1,35 @@
+/* Land mode HUD (entities/land/hud.ts). Kept beside the module that builds the DOM, not in
+   style.css: this is a peer of the diver HUD and arrives with its own markup. */
+#landHud{position:absolute;left:14px;top:14px;display:flex;flex-direction:column;gap:8px;align-items:flex-start;pointer-events:none}
+#landHud .landCard{padding:10px 14px;min-width:200px}
+#landPlace{display:block;font:800 20px/1 var(--display);letter-spacing:.02em;text-transform:uppercase}
+#landSub{display:block;margin-top:4px;font-size:12px;color:var(--muted)}
+#landBoat{display:block;margin-top:8px;font-size:12px;color:var(--ink)}
+#landBoat b{color:var(--sun)}
+#landHelp{font-size:11px;color:var(--muted);max-width:260px;line-height:1.45}
+#landPrompt,#dockPrompt{position:absolute;left:50%;bottom:92px;transform:translateX(-50%);padding:9px 18px;border-radius:30px;background:var(--sun);color:var(--gulf);font-weight:700;font-size:14px;white-space:nowrap;pointer-events:none;box-shadow:0 4px 18px rgba(0,0,0,.35)}
+#dockPrompt{bottom:130px;background:var(--flats)}
+#landPrompt kbd,#dockPrompt kbd{background:rgba(0,0,0,.18);border-radius:5px;padding:1px 6px;margin-right:6px;font-family:var(--display);font-size:15px}
+#landPanel{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,92vw);max-height:84vh;overflow:auto;padding:22px 24px;z-index:30;pointer-events:auto}
+#landPanel h2{margin:0;font:800 30px/1 var(--display);letter-spacing:.02em;text-transform:uppercase}
+#landPanel .vtag{margin:6px 0 14px;font-size:13px;color:var(--flats)}
+#landPanel .say{margin:0 0 14px;padding:10px 14px;border-left:3px solid var(--sun);font-style:italic;color:var(--ink)}
+#landPanel p.blurb{margin:0 0 14px;font-size:14px;line-height:1.5;color:var(--muted)}
+#landPanel .shelf{margin:0;padding:0;list-style:none;display:grid;gap:6px}
+#landPanel .shelf li{display:grid;grid-template-columns:1fr auto;gap:2px 12px;padding:8px 10px;border-radius:9px;background:rgba(255,255,255,.06);opacity:.8}
+#landPanel .shelf b{font-size:14px}
+#landPanel .shelf small{grid-column:1;color:var(--muted);font-size:12px}
+#landPanel .shelf .px{grid-row:1/3;grid-column:2;text-align:right;font-weight:700}
+#landPanel .shelf .px i{display:block;font-style:normal;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--sun)}
+#landPanel .foot{margin-top:14px;display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:12px;color:var(--muted)}
+#landPanel button{background:var(--sun);color:var(--gulf);border:none;border-radius:20px;padding:8px 18px;font-weight:700;font-size:13px}
+#touchLand{position:absolute;inset:auto 0 0 0;height:0}
+#tlL{left:16px;bottom:20px}
+#tlR{left:90px;bottom:20px}
+#tlUp{right:104px;bottom:96px}
+#tlDn{right:104px;bottom:20px}
+#tlRun{right:16px;bottom:20px;background:rgba(242,193,78,.18)}
+#tlRun.on{background:var(--sun);color:var(--gulf)}
+#tlAct{right:16px;bottom:96px;background:var(--sun);color:var(--gulf);border:none;font:800 22px var(--display)}
+#tlBoat{right:16px;bottom:172px;font-size:20px}
+@media (max-width:760px){#landHud{left:10px;top:10px}#landHelp{display:none}}
