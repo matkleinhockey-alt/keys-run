@@ -1,0 +1,13 @@
+/* The "F  Prise open the strongbox" prompt (entities/life/wreck-treasure.ts). Kept beside the
+   module that builds its DOM, like entities/land/land.css, and deliberately the same pill the land
+   prompt uses — it is the same verb in a different place, so it should not look like a new system.
+   Sat a little higher than #landPrompt's 92px: the diver HUD's reboard button owns the bottom of
+   the screen, and the touch swim pad owns the corners. */
+#lootPrompt{position:absolute;left:50%;bottom:110px;transform:translateX(-50%);padding:9px 18px;border-radius:30px;background:var(--sun);color:var(--gulf);font-weight:700;font-size:14px;white-space:nowrap;pointer-events:none;box-shadow:0 4px 18px rgba(0,0,0,.35);z-index:9}
+#lootPrompt kbd{background:rgba(0,0,0,.18);border-radius:5px;padding:1px 6px;margin-right:6px;font-family:var(--display);font-size:15px}
+/* Seen but not yet in reach: the same pill, dimmed and cooled off, so "swim 9 m that way" never
+   reads as "press F now". */
+#lootPrompt.far{background:rgba(9,40,70,.72);color:var(--ink);font-weight:600;font-size:13px;box-shadow:0 3px 12px rgba(0,0,0,.3)}
+/* In reach: the pill is also the touch button (wreck-treasure.ts's `onPromptTap`). */
+#lootPrompt.tappable{pointer-events:auto;cursor:pointer}
+@media (max-width:760px){#lootPrompt{bottom:230px;font-size:13px}}
