@@ -88,6 +88,8 @@ export interface Speargun {
   /** Player's hand is on the bands (R / touch draw button). Reloading is this, held — the gun
    * never reloads itself (sim/spear.ts `stepReload`). */
   setDrawing(v: boolean): void;
+  /** Flips the haul on or off — the R key's binding. See `setDrawing`. */
+  toggleDraw(): void;
   /** Reload progress for the HUD/tests: `draw` 0..1, `recoverLeft` seconds of brace remaining. */
   getReloadState(): { loaded: boolean; draw: number; recoverLeft: number };
   /** True while a shaft is in flight or a fish is speared — callers can use this the way
@@ -234,12 +236,11 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
   }
 
   function setHauling(v: boolean): void { hauling = v; }
-  /** `v` is the key/button going DOWN. The release is ignored — see `drawLatched`. */
-  function setDrawing(v: boolean): void {
-    if (!v) return;
-    drawLatched = !drawLatched;
-    drawing = drawLatched;
-  }
+  /** Explicit: start or stop hauling. Setting it true latches, so the haul survives a key release. */
+  function setDrawing(v: boolean): void { drawing = v; drawLatched = v; }
+  /** What the R key and the touch draw button are bound to: press once to start the haul, again
+   * to let go. Separate from `setDrawing` so a caller that means "draw" is never read as "stop". */
+  function toggleDraw(): void { setDrawing(!drawLatched); }
   function getReloadState(): { loaded: boolean; draw: number; recoverLeft: number } {
     return { loaded: canFire(gun), draw: gun.draw, recoverLeft: gun.reloadT };
   }
@@ -400,5 +401,5 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
     reloadHint.dispose();
   }
 
-  return { update, tryFire, setHauling, setDrawing, getReloadState, isActive, getFightState, assistTargetId, aimTargetId, lastShotRangeM, shaftsLeft, reset, debugForceReloadReady, setViewVisible, dispose };
+  return { update, tryFire, setHauling, setDrawing, toggleDraw, getReloadState, isActive, getFightState, assistTargetId, aimTargetId, lastShotRangeM, shaftsLeft, reset, debugForceReloadReady, setViewVisible, dispose };
 }

@@ -54,13 +54,15 @@ export function bindSpeargunInput(
   const onKeyDown = (e: KeyboardEvent): void => {
     if (!isActive()) return;
     if (e.code === 'KeyS' || e.code === 'ArrowDown') gun.setHauling(true);
-    else if (e.code === 'KeyR' && !e.repeat) gun.setDrawing(true);
+    else if (e.code === 'KeyR' && !e.repeat) gun.toggleDraw();
   };
   const onKeyUp = (e: KeyboardEvent): void => {
     if (e.code === 'KeyS' || e.code === 'ArrowDown') gun.setHauling(false);
     // No `setDrawing(false)` on the R release: the haul is latched, not held.
   };
-  const onBlur = (): void => { gun.setHauling(false); gun.setDrawing(false); g = null; };
+  // Blur drops the HAUL (that key is held) but not the draw: the draw is latched, and cancelling
+  // it on a lost focus would make an alt-tab mid-reload cost you the bands back to the last notch.
+  const onBlur = (): void => { gun.setHauling(false); g = null; };
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', onKeyUp);
   window.addEventListener('blur', onBlur);
@@ -87,7 +89,7 @@ export function bindSpeargunInput(
     e.preventDefault(); e.stopPropagation();
     tdDraw?.setPointerCapture(e.pointerId);
     tdDraw?.classList.add('on');
-    gun.setDrawing(true);
+    gun.toggleDraw();
   };
   // Releasing the button does not let go of the bands — the haul is latched (see this file's
   // header). The button's `on` class tracks the finger, so `index.ts` owning the latch means the
