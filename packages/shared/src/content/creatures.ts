@@ -153,7 +153,35 @@ export const VIS: Record<string, CreatureVis> = {
   // stripes running along a silver belly (unique among tunas; `hline` pattern below). The most
   // abundant schooling tuna there is, which is why its school range is the largest here.
   skipjack:{kind:'tuna',tuna:true,len:.75,h:.2,w:.17,back:'#23344f',belly:'#dfe6ec',fin:'#2b3a52',finlet:'#c8d0d8',sickle:.35,pattern:'hline',level:'surface',speed:3.4,school:[14,30],spread:5.5,dMin:25,dMax:1e5,act:'bust'},
-  humpback:{kind:'whale',len:15,h:2.6,w:2.1,back:'#1c2430',belly:'#8f97a0',pattern:'mottle',level:'surface',speed:1.8,school:[1,2],spread:10,dMin:25,dMax:1e5,act:'blow',catchable:false}
+  humpback:{kind:'whale',len:15,h:2.6,w:2.1,back:'#1c2430',belly:'#8f97a0',pattern:'mottle',level:'surface',speed:1.8,school:[1,2],spread:10,dMin:25,dMax:1e5,act:'blow',catchable:false},
+
+  // ---- The big ones. Everything above is a fish you meet; these are the four you remember. ----
+  //
+  // Three of the four are `catchable: false`, and not as a shortcut: the whale shark and the
+  // giant manta are filter feeders nobody fishes for, and the smalltooth sawfish is federally
+  // endangered and illegal to target in Florida. Only the tiger shark is on a line.
+  //
+  // Rarity lives in the ZONE_LIFE weights below, not here. These are deliberately tiny — the
+  // point of a whale shark is that you have been out there a while and then there is one.
+
+  // Whale shark — the biggest fish in the ocean, and a real if uncommon Keys/Gulf Stream visitor.
+  // 9 m here rather than a full-grown 12: it has to read as enormous beside a 7 m Robalo without
+  // becoming the only thing in the frame. Slow (`speed:1.1`) because they genuinely are, surface
+  // level because that is where you see them, and `pattern:'gspots'` for the white spot grid.
+  whaleshark:{kind:'shark',len:9,h:1.5,w:1.6,back:'#3f4a55',belly:'#e8ecee',fin:'#35404a',pattern:'gspots',level:'surface',speed:1.1,school:[1,1],spread:0,dMin:8,dMax:1e5,catchable:false},
+  // Giant manta — 5.5 m across the wings, which is wider than it is long and the whole reason to
+  // look at one. `flap:true` drives the wing-beat roll (school.ts); dark above, white below.
+  giantmanta:{kind:'ray',len:2.4,wing:5.5,back:'#1d2127',belly:'#f4f4f2',pattern:'spots',flap:true,level:'mid',speed:1.5,school:[1,2],spread:6,dMin:4,dMax:1e5,catchable:false},
+  // Smalltooth sawfish — a Florida endemic, critically endangered, and unmistakable: the rostrum
+  // is about a quarter of its length. `bill` is the billfish rostrum parameter, reused; it is the
+  // right shape at this fidelity and the saw's teeth are below what the body builder resolves.
+  // Backcountry and flats, in very shallow water, which is where the remaining population is.
+  sawfish:{kind:'shark',len:4.2,h:.42,w:.5,back:'#8d8c7c',belly:'#e6e3d4',fin:'#7b7a6b',bill:.26,level:'bottom',speed:.6,school:[1,1],spread:0,dMin:.8,dMax:12,catchable:false},
+  // Tiger shark — the one big new animal you can actually hook. Second only to the great white
+  // among sharks that take a bait, and a real deep-wall/offshore Keys fish. The vertical bars
+  // (`pattern:'bars'`) fade with age on a real one; they are kept here because they are what
+  // makes it recognisable as a tiger and not just another grey shark.
+  tigershark:{kind:'shark',len:4.2,h:.78,w:.72,back:'#5f6a63',belly:'#eceeea',fin:'#515b55',pattern:'bars',level:'mid',speed:1.5,school:[1,1],spread:0,dMin:6,dMax:1e5},
 };
 
 /** Single source of truth for "can this creature ever be landed" — see `CreatureVis.catchable`'s
@@ -178,13 +206,13 @@ export function isCatchable(key: string): boolean {
  */
 export const ZONE_LIFE: Record<string, Array<[string, number]>> = {
   // Mangrove creek channels — juveniles sheltering along the edges.
-  'Creek':[['snook',3],['redfish',2.5],['tarpon',1.5],['manatee',1],['mangrove',3.5],['ladyfish',2.5],['trout',1.5],['jackcrevalle',1]],
+  'Creek':[['sawfish',.05],['snook',3],['redfish',2.5],['tarpon',1.5],['manatee',1],['mangrove',3.5],['ladyfish',2.5],['trout',1.5],['jackcrevalle',1]],
   // Very shallow skinny water — bonefish/permit on the sand, small sharks cruising the edges.
-  'Flats':[['bonefish',5],['permit',2.2],['stingray',3],['redfish',1.5],['barracuda',2],['blacktip',1.5],['lemonshark',1],['eagleray',1],['ladyfish',3],['pompano',1.2],['palometa',3],['bluerunner',2],['manatee',.7]],
+  'Flats':[['sawfish',.07],['bonefish',5],['permit',2.2],['stingray',3],['redfish',1.5],['barracuda',2],['blacktip',1.5],['lemonshark',1],['eagleray',1],['ladyfish',3],['pompano',1.2],['palometa',3],['bluerunner',2],['manatee',.7]],
   // Florida Bay backcountry — juvenile snapper, small barracuda, rays on the sand, baitfish
   // schools, manatees in the shallows, and dolphin pods working the bay ("the bay" in the task
   // brief).
-  'Backcountry':[['redfish',4],['snook',3],['trout',3],['mangrove',2.5],['tarpon',2],['bonefish',1.5],['permit',1],['barracuda',1.2],['manatee',1.2],['stingray',2.2],['jackcrevalle',2],['ladyfish',3],['pompano',1.5],['tripletail',.6],['dolphin',1.5]],
+  'Backcountry':[['sawfish',.06],['redfish',4],['snook',3],['trout',3],['mangrove',2.5],['tarpon',2],['bonefish',1.5],['permit',1],['barracuda',1.2],['manatee',1.2],['stingray',2.2],['jackcrevalle',2],['ladyfish',3],['pompano',1.5],['tripletail',.6],['dolphin',1.5]],
   // Bridge pilings and the channels that run under them — structure-holders in current. Dolphin
   // pods regularly work the bridge channels for bait pushed through on the tide.
   'Bridge':[['tarpon',5],['snook',2],['mangrove',3],['eagleray',1],['sheepshead',3],['goliath',.6],['jackcrevalle',1.5],['nurse',1],['cobia',1],['barracuda',1],['dolphin',1.2],['lookdown',3.5],['bluerunner',4],['schoolmaster',2],['manatee',.9]],
@@ -199,17 +227,17 @@ export const ZONE_LIFE: Record<string, Array<[string, number]>> = {
   // grouper holding on ledges, bigger snapper/jack schools working the drop, dolphins cruising
   // the wall edge. `DeepWall` below (band 5, >= DEEP_WALL_DEPTH) used to be the same table all the
   // way to 45 m — split out so the deep wall/wreck band actually feels different, not just emptier.
-  'ReefWall':[['grouper',3],['gag',2],['redgrouper',2],['yellowtail',4],['mutton',2.5],['amberjack',2],['kingfish',1.5],['cero',1.5],['nurse',1],['goliath',.6],['graytrigger',1.2],['lionfish',1],['hammerhead',.8],['bullshark',.5],['cobia',1],['dolphin',1.3],['vermilion',5],['bluerunner',3],['schoolmaster',2]],
+  'ReefWall':[['giantmanta',.18],['whaleshark',.05],['tigershark',.12],['grouper',3],['gag',2],['redgrouper',2],['yellowtail',4],['mutton',2.5],['amberjack',2],['kingfish',1.5],['cero',1.5],['nurse',1],['goliath',.6],['graytrigger',1.2],['lionfish',1],['hammerhead',.8],['bullshark',.5],['cobia',1],['dolphin',1.3],['vermilion',5],['bluerunner',3],['schoolmaster',2]],
   // The deep wall and wrecks (depthAt >= DEEP_WALL_DEPTH, spawn.ts) — docs/ARCHITECTURE.md band 5
   // (20 m+, "deep wall, wrecks, the Humps... torch required, blackout risk"). Bigger-bodied
   // structure-holders and more apex presence than the wall top, less of the small schooling
   // yellowtail/mutton clutter that reads as "shallow reef" — this is what makes the deep band feel
   // like a different place rather than the same reef with the lights turned down.
-  'DeepWall':[['grouper',3.5],['gag',2.5],['redgrouper',2],['amberjack',3],['kingfish',2],['cobia',1.5],['goliath',1.3],['nurse',1.5],['hammerhead',.7],['bullshark',.5],['mutton',1.4],['yellowtail',1],['cero',1],['dolphin',1],['vermilion',3.5],['bluerunner',1.5]],
+  'DeepWall':[['giantmanta',.14],['whaleshark',.06],['tigershark',.2],['grouper',3.5],['gag',2.5],['redgrouper',2],['amberjack',3],['kingfish',2],['cobia',1.5],['goliath',1.3],['nurse',1.5],['hammerhead',.7],['bullshark',.5],['mutton',1.4],['yellowtail',1],['cero',1],['dolphin',1],['vermilion',3.5],['bluerunner',1.5]],
   // Gulf Stream / open offshore — pelagics (roaming layer only; see spawn.ts). Dolphin pods are a
   // common sight riding the current lines; pilot whales/humpbacks are a genuine *rare* event out
   // here — tiny weights are deliberate (see the task brief's "Encounter rarity").
-  'Offshore':[['mahi',5],['flyingfish',4],['dolphin',2.5],['blackfin',3],['sailfish',1.5],['wahoo',1],['turtle',.8],['marlin',.6],['blackmarlin',.25],['swordfish',.3],['yellowfin',2.5],['albacore',1.2],['bluefin',.8],['kingfish',1.5],['amberjack',1.5],['hammerhead',.3],['pilotwhale',.12],['humpback',.07],['skipjack',4],['bigeye',.7]],
+  'Offshore':[['whaleshark',.1],['giantmanta',.12],['tigershark',.14],['mahi',5],['flyingfish',4],['dolphin',2.5],['blackfin',3],['sailfish',1.5],['wahoo',1],['turtle',.8],['marlin',.6],['blackmarlin',.25],['swordfish',.3],['yellowfin',2.5],['albacore',1.2],['bluefin',.8],['kingfish',1.5],['amberjack',1.5],['hammerhead',.3],['pilotwhale',.12],['humpback',.07],['skipjack',4],['bigeye',.7]],
   // The Humps (Marathon Hump, West Hump) and other named structure far offshore — real relief that
   // concentrates bottom fish and jacks well out in otherwise-open water. Marathon's actual humps
   // are a known pilot-whale spot — a tiny weight here makes that a learnable, place-based rarity
@@ -309,5 +337,18 @@ export const SHAPE: Record<string, FishShape> = {
   pilotwhale:{peak:.3,nose:.5,ped:.16,tail:'flukes',tl:.22,th:1.1,dor:[[.28,.4,.4,'sickle']],anal:[],pec:.16,hump:.5},
   // Humpback — the signature huge pectoral "wings" (`pec:.34,wings:true` — up to ~1/3 body length
   // on the real animal), a tiny stubby rounded dorsal far aft, flukes, a slightly knobbly head.
-  humpback:{peak:.3,nose:.6,ped:.2,tail:'flukes',tl:.26,th:1.15,dor:[[.56,.63,.15,'round']],anal:[],pec:.34,wings:true,hump:.18}
+  humpback:{peak:.3,nose:.6,ped:.2,tail:'flukes',tl:.26,th:1.15,dor:[[.56,.63,.15,'round']],anal:[],pec:.34,wings:true,hump:.18},
+  // The big ones (see their VIS entries above for why each is here).
+  // Whale shark: a blunt, boxy head on a huge body — nothing about it is streamlined. The broad
+  // flat snout is `nose:.35`, and the tail is the tall heterocercal shark fin every shark uses.
+  whaleshark:{peak:.22,nose:.35,ped:.16,tail:'hetero',tl:.26,th:1.15,dor:[[.42,.56,.6,'tri'],[.72,.79,.25,'tri']],anal:[[.74,.8,.22,'tri']],pec:.5,shark:true,belly:.8},
+  // Giant manta: the body is almost all wing, so the fins carry none of it (kind 'ray' builds the
+  // disc from `wing`); what is left is a thin, flat body and a whip tail.
+  giantmanta:{peak:.3,nose:.3,ped:.05,tail:'whip',tl:.9,th:.08,dor:[],anal:[],pec:.1},
+  // Sawfish: shark-bodied behind the rostrum, with the dorsals set well back the way a sawfish's
+  // are — nearly over the tail, which is one of the things that distinguishes it from a sawshark.
+  sawfish:{peak:.34,nose:.9,ped:.14,tail:'hetero',tl:.26,th:.85,dor:[[.56,.68,.6,'tri'],[.74,.82,.45,'tri']],anal:[[.76,.83,.2,'tri']],pec:.34,shark:true},
+  // Tiger shark: a heavy forward body tapering hard to the tail, blunt square snout, the tall
+  // upper lobe exaggerated a little because it is the silhouette people know.
+  tigershark:{peak:.3,nose:.75,ped:.12,tail:'hetero',tl:.3,th:1.2,dor:[[.32,.44,1.1,'tri'],[.74,.8,.3,'tri']],anal:[[.74,.8,.3,'tri']],pec:.42,shark:true},
 };

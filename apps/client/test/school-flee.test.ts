@@ -24,13 +24,13 @@ const HULL_CLEAR = 7.5;
 function school(type: string, r: number, heading: number): SchoolState {
   const V = VIS[type];
   const members: SchoolState['members'] = Array.from({ length: Math.max(3, V.school[0]) }, (_, i) => ({
-    ox: (i % 3) - 1, oz: Math.floor(i / 3) - 1, oy: 0, swimPhase: i * 0.7, scale: 1, sizeU: 0.5,
+    ox: (i % 3) - 1, oz: Math.floor(i / 3) - 1, oy: 0, swimPhase: i * 0.7, seed: i * 0.7, bank: 0, scale: 1, sizeU: 0.5,
     act: null, actPhase: 0, actTimer: 2 + i, splashed: false, splashed2: false, breaching: false,
     wx: AX, wy: -4, wz: AZ, yaw: heading, pitch: 0, roll: 0, worldScale: 1,
   }));
   return {
     id: `f:${heading.toFixed(2)}`, type, cx: AX, cz: AZ, heading, phase: heading * 17.3,
-    vx: 0, vz: 0, turn: 0, flee: 0, fleeHeading: heading, bowRide: 0, glide: 0, dive: 0, diveTimer: 9,
+    vx: 0, vz: 0, turnRate: 0, turn: 0, flee: 0, fleeHeading: heading, bowRide: 0, glide: 0, dive: 0, diveTimer: 9,
     diveTarget: 0, anchor: { x: AX, z: AZ, r }, resident: true, members,
   };
 }

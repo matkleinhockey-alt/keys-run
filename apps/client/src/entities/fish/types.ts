@@ -20,8 +20,27 @@ export interface FishMember {
   oz: number;
   /** Vertical offset within the school's depth band, -1..1 (legacy `oy`). */
   oy: number;
-  /** Per-member VAT swim-cycle phase offset, radians (legacy `ph`, reused as the swim phase). */
+  /**
+   * The member's own place in the baked swim cycle, radians — what `render.ts` hands the GPU as
+   * `iPhase` and what `hitbox.ts` samples the bend at, so the two cannot disagree.
+   *
+   * It ADVANCES rather than sitting still. The VAT's cycle runs at one global rate (`uSwimT *
+   * angSpeed`), so with a fixed offset every fish of a species beat its tail at exactly the same
+   * rate whether it was milling over a patch at 0.75x cruise or bolting at 2.2x. This carries the
+   * difference: the extra phase accumulated by swimming faster or slower than cruise. At cruise
+   * it accumulates nothing and the look is unchanged.
+   */
   swimPhase: number;
+  /**
+   * The member's FIXED identity offset (what `swimPhase` used to be, and still its starting
+   * value). The formation wander, the yaw weave and the ray/turtle roll are all `sin(t * k +
+   * seed)` — they want a constant that desyncs this fish from its neighbours, not a clock. Using
+   * the advancing `swimPhase` for them would make their frequencies swim with the school's speed.
+   */
+  seed: number;
+  /** Smoothed bank angle, radians — eased toward the school's turn rate so a fish rolls into a
+   * corner and back out of it rather than snapping upright the instant the turn ends. */
+  bank: number;
   /** Per-member size multiplier (legacy `s`). */
   scale: number;
   /**
@@ -93,6 +112,12 @@ export interface SchoolState {
    * water, so it needs no low-pass and costs two stores per school per step.
    */
   vx: number; vz: number;
+  /**
+   * How fast the centroid is turning, rad/s, signed. Written by `stepSchool` from the heading it
+   * actually ended the step with. Fish bank into a turn — it is the most obvious thing a real
+   * school does that a yaw-only one does not — and this is what `stepMember` rolls them by.
+   */
+  turnRate: number;
   /** Group-level wander phase (legacy `g.ph`). */
   phase: number;
   /** -1/0/1 sticky boundary-avoidance turn direction (legacy `g.turn`). */

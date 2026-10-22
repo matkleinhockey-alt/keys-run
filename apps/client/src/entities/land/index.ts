@@ -44,6 +44,7 @@ import { createLandController, type LandController, type LandMode } from './cont
 import { updateLandCamera, cycleLandView } from './camera.js';
 import type { ShopPort } from '../../ui/gear.js';
 import { createLandHud, type LandHudHandles } from './hud.js';
+import { createDockCelebration, type RunBest } from './dock-celebration.js';
 
 export type { LandMode } from './controller.js';
 
@@ -75,6 +76,9 @@ export interface LandDeps {
   gameRunning(): boolean;
   /** The casino's slot machines (game/casino): opened instead of the shelf panel when the interaction is in the casino. */
   casino?: { open(id: string, done: () => void): void; close(): void; ambience(dt: number, level: number): void };
+  /** The biggest fish landed this run, hung on the dock with a crowd round it when you step ashore
+   * (dock-celebration.ts). Omitted or null = nothing to show. */
+  getRunBest?(): RunBest | null;
 }
 
 export interface LandSystem {
@@ -122,6 +126,7 @@ export function createLandSystem(deps: LandDeps): LandSystem {
   // Inventory.wearing. Lives here because this facade already owns the body and is handed the model
   // and the shadow sweep -- which keeps game/world.ts untouched.
   const outfit = createOutfitSync({ body: () => body, model: () => deps.getModel(), onBuilt: deps.onBuilt });
+  const celebration = createDockCelebration({ scene, onBuilt: deps.onBuilt, toast: deps.toast });
 
   // ---------------------------------------------------------------- the player's body
   function ensureBody(): Human {
@@ -221,6 +226,7 @@ export function createLandSystem(deps: LandDeps): LandSystem {
       setBoatUI(true);
       ensureBody().group.visible = ctl.cam.mode === 'third';
       ensureRope().visible = true;
+      if (ctl.mooring) celebration.onAshore(deps.getRunBest?.() ?? null, ctl.mooring);
     } else {
       // Put back exactly what we took. near/far/fov first, with a projection update, so a frame
       // never renders the boat with the walking camera's planes.
@@ -236,6 +242,7 @@ export function createLandSystem(deps: LandDeps): LandSystem {
       panel = 'none';
       if (body) body.group.visible = false;
       if (rope) rope.visible = false;
+      celebration.onLeaveShore();
       deps.toast('Back aboard.');
     }
     prevMode = ctl.mode;
@@ -346,6 +353,7 @@ export function createLandSystem(deps: LandDeps): LandSystem {
       state: () => wardrobe.get(),
     },
     colliders: COLLIDERS.length,
+    trophy: () => celebration.where,
   };
 
   return {
@@ -380,11 +388,11 @@ export function createLandSystem(deps: LandDeps): LandSystem {
       outfit.update(); // two pointer compares per frame; builds nothing unless the outfit changed
       if (deps.casino) deps.casino.ambience(dt, casinoLevel());
       updateDockPrompt();
-      if (ctl.mode === 'land') { updateBodyAndRope(); updateHud(); }
+      if (ctl.mode === 'land') { updateBodyAndRope(); updateHud(); celebration.update(dt, t); }
     },
 
     exitToBoat() { ctl.exitToBoat(); },
 
-    dispose() { ctl.dispose(); town.dispose(); },
+    dispose() { ctl.dispose(); town.dispose(); celebration.clear(); },
   };
 }

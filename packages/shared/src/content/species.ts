@@ -51,6 +51,13 @@ export const SPECIES: Record<string, SpeciesDef> = {
   blacktip:{name:'Blacktip Shark',min:30,max:150,str:1.05,mult:5,color:'#7a8187',jump:true,fact:'Hooked blacktips often spin out of the water.'},
   bullshark:{name:'Bull Shark',min:100,max:350,str:1.35,mult:4,color:'#6b6f68',fact:'Bull sharks roam from the open ocean right up into rivers and canals.'},
   lemonshark:{name:'Lemon Shark',min:60,max:250,str:1.15,mult:4,color:'#a6976b',fact:'Lemon sharks are protected in Florida state waters — release them.'},
+  // The one big new animal you can hook. Weights are honest for a Keys tiger: a 12-footer is
+  // around 800 lb and they go well past that. `str` above the hammerhead's because a tiger is a
+  // heavier, more dogged fish on a rod than a hammerhead of the same length; `mult` low because
+  // you are not selling it. The whale shark, giant manta and sawfish are deliberately NOT here —
+  // they are `catchable: false` in content/creatures.ts, which is the single source of truth both
+  // the rod and the spear consult (see test/catchable.test.ts).
+  tigershark:{name:'Tiger Shark',min:200,max:900,str:1.6,mult:3,color:'#5f6a63',fact:'Tiger sharks eat almost anything, and have been found with licence plates in their stomachs.'},
   hammerhead:{name:'Great Hammerhead',min:150,max:700,str:1.5,mult:3,color:'#6e7a80',fact:'Great hammerheads must be released in Florida waters.'},
   marlin:{name:'Blue Marlin',min:150,max:800,str:1.45,mult:5,color:'#1f3f8f',jump:true,fact:'The bucket-list billfish of the Gulf Stream. Blue marlin over 300 lb are almost always females.'},
   swordfish:{name:'Swordfish',min:80,max:400,str:1.3,mult:6,color:'#40465a',fact:'Daytime swordfish live near the bottom in well over a thousand feet of water.'},
@@ -76,18 +83,18 @@ export const ZONE_TABLE: Record<string, Array<[string, number]>> = {
   // so the big residents sit at or above 2.5 and the small ones (mutton, shark) are kept low
   // enough that the boost does not turn them into the bulk of the catch. Weights roll heavy too:
   // see `wreckSizeT` in sim/fight.ts. Measured against Reef/Oil Rig by test/playthrough-weights.mjs.
-  'Wreck':[['amberjack',6],['grouper',3.6],['cobia',3.2],['gag',2.6],['goliath',2.6],['barracuda',2.5],['jackcrevalle',2.5],['kingfish',2.5],['bullshark',.9],['mutton',.5],['blacktip',.3]],
+  'Wreck':[['tigershark',.3],['amberjack',6],['grouper',3.6],['cobia',3.2],['gag',2.6],['goliath',2.6],['barracuda',2.5],['jackcrevalle',2.5],['kingfish',2.5],['bullshark',.9],['mutton',.5],['blacktip',.3]],
   'Weedline':[['mahi',8],['tripletail',3],['blackfin',2],['graytrigger',2],['wahoo',2],['sailfish',1.6],['jackcrevalle',1.5],['yellowfin',.7],['marlin',.3]],
   'Flats':[['bonefish',5],['permit',2],['barracuda',3],['tarpon',1],['ladyfish',2],['lemonshark',.8],['blacktip',1],['palometa',1.5]],
   'Backcountry':[['snook',4],['redfish',4],['trout',5],['tarpon',2],['ladyfish',3],['jackcrevalle',2],['tripletail',.8],['bullshark',.6]],
   'Bridge':[['tarpon',5],['mangrove',4],['snook',2],['sheepshead',3],['jackcrevalle',2],['goliath',.6],['bullshark',.6],['lookdown',2],['bluerunner',2.5]],
   'Hawk Channel':[['mangrove',4],['yellowtail',3],['mutton',2],['redgrouper',1.2],['gag',.8],['barracuda',2],['cero',2],['pompano',1.5],['cobia',1],['jackcrevalle',1.5],['graytrigger',1.5],['bluerunner',3],['lanesnapper',2.5],['spanishmack',2.5],['lookdown',1],['tarpon',.5],['amberjack',.5],['kingfish',1.2],['blacktip',.3]],
   'Reef':[['yellowtail',5],['mutton',3],['hogfish',3],['grouper',2.5],['gag',2],['redgrouper',2],['barracuda',2],['cero',2.5],['kingfish',2],['lionfish',1.5],['graytrigger',2],['goliath',.5],['amberjack',.8],['cobia',.6],['lemonshark',.25],['schoolmaster',3],['lanesnapper',2.5],['vermilion',2.5],['bluerunner',2.5],['spanishmack',1.5]],
-  'Offshore':[['mahi',6],['blackfin',4],['wahoo',2],['sailfish',2],['marlin',1.3],['blackmarlin',.6],['swordfish',1.1],['yellowfin',.8],['albacore',.3],['bluefin',.4],['kingfish',1.5],['amberjack',1.5],['cobia',.5],['hammerhead',.5],['skipjack',3],['bigeye',.7]]
+  'Offshore':[['tigershark',.35],['mahi',6],['blackfin',4],['wahoo',2],['sailfish',2],['marlin',1.3],['blackmarlin',.6],['swordfish',1.1],['yellowfin',.8],['albacore',.3],['bluefin',.4],['kingfish',1.5],['amberjack',1.5],['cobia',.5],['hammerhead',.5],['skipjack',3],['bigeye',.7]]
 };
 
 /** Species that make a reel-screaming "sounder" run worth announcing (legacy index.html:2662). */
-export const SOUNDERS: Set<string> = new Set<string>(['blackfin','yellowfin','bluefin','albacore','amberjack','grouper','goliath','swordfish','cobia','bullshark','hammerhead','lemonshark','blacktip','mutton','kingfish','wahoo']);
+export const SOUNDERS: Set<string> = new Set<string>(['blackfin','yellowfin','bluefin','albacore','amberjack','grouper','goliath','swordfish','cobia','bullshark','tigershark','hammerhead','lemonshark','blacktip','mutton','kingfish','wahoo']);
 
 /** The three billfish species (legacy index.html:2663). */
 export const BILLFISH: Set<string> = new Set<string>(['sailfish','marlin','blackmarlin']);

@@ -30,6 +30,7 @@ import { shoreInfo } from '@keysrun/shared/world/chain';
 import { ampFor, waveHBase } from '@keysrun/shared/waves';
 import type { CreatureVis } from '@keysrun/shared/content/creatures';
 import { clamp, lerp, rand } from '../../core/math.js';
+import { SWIM_ANG_BASE } from './swim.js';
 import {
   angLerp, fleeClassFor, fleeParamsFor, nearestTrigger, ACT_DUR, ACT_CD,
   isBowRider, bowRideTarget, BOW_RIDE_RADIUS, BOW_RIDE_MIN_SPEED, BOW_RIDE_MAX_SPEED,
@@ -75,6 +76,14 @@ export type SchoolEvent =
  * up once by `state.type` — kept out of `SchoolState` itself so the state stays plain/small, in
  * the spirit of the server-replication note in docs/ARCHITECTURE.md's netcode section:
  * "immutable descriptors ... sent once at spawn, never in snapshots"). */
+/**
+ * Bounds on the tail-beat rate multiplier, and the hardest a fish will lean into a turn.
+ * BEAT_MIN is not 0: a fish holding station still sculls, and a frozen tail reads as a dead one.
+ */
+const BEAT_MIN = 0.45, BEAT_MAX = 2.4;
+/** rad — about 21 degrees. A banking fish, not a barrel roll. */
+const BANK_MAX = 0.37;
+
 /** How far a school will notice a motionless diver, metres. */
 const CURIOUS_RANGE = 36;
 /**
@@ -107,6 +116,7 @@ export function stepSchool(state: SchoolState, V: CreatureVis, ctx: SchoolCtx): 
   const bowRiding = g.bowRide > 0.4 && !!boatThreat && boatThreat.heading !== undefined;
   const triggerThreats = bowRiding ? threats.filter((th) => th !== boatThreat) : threats;
 
+  const heading0 = g.heading;
   const cls = fleeClassFor(g.type, V);
   const trigger = nearestTrigger(g.cx, g.cz, cls, triggerThreats);
   if (trigger) {
@@ -209,6 +219,15 @@ const tang = 0.55 * (1 - pull); // fades out the further from home, so a stray s
   }
   g.vx = fx * sp;
   g.vz = fz * sp;
+  // Signed turn rate, wrapped into (-PI, PI] so crossing north is not read as a 2*PI spin. Eased
+  // rather than taken raw: heading is nudged by several terms per step (wander, flee, anchor,
+  // the boundary turn) and the raw frame-to-frame delta is spiky enough to make a bank flicker.
+  if (dt > 0) {
+    let dh = g.heading - heading0;
+    while (dh > Math.PI) dh -= Math.PI * 2;
+    while (dh < -Math.PI) dh += Math.PI * 2;
+    g.turnRate = lerp(g.turnRate, dh / dt, Math.min(1, dt * 4));
+  }
   g.cx += g.vx * dt;
   g.cz += g.vz * dt;
   // keep a long-wandering school from drifting off the playable chart entirely
@@ -239,7 +258,7 @@ function stepMember(
   d: number, amp: number, floor: number, rx: number, rz: number, fx: number, fz: number,
   wf: number, wa: number, t: number, dt: number, events: SchoolEvent[],
 ): void {
-  const ox = m.ox + Math.sin(t * 0.6 + m.swimPhase) * 0.3, oz = m.oz + Math.cos(t * 0.5 + m.swimPhase) * 0.3;
+  const ox = m.ox + Math.sin(t * 0.6 + m.seed) * 0.3, oz = m.oz + Math.cos(t * 0.5 + m.seed) * 0.3;
   const mx = g.cx + rx * ox + fx * oz, mz = g.cz + rz * ox + fz * oz;
   const surf = waveHBase(mx, mz, t, amp);
 
@@ -291,11 +310,29 @@ function stepMember(
       if (m.actPhase >= 1) { m.act = null; const cd = ACT_CD[V.act]; m.actTimer = rand(cd[0], cd[1]); }
     }
   }
-  if (g.glide > 0) { y = surf + 0.45 + Math.sin(t * 3 + m.swimPhase) * 0.12; pitch = 0.05; }
-  if (V.flap) roll = Math.sin(t * 2.2 + m.swimPhase) * 0.28;
-  else if (V.kind === 'ray') roll = Math.sin(t * 1.5 + m.swimPhase) * 0.05;
+  if (g.glide > 0) { y = surf + 0.45 + Math.sin(t * 3 + m.seed) * 0.12; pitch = 0.05; }
+  if (V.flap) roll = Math.sin(t * 2.2 + m.seed) * 0.28;
+  else if (V.kind === 'ray') roll = Math.sin(t * 1.5 + m.seed) * 0.05;
 
-  const yaw = g.heading + Math.sin(t * wf + m.swimPhase) * (g.glide > 0 ? 0 : wa);
+  // Bank into the turn. A fish leans INTO a corner, so a left turn rolls it left — and a slow
+  // heavy body leans less for the same corner than a quick one, which is why this is scaled by
+  // cruise speed rather than being one constant. Capped: a school hard against the world
+  // boundary turns fast enough to put a fish on its side otherwise.
+  if (!V.flap) {
+    const bank = clamp(-g.turnRate * (0.30 + 0.10 * V.speed), -BANK_MAX, BANK_MAX);
+    m.bank = lerp(m.bank, bank, Math.min(1, dt * 3));
+    roll += m.bank;
+  }
+
+  // Tail-beat rate follows how fast this fish is ACTUALLY going. The VAT runs at one global rate,
+  // so without this a school milling over its patch at 0.75x cruise and a school bolting at 2.2x
+  // beat identically — which is the single most obviously wrong thing about a school at rest.
+  // Only the DIFFERENCE from cruise is accumulated, so a fish at cruise looks exactly as it did.
+  const spd = Math.hypot(g.vx, g.vz);
+  const rate = clamp(spd / Math.max(0.05, V.speed), BEAT_MIN, BEAT_MAX);
+  m.swimPhase += (rate - 1) * SWIM_ANG_BASE * dt;
+
+  const yaw = g.heading + Math.sin(t * wf + m.seed) * (g.glide > 0 ? 0 : wa);
   m.wx = mx; m.wy = y; m.wz = mz;
   m.yaw = yaw; m.pitch = pitch; m.roll = roll;
   m.worldScale = m.scale;

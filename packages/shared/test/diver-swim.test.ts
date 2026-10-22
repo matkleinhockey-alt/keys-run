@@ -123,3 +123,21 @@ describe('the diver is pushed by the real current', () => {
     expect(range(-1)).toBeGreaterThan(range(-18) * 1.5);
   });
 });
+
+describe('surfacing with Space', () => {
+  // Pins the bug: below neutral depth, negative buoyancy out-pulled the pulsed ascend kick, so
+  // holding Space from 30 m sank the diver instead of bringing them up.
+  it.each([[10, 6], [20, 11], [30, 16]])('reaches the surface from %i m within %i s holding Space', (depth, maxS) => {
+    let s = createDiverState(CALM.x, -depth, CALM.z, 0);
+    let t = 0;
+    while (s.y < -0.3 && t < 60) { s = stepDiver(s, { ...NO_INPUT, ascend: true }, env(0), DT); t += DT; }
+    expect(t).toBeLessThan(maxS);
+  });
+
+  it('arrives at the surface rather than launching out of it', () => {
+    let s = createDiverState(CALM.x, -20, CALM.z, 0);
+    let top = -Infinity;
+    for (let i = 0; i < 30 * 20; i++) { s = stepDiver(s, { ...NO_INPUT, ascend: true }, env(0), DT); top = Math.max(top, s.y); }
+    expect(top).toBeLessThan(0.5);
+  });
+});

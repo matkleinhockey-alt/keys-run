@@ -530,6 +530,7 @@ export function initWorld(wrap: HTMLElement): World {
     scene, camera, canvas: renderer.domElement, sky: sceneCtx.sky, sunDisc: sceneCtx.sunDisc, sunDir,
     camState, fpState, lightMats: tod.lightMats, getTodK: tod.getK, onBuilt: (g) => shadows.applyToSubtree(g),
     isTouch: isTouch(), getBoat: () => stateBox.state, getHullLen: () => boatSpec.len, getModel: () => model,
+    getRunBest: () => (catchFlow.session.biggest ? { ...catchFlow.session.biggest, boatName: `${boatSpec.brand} ${boatSpec.name}` } : null),
     refuse: () => (handgun.mode === 'gun' ? 'Holster the pistol first (9).' : diver.mode === 'diver' ? 'Climb back aboard first.' : FishF.state === 'fight' ? 'Land your fish first.' : catchFlow.current ? 'Finish with your catch first.' : null),
     // Charging counts as a cast in flight even though `state` is still 'idle' while the key is
     // held: ashore the keyup is suspended (above), so a charge left running stays running, the

@@ -61,6 +61,10 @@ interface SessionStats {
   best: { name: string; w: number; pts: number } | null;
   slam1: boolean;
   slam2: boolean;
+  /** Heaviest fish landed this run (by weight, not points) — hung on the dock when you go ashore
+   * (entities/land/dock-celebration.ts). `id` is the landing's number, so the same fish is only
+   * celebrated once. */
+  biggest: { key: string; weight: number; id: number; released: boolean } | null;
 }
 
 interface PhotoHandle {
@@ -187,7 +191,7 @@ export interface CatchFlowDeps {
 }
 
 export function createCatchFlow(deps: CatchFlowDeps) {
-  const session: SessionStats = { count: 0, score: 0, caught: new Set(), best: null, slam1: false, slam2: false };
+  const session: SessionStats = { count: 0, score: 0, caught: new Set(), best: null, slam1: false, slam2: false, biggest: null };
   const cooler = createCooler(deps.gear);
   const portrait = createPortrait('fishCanvas');
   // Shares `#fishCanvas` with `portrait` — see underwater-trophy.ts's header: only one of the two
@@ -224,6 +228,7 @@ export function createCatchFlow(deps: CatchFlowDeps) {
     if (!session.slam1 && ['tarpon', 'bonefish', 'permit'].every((k) => session.caught.has(k))) { session.slam1 = true; session.score += 1000; bonus = 'Inshore grand slam · +1,000'; }
     if (!session.slam2 && ['sailfish', 'mahi', 'wahoo'].every((k) => session.caught.has(k))) { session.slam2 = true; session.score += 1500; bonus = (bonus ? bonus + ' · ' : '') + 'Blue water slam · +1,500'; }
     if (!session.best || pts > session.best.pts) session.best = { name: S.name, w: fish.weight, pts };
+    if (!session.biggest || fish.weight > session.biggest.weight) session.biggest = { key: fish.key, weight: fish.weight, id: session.count, released: false };
 
     // Fire-and-forget report to the real leaderboard (apps/api). Wrapped defensively even though
     // submitCatch itself never throws (see its own header) — nothing downstream of a landed fish
@@ -379,6 +384,7 @@ export function createCatchFlow(deps: CatchFlowDeps) {
   }
 
   function releaseWith(bonusFrac: number, message: (bonus: number) => string): void {
+    if (session.biggest?.id === session.count) session.biggest.released = true;
     const bonus = Math.round(lastPts * bonusFrac);
     session.score += bonus;
     updateScore();

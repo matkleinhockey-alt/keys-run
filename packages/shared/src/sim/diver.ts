@@ -101,6 +101,21 @@ export const SPRINT_MULT = 1.9;
  * as its own control alongside look-to-steer, so looking straight up/down isn't the only way up. */
 export const VERTICAL_KICK_ACCEL = 2.2;
 
+/**
+ * Space ("surface") is a steady, committed swim for the top, not another pulsed fin kick fighting
+ * the buoyancy curve. It used to be: `VERTICAL_KICK_ACCEL` pulsed, versus up to
+ * `BUOY_MAX_NEGATIVE_ACCEL` of sink below neutral, so from 30 m holding Space still sank you
+ * (146 m after two minutes) and from 20 m it took 18 s. Now it drives vertical speed toward a
+ * target rate with a short response time, regardless of depth or buoyancy: 30 m in ~14 s, ~10 s
+ * sprinting. The assist eases off over the last `ASCEND_EASE_DEPTH` so the diver arrives at the
+ * surface instead of launching out of it.
+ */
+export const ASCEND_SPEED = 2.5;
+export const ASCEND_SPEED_SPRINT = 3.5;
+/** 1/s — how quickly vertical speed reaches the ascent rate (~0.1 s; it is re-applied every step against that step's drag and buoyancy, so a soft value settles well under the target). */
+export const ASCEND_RESPONSE = 12;
+export const ASCEND_EASE_DEPTH = 1.5;
+
 /** Kicking backwards is a sculling motion, not a fin stroke: ~45% of forward thrust. */
 export const BACK_KICK_FRACTION = 0.45;
 
@@ -365,7 +380,6 @@ function integrateMotion(state: DiverState, input: DiverInput, env: DiverEnv, dt
     state.vz += kz * accel * dt;
 
     const vAccel = VERTICAL_KICK_ACCEL * sprintK * pulse * swimMul;
-    if (input.ascend) state.vy += vAccel * dt;
     if (input.descend) state.vy -= vAccel * dt;
   } else {
     state.kicking = false;
@@ -403,6 +417,13 @@ function integrateMotion(state: DiverState, input: DiverInput, env: DiverEnv, dt
   state.vx = w.x + par * dPar * fx + px * dPerpH;
   state.vy = par * dPar * fy + py * dPerpV;
   state.vz = w.z + par * dPar * fz + pz * dPerpH;
+
+  // Surfacing (see ASCEND_SPEED): applied after buoyancy and drag so neither can hold it back.
+  if (allowKicks && input.ascend && !input.descend && state.y < 0) {
+    const ease = clamp(-state.y / ASCEND_EASE_DEPTH, 0, 1);
+    const target = (input.sprint ? ASCEND_SPEED_SPRINT : ASCEND_SPEED) * ease;
+    if (state.vy < target) state.vy += (target - state.vy) * Math.min(1, ASCEND_RESPONSE * dt);
+  }
 
   state.x += state.vx * dt;
   state.y += state.vy * dt;
