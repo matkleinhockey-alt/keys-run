@@ -148,19 +148,43 @@ export function createPistolViewModel(camera: THREE.Camera): PistolViewModel {
   forearm.rotation.set(1.15, 0.12, 0.12);
   base.add(forearm);
 
-  // --- muzzle flash: two crossed additive planes (a star from any angle) + a short-lived light
+  // --- muzzle flash: a star burst facing the shooter + a hot core + a short-lived light
+  //
+  // This was two square planes with `p2.rotation.z = PI/2`, described as "crossed planes, a star
+  // from any angle". Rotating a plane about its OWN normal leaves it where it was, so the two were
+  // coplanar and the flash rendered as a single flat square — a pale sheet of paper hanging off
+  // the slide in every screenshot. The shape is now an actual star, built once and shared.
+  const starGeom = ((): THREE.BufferGeometry => {
+    const POINTS = 8, OUTER = 0.085, INNER = 0.03;
+    const pos: number[] = [], idx: number[] = [];
+    pos.push(0, 0, 0);                                   // hub
+    for (let i = 0; i < POINTS * 2; i++) {
+      const a = (i / (POINTS * 2)) * Math.PI * 2;
+      const r = i % 2 === 0 ? OUTER : INNER;
+      pos.push(Math.cos(a) * r, Math.sin(a) * r, 0);
+    }
+    for (let i = 0; i < POINTS * 2; i++) idx.push(0, 1 + i, 1 + ((i + 1) % (POINTS * 2)));
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setIndex(idx);
+    return g;
+  })();
   const flashMat = new THREE.MeshBasicMaterial({
-    color: 0xffd48a, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+    color: 0xffb347, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+  });
+  // The core is what makes it read as burning rather than as a sticker: a small white-hot centre
+  // under the amber star, additive on top of it.
+  const coreMat = new THREE.MeshBasicMaterial({
+    color: 0xfff6e0, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
   });
   const flash = new THREE.Group();
-  const plane = new THREE.PlaneGeometry(0.1, 0.1);
-  const p1 = new THREE.Mesh(plane, flashMat);
-  const p2 = new THREE.Mesh(plane, flashMat);
-  p2.rotation.z = Math.PI / 2;
-  flash.add(p1, p2);
+  const star = new THREE.Mesh(starGeom, flashMat);
+  const core = new THREE.Mesh(new THREE.CircleGeometry(0.022, 10), coreMat);
+  core.position.z = -0.001;
+  flash.add(star, core);
   flash.position.set(0, 0, -0.02);
-  // Planes face the shooter (a flash seen from behind the gun is a star, not an edge-on sliver; the first
-  // version laid them along the line of fire and the flash was invisible in every screenshot).
+  // Faces the shooter: a flash seen from behind the gun is a star, not an edge-on sliver. An
+  // earlier version laid it along the line of fire and it was invisible in every screenshot.
   const flashHolder = new THREE.Group();
   flashHolder.add(flash);
   muzzle.add(flashHolder);
