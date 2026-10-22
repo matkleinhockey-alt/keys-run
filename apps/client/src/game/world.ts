@@ -701,7 +701,23 @@ export function initWorld(wrap: HTMLElement): World {
     // While diving, the boat's "driver" is over the side: it keeps stepping (so it keeps existing,
     // and keeps drifting under its own wave/current forces — stepBoat already applies those at
     // zero throttle/steer) but never sees player input. See entities/diver/controller.ts.
-    const boatInput = diver.mode === 'diver' ? NEUTRAL_BOAT_INPUT : input;
+    //
+    // The reel key is ALSO the astern throttle: game/fishing/update.ts reads `boatInput.back` as
+    // "reel" (the rod deliberately reuses the driving keys rather than inventing its own), and
+    // `entities/boat/input.ts` maps the same ArrowDown/S to `back`. So reeling a fish in backed
+    // the boat down the whole time, and since `releaseCast` refuses to cast above 1.6 m/s
+    // ("Slow under 3 knots to cast."), the cast *after* a catch was routinely rejected until the
+    // boat coasted to a stop. A playthrough agent hit this on every single second cast it tried.
+    //
+    // This is the second distinct cause of "I can't cast again after fishing" — the first was the
+    // rod's own state machine never leaving 'caught' (fixed in `clearCaught`). Suppressing astern
+    // only while the line is out keeps the shared-key design (the rod still reads the same key)
+    // without the boat acting on it, and leaves forward/steering alone so you can still drive
+    // after a running fish.
+    const rodHasLine = fishingLineOut() || FishF.state === 'caught';
+    const boatInput = diver.mode === 'diver' ? NEUTRAL_BOAT_INPUT
+      : rodHasLine && input.back ? { ...input, back: false }
+      : input;
     const next = stepBoat(stateBox.state, boatInput, env, dt);
     stateBox.state = next;
     fishing.update(dt, simTime, next, sw, ch);
