@@ -286,7 +286,22 @@ describe('props, cars and people', () => {
       const [x, z] = toWorld(F, n.at!.u, n.at!.v);
       const g = groundAt(x, z);
       expect(g, `${n.id} is not on the pad`).toBe(PAD_Y);
-      const blocked = COLLIDERS.some((c) => x > c.x0 - 0.2 && x < c.x1 + 0.2 && z > c.z0 - 0.2 && z < c.z1 + 0.2);
+      // Someone standing ON furniture (a dancer on the stage, the DJ in the booth) sits inside
+      // that box's footprint by definition — from above the two are the same rectangle. They
+      // declare which box they are on, and must be on that one and inside nothing else.
+      const onBox = n.onBox ? INTERIOR_BOXES.find((b) => b.id === n.onBox) : undefined;
+      if (n.onBox) expect(onBox, `${n.id} names a box that does not exist: ${n.onBox}`).toBeDefined();
+      if (onBox) {
+        expect(
+          n.at!.u > onBox.u0 && n.at!.u < onBox.u1 && n.at!.v > onBox.v0 && n.at!.v < onBox.v1,
+          `${n.id} is not actually on ${n.onBox}`,
+        ).toBe(true);
+      }
+      const onBoxRect = onBox ? worldRect(F, onBox.u0, onBox.u1, onBox.v0, onBox.v1) : null;
+      const blocked = COLLIDERS.some((c) => {
+        if (onBoxRect && c.x0 === onBoxRect.x0 && c.z0 === onBoxRect.z0 && c.x1 === onBoxRect.x1 && c.z1 === onBoxRect.z1) return false;
+        return x > c.x0 - 0.2 && x < c.x1 + 0.2 && z > c.z0 - 0.2 && z < c.z1 + 0.2;
+      });
       expect(blocked, `${n.id} is standing inside something`).toBe(false);
       if (n.inside) {
         const l = LOTS.find((q) => q.id === n.inside)!;

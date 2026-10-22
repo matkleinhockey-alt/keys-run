@@ -45,6 +45,17 @@ export function humanOptionsFor(look: NpcLook, i: number): HumanOptions {
     case 'bartender': return { ...base, shirt: 0xf3efe5, shortSleeve: true, shorts: 0x2b2118, hair: 0x7a3a1c, longHair: true, hairStyle: 'bun' };
     case 'cook': return { ...base, shirt: 0xffffff, cap: 0xffffff, shorts: 0x23262a, shortSleeve: true };
     case 'patron': return { ...base, shortSleeve: true, cap: 0x5a7bd6, shorts: 0x6b5a3a };
+    // Pink Flamingo performers — the same `bikini` figure the boat's own pole dancer and deck
+    // party use (entities/boat/model.ts), in the club's magenta rather than swimwear colours.
+    // Reusing that option rather than adding a new body keeps one figure to maintain and keeps
+    // this exactly as explicit as the rest of the game, which is to say not.
+    case 'dancer': return {
+      ...base, bikini: true, longHair: true,
+      hairStyle: (['long', 'wavy', 'pony'] as const)[i % 3],
+      shorts: [0xff3ea5, 0x8a3cff, 0x38e0ff][i % 3], skin: SKIN[(i + 1) % SKIN.length], glasses: false,
+    };
+    case 'mc': return { ...base, shirt: 0x2a0f26, shortsLong: true, shorts: 0x2a0f26, shoes: 0x15171a, glasses: true, shortSleeve: false };
+    case 'dj': return { ...base, shirt: 0x15171a, cap: 0xff3ea5, shortSleeve: true, shorts: 0x23262a, glasses: true };
   }
 }
 

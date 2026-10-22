@@ -336,7 +336,12 @@ export const WALKWAYS: readonly Walkway[] = [
   { id: 'blvd-sidewalk', pts: [[-96, 82], [96, 82]] },
 ];
 
-export type NpcLook = 'tourist' | 'angler' | 'local' | 'woman' | 'bouncer' | 'bartender' | 'cook' | 'patron';
+export type NpcLook =
+  | 'tourist' | 'angler' | 'local' | 'woman' | 'bouncer' | 'bartender' | 'cook' | 'patron'
+  // Pink Flamingo staff. 'dancer' is a performer on the stage, dressed the same way the boat's
+  // own pole dancer and deck party already are (entities/boat/model.ts) — this game's register,
+  // not a different one.
+  | 'dancer' | 'mc' | 'dj';
 export interface Npc {
   id: string;
   look: NpcLook;
@@ -349,6 +354,15 @@ export interface Npc {
   at?: { u: number; v: number; yaw: number };
   /** The interior group (by lot id) this person lives in, drawn only when it is. */
   inside?: string;
+  /**
+   * Stands ON a piece of interior furniture rather than beside it — an `INTERIOR_BOXES` id.
+   *
+   * Needed because a collider is a solid box: "inside the stage" and "on top of the stage" are
+   * the same rectangle from above, and the placement test rightly refuses anyone standing inside
+   * furniture. Naming the box makes the difference explicit, and the test still checks the person
+   * is on that box and nothing else.
+   */
+  onBox?: string;
 }
 
 export const NPCS: readonly Npc[] = [
@@ -369,6 +383,19 @@ export const NPCS: readonly Npc[] = [
   { id: 'i-patron-1', look: 'patron', inside: 'bar', at: { u: 17, v: 58.6, yaw: Math.PI / 2 } },
   { id: 'i-patron-2', look: 'woman', inside: 'bar', at: { u: 26, v: 58.6, yaw: Math.PI / 2 } },
   { id: 'i-cook', look: 'cook', inside: 'diner', at: { u: -21.5, v: 63.6, yaw: -Math.PI / 2 } },
+  // The Pink Flamingo, which you own. Two performers on the poles (INTERIOR_BOXES 'club-stage'
+  // spans u 42..60, v 64..70, poles at u 47 and 55), an MC at the stage edge, a bartender behind
+  // the west bar, a DJ in the back corner and a few punters at the tables. Facing yaw PI/2 is
+  // inland, so the stage acts face the room at -PI/2.
+  { onBox: 'club-stage', id: 'i-dancer-1', look: 'dancer', inside: 'club', at: { u: 47, v: 66.6, yaw: -Math.PI / 2 } },
+  { onBox: 'club-stage', id: 'i-dancer-2', look: 'dancer', inside: 'club', at: { u: 55, v: 66.6, yaw: -Math.PI / 2 } },
+  { id: 'i-mc', look: 'mc', inside: 'club', at: { u: 51, v: 62.6, yaw: -Math.PI / 2 } },
+  { id: 'i-club-bar', look: 'bartender', inside: 'club', at: { u: 38, v: 69.4, yaw: -Math.PI / 2 } }, // at the service end of the bar, not inside it
+  { onBox: 'club-dj', id: 'i-dj', look: 'dj', inside: 'club', at: { u: 63.5, v: 67.6, yaw: Math.PI } },
+  { id: 'i-club-1', look: 'patron', inside: 'club', at: { u: 46, v: 57, yaw: -Math.PI / 2 } },
+  { id: 'i-club-2', look: 'woman', inside: 'club', at: { u: 49.5, v: 56.4, yaw: -Math.PI / 2 } },
+  { id: 'i-club-3', look: 'local', inside: 'club', at: { u: 56, v: 57.4, yaw: -Math.PI / 2 } },
+  { id: 'i-club-4', look: 'tourist', inside: 'club', at: { u: 41, v: 53, yaw: -Math.PI / 2 } },
   { id: 'i-patron-3', look: 'patron', inside: 'diner', at: { u: -25, v: 57.6, yaw: Math.PI / 2 } },
 ];
 

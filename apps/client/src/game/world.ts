@@ -325,6 +325,11 @@ export function initWorld(wrap: HTMLElement): World {
   };
   document.getElementById('btnRace')?.addEventListener('click', () => raceMode.toggle());
   document.getElementById('btnBuddy')?.addEventListener('click', () => life.toggleBuddy());
+  // ONE listener only. A second `addEventListener` for this same button was added further down
+  // on the belief that it had none — addEventListener stacks rather than replaces, so every click
+  // toggled sunset twice and landed back where it started. The button looked dead; the handler
+  // was running fine, exactly twice. (`O` on the keyboard worked, which is what made it look like
+  // a touch-only problem.)
   document.getElementById('btnSun')?.addEventListener('click', () => tod.toggleSunset());
   const camFwd = new THREE.Vector3();
   function reelAudioState(): ReelAudioState | undefined {
@@ -622,11 +627,6 @@ export function initWorld(wrap: HTMLElement): World {
   }
   document.getElementById('btnDive')?.addEventListener('click', toggleDive);
   window.addEventListener('keydown', (e) => { if (e.code === 'KeyJ') toggleDive(); });
-
-  // #btnSun was rendered and styled but never given a click handler — only the `O` key reached
-  // toggleSunset(), so the button looked interactive and did nothing (and is the only way to
-  // reach sunset on touch, where there is no keyboard at all).
-  document.getElementById('btnSun')?.addEventListener('click', () => tod.toggleSunset());
 
   bindBoatInput(input, stateBox, {
     toggleTrim() {
