@@ -109,6 +109,10 @@
     "./sim/shop": {
       "types": "./dist/sim/shop.d.ts",
       "default": "./dist/sim/shop.js"
+    },
+    "./sim/services": {
+      "types": "./dist/sim/services.d.ts",
+      "default": "./dist/sim/services.js"
     }
   },
   "scripts": {

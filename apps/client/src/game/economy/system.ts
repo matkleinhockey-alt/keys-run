@@ -139,6 +139,14 @@ export function createEconomySystem(deps: EconomyDeps) {
     syncDeck,
     payForCatch,
     market,
+    /** Money in that is not a fish: lotto winnings (game/services). Same persistence path as
+     * everything else, so a win survives a reload. Ignores non-positive/non-finite amounts. */
+    credit(n: number): void {
+      if (!Number.isFinite(n) || n <= 0) return;
+      commit(sanitizeEconomy({ ...state, cash: state.cash + Math.floor(n) }));
+    },
+    /** Make sure the wallet is on disk now (the motel promises "progress saved"). */
+    flush(): void { save(state); },
     /** Dev/test: a legal wallet for a screenshot script. Not reachable from normal play. */
     debugSet(over: Partial<EconomyState>): void { commit(sanitizeEconomy({ ...state, ...over })); syncDeck(); },
   };

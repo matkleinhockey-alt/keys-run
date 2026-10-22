@@ -183,8 +183,11 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
   laundromat: {
     id: 'laundromat', name: 'Suds & Sun Coin Laundry', tagline: 'Wash · Dry · Fold',
     greeting: ['Quarters in the machine by the door.'],
-    blurb: 'Nothing here but the warm, sweet smell of fabric softener. A place to wash the fish out of your shorts.',
-    sells: [],
+    blurb: 'The warm, sweet smell of fabric softener. A place to wash the fish out of your shorts, and the bar out of your shirt.',
+    sells: [
+      item('wash', 'Wash & dry', 'Takes the bar out of your shirt. And you.', 8, 'service', 'laundromat.wash'),
+      item('sock', 'Lost-and-found sock', 'A mystery sock. Eight to collect. Nothing happens.', 3, 'sink', 'laundromat.sock'),
+    ],
     enterable: false,
   },
   icecream: {

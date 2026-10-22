@@ -44,6 +44,11 @@ export interface TimeOfDayController {
   /** Current day(0)/sunset(1) blend — legacy's module-level `TOD.k`. Boats read this for their
    * cockpit mood-light crossfade (entities/boat/visuals.ts); see index.html:3289. */
   getK(): number;
+  /** True when the sky is at, or heading to, sunset (the same toggle the sun button flips). */
+  isSunset(): boolean;
+  /** Jump straight to full sunset, no glide. Used by the motel, which does it behind a black fade so
+   * nobody watches the sun teleport. Idempotent. Not a toggle: it can never send you back to day. */
+  snapToSunset(): void;
 }
 
 export function createTimeOfDay(ctx: SceneCtx, waterSky: { value: THREE.Color }): TimeOfDayController {
@@ -94,6 +99,12 @@ export function createTimeOfDay(ctx: SceneCtx, waterSky: { value: THREE.Color })
     setCloudMat(m) { cloudMat = m; },
     update: updateTOD,
     getK() { return state.k; },
+    isSunset() { return state.target === 1; },
+    snapToSunset() {
+      state.target = 1; state.k = 1; state.dirty = true;
+      const b = document.getElementById('btnSun');
+      if (b) b.textContent = '☀️';
+    },
     toggleSunset() {
       state.target = state.target ? 0 : 1;
       state.dirty = true;
