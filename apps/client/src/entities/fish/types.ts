@@ -10,6 +10,8 @@
  * one place a `SchoolState` meets a `THREE.InstancedMesh`.
  */
 
+import type { Carcass } from '@keysrun/shared/sim/chum';
+
 export type SwimAxis = 'x' | 'y';
 
 /** One live fish within a school — legacy's inline `m` member object, typed and renamed. */
@@ -169,4 +171,14 @@ export interface SchoolCtx {
   t: number;
   dt: number;
   threats: readonly Threat[];
+  /**
+   * Dead birds floating on the surface — the counterpart to `threats`, and the opposite sign: a
+   * `Threat` pushes a school away, a `Carcass` pulls the big, toothy species in (sim/chum.ts's
+   * `chumPull`, consulted by `stepSchool`). Owned and stepped by the client
+   * (entities/life/carcass.ts); the fish system only reads it.
+   *
+   * Optional, defaulting to none, so every existing caller and every hand-built test ctx keeps
+   * compiling — and because "nothing has been shot" is the normal state of the world.
+   */
+  carcasses?: readonly Carcass[];
 }

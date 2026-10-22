@@ -42,8 +42,12 @@
  *  - the report spooks fish: `kind: 'spear'` threats, the same mechanism a missed shaft uses, placed
  *    under the shooter and along the shot (sim/handgun.ts `gunshotSpooks`) and held for a few
  *    seconds, so a school that bolts stays bolted instead of drifting straight back;
- *  - the report scatters birds, probabilistically with distance and nearness to the bullet, and a
- *    struck bird leaves for a good while (seabirds.ts `scareBird`: out, gone, and flying back in);
+ *  - the report scatters birds, probabilistically with distance and nearness to the bullet
+ *    (seabirds.ts `scareBird`: out, gone, and flying back in);
+ *  - a bird that is actually HIT falls out of the sky, hits the water and floats there as a
+ *    carcass, which draws the big predatory species in to it (`life.shootBird` ->
+ *    entities/life/carcass.ts -> @keysrun/shared/sim/chum). A dead bird on the surface is chum, and
+ *    that - not the scattering - is what a hit on a bird is for;
  *  - Caelen is reached through `life.caelenShot` with the bullet's real air path, so his hitbox,
  *    "you suck at this" taunt and two-minute sulk are his own and not duplicated here.
  */
@@ -102,7 +106,7 @@ export interface HandgunDeps {
   /** The player's inventory; rounds are `handgun.ammo`, upgrades read from `mods`. */
   gear: GearPort;
   fishWorld: Pick<FishWorld, 'spearTargetsNear'>;
-  life: Pick<LifeSystems, 'shootableBirds' | 'caelenShot' | 'caelenDebugHitbox'>;
+  life: Pick<LifeSystems, 'shootableBirds' | 'shootBird' | 'caelenShot' | 'caelenDebugHitbox'>;
   audio: Pick<AudioSystem['engine'], 'gunshot' | 'gunClick' | 'gunBrass' | 'gunReload' | 'gunImpact' | 'gunHitTick' | 'gull'>;
   particles: ParticleSystem;
 }
@@ -415,12 +419,21 @@ export function createHandgunSystem(deps: HandgunDeps): HandgunSystem {
         deps.particles.spawnP(p.x, p.y, p.z, (Math.random() - 0.5) * 2.2, 0.8 + Math.random() * 1.6, (Math.random() - 0.5) * 2.2, 1.2 + Math.random() * 0.9, 0.55, 0.95, true);
       }
       if (info.bird) {
-        scareBird(info.bird, shooter.x, shooter.z, birdAwaySeconds(info.birdKind ?? 'gull', true));
+        // Shot DOWN, not merely scattered. `scareBird` (which is still what the report itself does
+        // to every other bird in earshot, below) was the whole consequence of a hit, so a hit and
+        // a near miss amounted to the same thing: the flock left. Now the struck bird falls,
+        // splashes, and leaves a carcass in the water that the big predatory species come to
+        // (entities/life/carcass.ts, @keysrun/shared/sim/chum). `birdAwaySeconds(kind, true)` is
+        // no longer consulted for a struck bird: how long the flock is a bird short is now tied to
+        // how long its corpse floats (carcass.ts's BIRD_REPLACE_S), not to the scare table.
+        deps.life.shootBird(info.bird);
         deps.audio.gull(p.x, p.z);
       }
       if (!firstBirdToast || tally.birds % 5 === 0) {
         firstBirdToast = true;
-        deps.toast(`Squawk! The ${info.birdKind ?? 'gull'} loses a few feathers and its dignity, and leaves in a huff. It will be back.`);
+        deps.toast(info.kind === 'bird'
+          ? `Squawk! The ${info.birdKind ?? 'gull'} drops into the water and lies there. Something big will be along for it shortly.`
+          : `Squawk! The ${info.birdKind ?? 'gull'} loses a few feathers and its dignity.`);
       }
     }
     hud.setScore(tally.fish, tally.birds, tally.caelen);

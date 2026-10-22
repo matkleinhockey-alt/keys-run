@@ -114,6 +114,45 @@ export interface BirdFlee {
 /** Seconds of visible flight each way (out, and back in) before the bird is out of sight. */
 export const FLEE_FLIGHT_S = 4;
 
+/**
+ * A bird that has been shot and is on its way down — the same trick as `BirdFlee`: a plain state
+ * bag honoured inside `moveBird`, so none of the systems that own birds (boat-gulls, pelicans,
+ * the bait-ball and weedline flocks) needs to know this can happen.
+ *
+ * Unlike a flee, a fall IGNORES the home position `moveBird` is handed. A falling bird is no
+ * longer following its flock's path at an offset; it is a ballistic object. So the fall carries
+ * its own integrated position and `moveBird` places the bird there outright.
+ */
+export interface BirdFall {
+  /** Live world position of the tumbling body. */
+  x: number; y: number; z: number;
+  /** Velocity, m/s. Seeded from the bird's own flight so it carries on through, not straight down. */
+  vx: number; vy: number; vz: number;
+  /** Tumble angle and rate, radians / radians per second. */
+  spin: number;
+  spinRate: number;
+  /** Water surface Y at the moment of the hit, snapshotted by the caller. Within the metre or two
+   * of wave relief over a 1-2 s fall this is close enough, and it keeps `moveBird` — which has no
+   * idea what a wave is — from needing the wave field. */
+  surf: number;
+  /** Seconds the flock is a bird down before a replacement drifts back in — see `moveBird`'s
+   * fall-lands branch for why the bird is recycled rather than destroyed. Supplied by the caller
+   * so the number can live next to the carcass lifetime it has to outlast. */
+  awayS: number;
+  /** Called once, by `moveBird`, the frame the body reaches the water. This is where a carcass
+   * gets spawned. A callback rather than a flag someone polls because `moveBird` is the only code
+   * that knows the falling position, and the owner of the carcass list (entities/life/carcass.ts)
+   * is not the owner of the bird. */
+  onSplash: (x: number, y: number, z: number) => void;
+}
+
+/** Terminal-ish fall speed, m/s. A gull is light and mostly feathers; it flutters down rather
+ * than dropping like a stone, which is also the funnier reading. */
+const FALL_MAX_SPEED = 13;
+/** Gravity used for the tumble, m/s². Under the real 9.81 to stretch the fall out — the arc is the
+ * whole point of the moment, and at 3 fps a true 1.2 s drop is four frames of nothing. */
+const FALL_G = 6.5;
+
 export interface Bird {
   g: THREE.Group;
   wings: ReadonlyArray<{ sx: number; sh: THREE.Group; el: THREE.Group }>;
@@ -126,6 +165,8 @@ export interface Bird {
   dive: Record<string, number> | null;
   /** Non-null while scattered; see `BirdFlee`. */
   flee: BirdFlee | null;
+  /** Non-null while falling out of the sky; see `BirdFall`. Takes precedence over `flee`. */
+  fall: BirdFall | null;
 }
 
 /** legacy `makeSeabird` (index.html:2016-2022). */
@@ -145,12 +186,28 @@ export function makeSeabird(kind: BirdKind, scale = 1): Bird {
     return { sx, sh, el };
   });
   g.scale.setScalar(scale);
-  return { g, wings, kind, ph: Math.random() * 6.28, px: null, py: null, pz: null, yaw: 0, roll: 0, dive: null, flee: null };
+  return { g, wings, kind, ph: Math.random() * 6.28, px: null, py: null, pz: null, yaw: 0, roll: 0, dive: null, flee: null, fall: null };
+}
+
+/**
+ * Wings limp and half-folded, dropped below the shoulder line. The pose of a bird that has stopped
+ * flying — used while one is falling out of the sky (`poseBird` below) and again for the carcass
+ * floating afterwards (entities/life/carcass.ts), which is why it is here and exported rather than
+ * written twice: the two have to match or the carcass visibly changes shape the moment it lands.
+ */
+export function poseBirdLimp(B: Bird): void {
+  B.wings.forEach((w) => {
+    w.sh.rotation.set(0, -w.sx * 0.25, w.sx * -0.35);
+    w.el.rotation.set(0, -w.sx * 0.55, w.sx * -0.5);
+  });
 }
 
 /** legacy `poseBird` (index.html:2024-2029): flap (0..1 blend) with a phase, glide with a slight
  * dihedral, or fold back for a dive. */
 export function poseBird(B: Bird, dt: number, flap: number, tuck: number, rate = 9): void {
+  // A bird falling out of the sky is not flying. A flapping corpse would undo the whole read of
+  // the moment.
+  if (B.fall) { poseBirdLimp(B); return; }
   // A bird that has been scared is flapping hard whatever its home behaviour says (a gliding gull
   // does not coast away from a gunshot), and is not tucked for a dive.
   if (B.flee && B.g.visible) { flap = 1; tuck = 0; rate = Math.max(rate, 14); }
@@ -166,6 +223,39 @@ export function poseBird(B: Bird, dt: number, flap: number, tuck: number, rate =
 
 /** legacy `moveBird` (index.html:2031-2034): face along its motion and bank into turns. */
 export function moveBird(B: Bird, x: number, y: number, z: number, dt: number): void {
+  // A shot bird: ballistic, and the home position it was handed is ignored entirely (see
+  // `BirdFall`). Checked before `flee` because a fall supersedes a scare.
+  if (B.fall) {
+    const f = B.fall;
+    f.vy = Math.max(-FALL_MAX_SPEED, f.vy - FALL_G * dt);
+    // Horizontal drag: it carries on along its old line for a moment and then stops driving.
+    const keep = Math.max(0, 1 - dt * 1.1);
+    f.vx *= keep; f.vz *= keep;
+    f.x += f.vx * dt; f.y += f.vy * dt; f.z += f.vz * dt;
+    f.spin += f.spinRate * dt;
+    B.g.visible = true;
+    B.g.position.set(f.x, f.y, f.z);
+    // Nose down and rolling over and over. The heading is frozen at whatever it was flying: it is
+    // no longer steering, and re-deriving a yaw from the fall would make it weathervane.
+    B.g.rotation.set(-0.9 + Math.sin(f.spin * 0.7) * 0.3, B.yaw, f.spin, 'YXZ');
+    if (f.y <= f.surf) {
+      B.fall = null;
+      // The body is gone from the bird system the instant it lands: what floats from here is a
+      // carcass (entities/life/carcass.ts), spawned by this callback, which has its own mesh and
+      // its own lifetime. The bird itself goes into a long `flee` instead of being destroyed —
+      // the flocks are fixed-size pools built once at boot (boat-gulls.ts, pelicans.ts,
+      // hotspots.ts), so permanently removing members would thin every flock in the world one
+      // shot at a time until the sky was empty. A replacement drifts back in later, which is also
+      // what the hit toast has always promised ("It will be back").
+      B.g.visible = false;
+      B.px = null; B.py = null; B.pz = null;
+      // `t: FLEE_FLIGHT_S` starts the absence already past the outbound leg, so a dead bird does
+      // not fly away from its own splash — only the return leg at the far end still plays.
+      B.flee = { t: FLEE_FLIGHT_S, away: Math.max(f.awayS, 2 * FLEE_FLIGHT_S + 1), dx: Math.sin(B.yaw), dz: Math.cos(B.yaw) };
+      f.onSplash(f.x, f.surf, f.z);
+    }
+    return;
+  }
   if (B.flee) {
     const f = B.flee;
     f.t += dt;
@@ -219,8 +309,47 @@ export function birdWorldPos(B: Bird, out: THREE.Vector3 = _wp): THREE.Vector3 {
  * under fire would never come home). The run direction is taken in world space; every parent group
  * of a bird in this game is translated but not rotated, so world and local directions agree.
  */
+/**
+ * Shoots a bird out of the sky: it goes limp, tumbles down along the line it was flying, and when
+ * it reaches the water `onSplash` fires once with the WORLD position of the impact.
+ *
+ * Does nothing to a bird that is already falling or already away — the same discipline as
+ * `scareBird`, and for a sharper reason here: two hits on one gull must not put two carcasses in
+ * the water from one bird.
+ *
+ * ## The coordinate space, which is the whole trick in this function
+ *
+ * `moveBird` writes `B.g.position`, which is PARENT-LOCAL: most birds in this game are children
+ * of a hotspot/flock group that is translated (never rotated — see `scareBird`). So the fall has
+ * to be integrated in local space or the bird teleports to the world origin's neighbourhood the
+ * moment it is hit. Callers, meanwhile, only have world numbers: a surface height from the wave
+ * field, and a splash point they want to put a carcass at. This function is the one place that
+ * knows both, so it takes and returns world and converts at the boundary — the parent's
+ * translation is exactly `worldPos - B.g.position`.
+ */
+export function shootDownBird(B: Bird, surfaceWorldY: number, awayS: number, onSplash: (x: number, y: number, z: number) => void): void {
+  if (B.fall || B.flee) return;
+  const w = birdWorldPos(B);
+  const l = B.g.position;
+  const ox = w.x - l.x, oy = w.y - l.y, oz = w.z - l.z;
+  // It keeps some of its own momentum — a bird hit in level flight pitches over and carries on for
+  // a beat — but only some: a full cruising speed carried all the way down read as a controlled
+  // glide rather than a fall. Forward is (sin yaw, cos yaw), `moveBird`'s own convention.
+  const fwd = 3.5;
+  B.fall = {
+    x: l.x, y: l.y, z: l.z,
+    vx: Math.sin(B.yaw) * fwd, vy: -1.5, vz: Math.cos(B.yaw) * fwd,
+    spin: 0, spinRate: (Math.random() < 0.5 ? -1 : 1) * (3 + Math.random() * 3),
+    surf: surfaceWorldY - oy,
+    awayS,
+    onSplash: (lx, ly, lz) => onSplash(lx + ox, ly + oy, lz + oz),
+  };
+}
+
 export function scareBird(B: Bird, fromX: number, fromZ: number, awayS: number): void {
-  if (B.flee) return;
+  // `B.fall` as well as `B.flee`: the report of the shot that killed a bird reaches every bird in
+  // earshot including that one, and a corpse must not change its mind and fly off.
+  if (B.flee || B.fall) return;
   const p = birdWorldPos(B);
   let dx = p.x - fromX, dz = p.z - fromZ;
   const l = Math.hypot(dx, dz);
