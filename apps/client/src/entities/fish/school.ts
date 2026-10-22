@@ -123,11 +123,31 @@ export function stepSchool(state: SchoolState, V: CreatureVis, ctx: SchoolCtx): 
     g.heading += (Math.sin(t * 0.37 + g.phase) * 0.35 + Math.sin(t * 0.11 + g.phase * 2) * 0.2) * dt;
   }
 
+  // A resident school holds a patch (spawn.ts gives it a 6-16 m anchor). The obvious way to write
+  // that is a tangential orbit with a radial correction toward radius R — which is what this did,
+  // and it is wrong in a way that is invisible in code and glaring in play: the correction is a
+  // stable attractor, so every school converges onto a perfect circle of radius R and stays there,
+  // turning the same way forever. Parked over a bait frenzy watching one patch, it reads as fish
+  // spinning in circles, because that is exactly what they are doing.
+  //
+  // Real fish holding structure mill: they wander over the patch, drift off the edge, and come
+  // back. So the anchor is a soft tether rather than a track. Inside the patch nothing steers at
+  // all — the wander above runs untouched. Only past the edge does a homing term fade in, and the
+  // slight tangential lead that stops a school charging straight through the middle reverses on a
+  // ~90 s cycle, so no school can settle into a fixed carousel even out at the boundary.
   if (g.anchor && g.flee <= 0 && !bowRiding) {
     const ax = g.cx - g.anchor.x, az = g.cz - g.anchor.z, d0 = Math.hypot(ax, az) || 1;
-    const R = g.anchor.r || 10, dir = (g.phase % 2) < 1 ? 1 : -1, rc = clamp((R - d0) / R, -1, 1) * 0.9;
-    const vx = -az / d0 * dir + ax / d0 * rc, vz = ax / d0 * dir + az / d0 * rc;
-    g.heading = angLerp(g.heading, Math.atan2(-vx, -vz), dt * 2);
+    const R = g.anchor.r || 10;
+    // <0 inside the patch, 0 at the edge, >0 outside. The -0.15 starts the pull just inside the
+    // boundary so a school eases round instead of overshooting and visibly snapping back.
+    const pull = clamp((d0 - R) / R + 0.15, 0, 1);
+    if (pull > 0) {
+      const dir = Math.sin(t * 0.07 + g.phase * 3.1) >= 0 ? 1 : -1;
+      const tang = 0.55 * (1 - pull); // fades out the further from home, so a stray school comes back
+      const vx = (-ax / d0) * pull + (-az / d0) * dir * tang;
+      const vz = (-az / d0) * pull + (ax / d0) * dir * tang;
+      g.heading = angLerp(g.heading, Math.atan2(-vx, -vz), dt * 1.6 * (0.4 + pull));
+    }
     sp *= 0.75;
   }
   if (g.glide > 0) {
