@@ -43,7 +43,14 @@ const SURFACE: Profile = {
 // "Submerged": ~10-30 m visibility depending on depth band means almost nothing past the first
 // ring is ever seen; kept deliberately small and cheap.
 const SUBMERGED: Profile = {
-  rings: [{ outer: 26, segs: 16 }, { outer: 60, segs: 5 }],
+  // Relief tiers (shared/world/relief.ts). The near ring is 2 m spacing (was 4 m): a coral head is
+  // 1.4-3.8 m across and a rock ledge a few metres wide, so at 4 m they were one or two vertices
+  // and read as lumps; at 2 m they are shaped. The mid ring is 6.4 m (was 12.8 m) — enough for the
+  // 8-16 m outcrops and the 30 m spur-and-groove to survive as silhouette, not the heads, which are
+  // invisible at that range anyway. Cost: ~17k vertices resident (was ~4.5k), most of it in the
+  // chunks you are actually looking at; nothing past 60 m is built, same as before. (Vertex count
+  // is 33^2 per near chunk, 11^2 per mid chunk; ~12 near + ~35 mid chunks at a 26/60 m radius.)
+  rings: [{ outer: 26, segs: 32 }, { outer: 60, segs: 10 }],
   freeMargin: 1.4,
 };
 // Hysteresis band for the surfaced/submerged switch (metres of camera Y) — avoids flapping LOD

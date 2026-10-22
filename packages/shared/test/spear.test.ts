@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { mulberry32 } from '../src/rng/index.js';
 import {
-  SPEAR_SPEED, SPEAR_RANGE, SPEAR_RELOAD, SPEAR_RELOAD_FLOOR,
+  SPEAR_SPEED, SPEAR_RANGE, SPEAR_RELOAD, SPEAR_RELOAD_FLOOR, SPEAR_DRAW_TIME, SPEAR_DRAW_SLIP, SPEAR_DRAW_NOTCHES, drawRateFor,
   createGun, canFire, stepReload, startReload,
   fire, stepSpear, closestDistSqSegmentSegment, segmentHitsCapsule,
   distAtFlightTime, shaftSpeedAtDist, holdChance,
@@ -262,31 +262,66 @@ describe('water drag (range and power falloff)', () => {
   });
 });
 
-describe('reload gating', () => {
-  it('a fresh gun can fire', () => {
+
+describe('reload: recover, then a hand-hauled draw', () => {
+  const HOLD = { drawing: true, speed: 0 };
+  const run = (gun: ReturnType<typeof createGun>, hand: { drawing: boolean; speed: number }, secs: number) => {
+    let g = gun, n = Math.round(secs / DT);
+    while (n-- > 0) g = stepReload(g, DT, hand);
+    return g;
+  };
+
+  it('a fresh gun is loaded and can fire', () => {
     expect(canFire(createGun())).toBe(true);
   });
 
-  it('cannot fire immediately after a shot, and can again once reloaded', () => {
-    let gun = startReload(SPEAR_RELOAD);
-    expect(canFire(gun)).toBe(false);
-    const steps = Math.ceil(SPEAR_RELOAD / DT);
-    for (let i = 0; i < steps - 1; i++) {
-      gun = stepReload(gun, DT);
-      expect(canFire(gun)).toBe(false);
-    }
-    gun = stepReload(gun, DT);
-    expect(canFire(gun)).toBe(true);
+  it('a timer alone never reloads: with the hand off the bands the gun stays empty forever', () => {
+    const g = run(startReload(SPEAR_RELOAD), { drawing: false, speed: 0 }, 60);
+    expect(canFire(g)).toBe(false);
+    expect(g.draw).toBe(0);
   });
 
-  it('never allows a reload shorter than the anti-cheat floor', () => {
+  it('cannot draw during the recover phase', () => {
+    const g = run(startReload(SPEAR_RELOAD), HOLD, SPEAR_RELOAD - 0.1);
+    expect(g.draw).toBe(0);
+    expect(g.reloadT).toBeGreaterThan(0);
+  });
+
+  it('the fastest possible reload (perfect hand, hanging still) is recover + draw, and beats the floor', () => {
+    let g = startReload(SPEAR_RELOAD), t = 0;
+    while (!canFire(g) && t < 60) { g = stepReload(g, DT, HOLD); t += DT; }
+    expect(canFire(g)).toBe(true);
+    expect(t).toBeGreaterThanOrEqual(SPEAR_RELOAD + SPEAR_DRAW_TIME - 2 * DT);
+    expect(t).toBeGreaterThan(SPEAR_RELOAD_FLOOR);
+    // and clearly longer than the 2.5 s timer it replaced
+    expect(t).toBeGreaterThan(4);
+  });
+
+  it('kicking while hauling is slower than hanging still', () => {
+    expect(drawRateFor(0)).toBe(1);
+    expect(drawRateFor(5)).toBeLessThan(0.5);
+    const still = run(startReload(SPEAR_RELOAD), HOLD, SPEAR_RELOAD + 1.5);
+    const swim = run(startReload(SPEAR_RELOAD), { drawing: true, speed: 1.4 }, SPEAR_RELOAD + 1.5);
+    expect(swim.draw).toBeLessThan(still.draw);
+  });
+
+  it('letting go slips back, but only to the last notch passed', () => {
+    const hauled = run(startReload(SPEAR_RELOAD), HOLD, SPEAR_RELOAD + SPEAR_DRAW_TIME * 0.5);
+    expect(hauled.draw).toBeGreaterThan(0.45);
+    const slipped = run(hauled, { drawing: false, speed: 0 }, 30);
+    expect(slipped.draw).toBeCloseTo(Math.floor(hauled.draw * SPEAR_DRAW_NOTCHES) / SPEAR_DRAW_NOTCHES, 6);
+    expect(slipped.draw).toBeGreaterThan(0);
+    expect(SPEAR_DRAW_SLIP).toBeGreaterThan(0);
+  });
+
+  it('never allows a recover phase shorter than the anti-cheat floor', () => {
     const gun = startReload(0.1); // a hostile/buggy caller asking for a near-instant reload
     expect(gun.reloadT).toBeGreaterThanOrEqual(SPEAR_RELOAD_FLOOR);
   });
 
   it('stepReload is a no-op once loaded', () => {
     const loaded = createGun();
-    expect(stepReload(loaded, DT)).toBe(loaded);
+    expect(stepReload(loaded, DT, HOLD)).toBe(loaded);
   });
 });
 

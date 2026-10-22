@@ -23,6 +23,7 @@
  */
 import * as THREE from 'three';
 import { AIR_MAX, type DiverState } from '@keysrun/shared/sim/diver';
+import { beginGesture, moveGesture, type Gesture } from './gesture.js';
 
 const clamp = (v: number, a: number, b: number): number => (v < a ? a : v > b ? b : v);
 
@@ -32,13 +33,16 @@ export interface DiverCamState {
   yaw: number;
   pitch: number;
   mode: DiverCamMode;
+  /** True while a press that has become a LOOK is held (entities/diver/gesture.ts) — an
+   * undecided press, which may yet turn out to be a tap that fires the gun, is not a drag. */
   dragging: boolean;
-  lx: number;
-  ly: number;
+  /** Smoothed yaw rate (rad/s) of the look, for the camera's bank into a turn. */
+  yawRate: number;
+  prevYaw: number;
 }
 
 export function createDiverCamState(yaw = 0): DiverCamState {
-  return { yaw, pitch: -0.1, mode: 'mask', dragging: false, lx: 0, ly: 0 };
+  return { yaw, pitch: -0.1, mode: 'mask', dragging: false, yawRate: 0, prevYaw: yaw };
 }
 
 export function cycleDiverView(cam: DiverCamState): string {
@@ -48,21 +52,31 @@ export function cycleDiverView(cam: DiverCamState): string {
 
 /** Pointer-drag look, gated by `isActive` exactly like entities/diver/input.ts's key handlers —
  * bound/unbound per dive (see controller.ts) rather than left live, so a drag that started while
- * driving the boat never bleeds a diver-mode look delta in. */
+ * driving the boat never bleeds a diver-mode look delta in.
+ *
+ * A press does NOT start a look until it has moved `LOOK_DRAG_PX` (gesture.ts) — the same press
+ * may be a click that entities/speargun/input.ts fires the gun on at release, and the two must
+ * agree on which it is. Only the primary button looks/fires; right/middle presses used to start a
+ * look too, which is how a stray context-menu click rotated the view. */
 export function bindDiverPointerControls(canvas: HTMLCanvasElement, cam: DiverCamState, isActive: () => boolean): () => void {
+  let g: Gesture | null = null;
   const onDown = (e: PointerEvent): void => {
-    if (!isActive()) return;
-    cam.dragging = true; cam.lx = e.clientX; cam.ly = e.clientY;
+    if (!isActive() || e.button !== 0 || g) return;
+    g = beginGesture(e.pointerId, e.clientX, e.clientY);
     canvas.setPointerCapture(e.pointerId);
   };
   const onMove = (e: PointerEvent): void => {
-    if (!isActive() || !cam.dragging) return;
-    const dx = e.clientX - cam.lx, dy = e.clientY - cam.ly;
-    cam.lx = e.clientX; cam.ly = e.clientY;
+    if (!g || e.pointerId !== g.id || !isActive()) return;
+    const { dx, dy } = moveGesture(g, e.clientX, e.clientY);
+    if (g.kind === 'look') cam.dragging = true;
+    if (dx === 0 && dy === 0) return;
     cam.yaw -= dx * 0.0045;
     cam.pitch = clamp(cam.pitch - dy * 0.0045, -1.3, 1.3);
   };
-  const onUp = (): void => { cam.dragging = false; };
+  const onUp = (e: PointerEvent): void => {
+    if (!g || e.pointerId !== g.id) return;
+    g = null; cam.dragging = false;
+  };
   canvas.addEventListener('pointerdown', onDown);
   canvas.addEventListener('pointermove', onMove);
   canvas.addEventListener('pointerup', onUp);
@@ -72,7 +86,7 @@ export function bindDiverPointerControls(canvas: HTMLCanvasElement, cam: DiverCa
     canvas.removeEventListener('pointermove', onMove);
     canvas.removeEventListener('pointerup', onUp);
     canvas.removeEventListener('pointercancel', onUp);
-    cam.dragging = false;
+    g = null; cam.dragging = false;
   };
 }
 
@@ -93,7 +107,17 @@ export function updateDiverCamera(camera: THREE.PerspectiveCamera, cam: DiverCam
   const airFrac = clamp(state.air / AIR_MAX, 0, 1);
   const tunnel = airFrac < 0.25 ? Math.min(1, (0.25 - airFrac) / 0.25) : 0;
   const baseFov = depth > 0.15 ? MASK_FOV : SURFACE_FOV;
-  const wantFov = baseFov - (baseFov - TUNNEL_MIN_FOV) * tunnel;
+  // Speed widens the view a little (sprinting reads as speed, not just a faster number), capped so
+  // it never fights the tunnel-vision narrowing at low air.
+  const speed = Math.hypot(state.vx, state.vy, state.vz);
+  const wantFov = baseFov - (baseFov - TUNNEL_MIN_FOV) * tunnel + Math.min(4, speed * 1.5) * (1 - tunnel);
+
+  // Look rate, smoothed, for banking into a turn. Differenced here (not in the pointer handler)
+  // because yaw can also be set directly (debug hooks, enterWater), and wrapping a teleport-sized
+  // jump into the bank would roll the view over.
+  const rawRate = dt > 0 ? (cam.yaw - cam.prevYaw) / dt : 0;
+  cam.prevYaw = cam.yaw;
+  cam.yawRate += (clamp(rawRate, -6, 6) - cam.yawRate) * Math.min(1, dt * 8);
   camera.fov += (wantFov - camera.fov) * Math.min(1, dt * 3);
   camera.near = DIVE_CAMERA_NEAR;
   camera.far = DIVE_CAMERA_FAR;
@@ -108,8 +132,15 @@ export function updateDiverCamera(camera: THREE.PerspectiveCamera, cam: DiverCam
     // doc's "reticle sway"; the real visual warp is the renderer's to add later.
     const swayK = state.narcosis ? 2.2 : 1;
     const sway = Math.sin(t * 1.3) * 0.015 * swayK;
-    camera.position.set(state.x, state.y + EYE_HEIGHT, state.z);
-    camera.rotation.set(cam.pitch + sway, cam.yaw, Math.cos(t * 0.9) * 0.01 * swayK, 'YXZ');
+    // Kick stroke: the head surges forward with each fin stroke and dips slightly on the recovery
+    // (state.kickPhase, sim/diver.ts), scaled by speed so a coast is smooth. Roll banks into a
+    // turn (negative yaw rate = turning right = roll right). Both are camera-only: aim comes from
+    // yaw/pitch alone, so none of this moves where a shot goes.
+    const stroke = state.kicking ? Math.max(0, Math.sin(state.kickPhase * Math.PI * 2)) : 0;
+    const surge = stroke * 0.05 * Math.min(1, speed / 1.2);
+    const bank = clamp(cam.yawRate * 0.03, -0.1, 0.1);
+    camera.position.set(state.x + fx * surge, state.y + EYE_HEIGHT + fy * surge - stroke * 0.012, state.z + fz * surge);
+    camera.rotation.set(cam.pitch + sway + stroke * 0.006, cam.yaw, Math.cos(t * 0.9) * 0.01 * swayK + bank, 'YXZ');
   } else {
     tmpPos.set(state.x - fx * 3.4, state.y + 1.1 - fy * 1.2, state.z - fz * 3.4);
     camera.position.copy(tmpPos);

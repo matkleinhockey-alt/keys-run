@@ -22,23 +22,19 @@ import { EffectPass, type Effect, type EffectComposer } from 'postprocessing';
 import type { QualityTier } from '../../core/quality.js';
 import { createSurfaceTransition, type SurfaceTransition } from './transition.js';
 import { createMarineSnow, type MarineSnow } from './marine-snow.js';
+import { createSeepBubbles, type SeepBubbles } from './seep-bubbles.js';
 import { CausticsEffect } from './caustics.js';
 import { LensWettingEffect } from './lens-wetting.js';
 import { createGodRays, type GodRaysRig } from './godrays.js';
 import { MARINE_SNOW_FULL_DEPTH, INSCATTER_COLOR, AMBIENT_HALF_DEPTH } from './depth-bands.js';
-import { depthAt } from '@keysrun/shared/world/depth';
-import { floorY } from '../seafloor.js';
+import { seafloorHeightAt as terrainHeightAt } from '../terrain/heightfield.js';
 
-/** The QA/debug dive hook's seafloor estimate, built from the REAL (not aspirational)
- * `world/seafloor.ts` — read-only import, this agent does not own that file. `floorY` is still
- * the documented-hazard, vertically-*compressed* single-plane formula
- * (`d => -(0.25 + min(d,14) * 0.55)`, docs/ARCHITECTURE.md "Seafloor"): it flattens to y≈-7.95 for
- * any true depth past 14 m. An earlier version of this hook estimated the floor as `-depthAt(x,z)`
- * (the *true*, uncompressed bathymetry) — that is lower (more negative, i.e. "deeper") than the
- * actually-rendered compressed floor at every depth, so the debug camera ended up embedded *below*
- * the real terrain surface at every single capture, seeing nothing but raw fog colour. Reading the
- * real export instead fixes that for any depth the compressed mesh still tracks. */
-const seafloorHeightAt = (x: number, z: number): number => floorY(depthAt(x, z));
+/** The QA/debug dive hook's seafloor estimate: the exact height the terrain mesh and the diver's
+ * ground collision sample (world/terrain/heightfield.ts), relief included. This used to be the
+ * old compressed single-plane `floorY(depthAt)`, which is neither what is drawn nor what is
+ * collided with once the floor has real rock on it — a debug camera placed by it ends up inside a
+ * coral head. */
+const seafloorHeightAt = (x: number, z: number): number => terrainHeightAt(x, z);
 
 export interface UnderwaterDeps {
   scene: THREE.Scene;
@@ -81,6 +77,8 @@ export function createUnderwaterWorld(deps: UnderwaterDeps): UnderwaterWorld {
   const transition: SurfaceTransition = createSurfaceTransition(camera);
   const marineSnow: MarineSnow = createMarineSnow(renderer.getPixelRatio());
   scene.add(marineSnow.points);
+  const seepBubbles: SeepBubbles = createSeepBubbles(renderer.getPixelRatio());
+  scene.add(seepBubbles.points);
 
   let godRays: GodRaysRig | null = null;
   let lensWetting: LensWettingEffect | null = null;
@@ -206,8 +204,13 @@ export function createUnderwaterWorld(deps: UnderwaterDeps): UnderwaterWorld {
     lensWetting?.setAmounts(transition.wetness(), transition.underwaterAmount());
 
     const cameraDepth = Math.max(0, -camera.position.y);
-    const snowFraction = Math.min(1, cameraDepth / MARINE_SNOW_FULL_DEPTH) * transition.underwaterAmount();
+    // Snow used to scale from 0 at the surface to full at 25 m, which left the shallows — where
+    // most spearfishing happens and where the current is strongest (surge) — with almost no
+    // particulate to read the water's motion from. A floor keeps it present from the first metre;
+    // depth still thickens it.
+    const snowFraction = (0.4 + 0.6 * Math.min(1, cameraDepth / MARINE_SNOW_FULL_DEPTH)) * transition.underwaterAmount();
     marineSnow.update(dt, camera.position, snowFraction, simTime);
+    seepBubbles.update(dt, camera.position, simTime, transition.underwaterAmount());
   }
 
   function attachPostFX(composer: EffectComposer, tier: QualityTier): void {
@@ -273,6 +276,8 @@ export function createUnderwaterWorld(deps: UnderwaterDeps): UnderwaterWorld {
     dispose() {
       scene.remove(marineSnow.points);
       marineSnow.dispose();
+      scene.remove(seepBubbles.points);
+      seepBubbles.dispose();
       if (godRays) { scene.remove(godRays.lightMesh); godRays.dispose(); godRays = null; }
       if (skyHidden) { sky.visible = true; sunDisc.visible = true; scene.background = originalBackground; }
       postEffectPass = null; // the composer that owned it is already being torn down by postfx.dispose()
