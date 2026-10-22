@@ -1057,6 +1057,13 @@ export function initWorld(wrap: HTMLElement): World {
      * real throttle input to demonstrate — teleport() above always zeroes speed) instead of
      * guessing where it ended up. No normal code path reads this. */
     boatState: () => ({ x: curState.x, z: curState.z, h: curState.h, speed: curState.speed }),
+    /** Verification-only: whether the rod is currently holding the astern throttle off, and why.
+     * The reel key doubles as astern (see the `rodHasLine` guard in `frame()`), and the symptom of
+     * that guard silently never firing is subtle — a cast refused with "Slow under 3 knots" some
+     * seconds later — so this exposes the condition directly rather than leaving it to be inferred
+     * from boat speed, which at this sandbox's frame rate barely moves within a test's patience. */
+    asternSuppressed: (): { suppressed: boolean; lineOut: boolean; rodState: string } =>
+      ({ suppressed: fishingLineOut() || FishF.state === 'caught', lineOut: fishingLineOut(), rodState: FishF.state }),
   };
 
   // DEV/VERIFICATION HOOK ONLY — same spirit as __fishDebug/__uwDebug above: this sandbox's
