@@ -29,6 +29,7 @@ import { VIS, isCatchable } from '../content/creatures.js';
 import { offshoreF, depthAt, landH, type Zone, type Hump } from '../world/depth.js';
 import { weightedPick, type Rng } from '../rng/index.js';
 import { clamp, lerp } from '../internal/math.js';
+import { STARTER_TACKLE, tackleById, type Tackle } from '../content/tackle.js';
 
 // re-exported so callers don't need a second import just for the zone key union
 export type { Zone };
@@ -97,11 +98,27 @@ export function pickSpecies(zone: Zone | (string & {}), bob: { x: number; z: num
   return weightedPick(rng, weighted);
 }
 
-/** legacy `chooseFish`'s weight roll (index.html:2657). */
+/** Odds that a hooked fish is a fish of a lifetime, before the offshore/hotspot boosts. */
+export const TROPHY_TAIL_P = 0.05;
+
+/**
+ * legacy `chooseFish`'s weight roll (index.html:2657), plus a trophy tail.
+ *
+ * Why the tail: the legacy shape `rng^1.8` piles mass at the bottom of every species' range and
+ * only reaches the top 15% about 9% of the time inshore, so a 400 lb shark or an 80 lb grouper was
+ * a once-in-a-session rarity, and the weight ceiling (p99 inshore ~50-80 lb, max ~480) rarely
+ * mattered. Measured per zone by apps/client/test/playthrough-weights.mjs. The tail re-rolls a
+ * fraction of fish into the top 20% of their range (offshore and hotspots more), so the ceiling
+ * is actually used. Rejected: shifting the whole distribution up, which makes every fish bigger
+ * and none of them special, and which on the old sim just inflated scores because every hooked
+ * fish was landed. The fight model is what makes these earned: see `FightParams.pullN`.
+ */
 export function rollWeight(key: string, bob: { x: number; z: number }, hotspot: boolean, rng: Rng): number {
   const S = SPECIES[key];
   const of = offshoreF(bob.x, bob.z);
-  const w = S.min + (S.max - S.min) * Math.min(1, Math.pow(rng(), 1.8 - 1.2 * of) * (hotspot ? 1.2 : 1) * (1 + 0.3 * of));
+  let t = Math.min(1, Math.pow(rng(), 1.8 - 1.2 * of) * (hotspot ? 1.2 : 1) * (1 + 0.3 * of));
+  if (rng() < TROPHY_TAIL_P * (hotspot ? 1.8 : 1) * (1 + of)) t = Math.max(t, 0.8 + 0.2 * Math.pow(rng(), 0.7));
+  const w = S.min + (S.max - S.min) * t;
   return +w.toFixed(1);
 }
 
@@ -125,8 +142,57 @@ export function chooseFish(zone: Zone | (string & {}), bob: { x: number; z: numb
 }
 
 /* ------------------------------------------------------------------------------------------ *
- * The fight itself (legacy `setHook` + `updateFishing`'s fight branch)
+ * The fight itself (legacy `setHook` + `updateFishing`'s fight branch, rebuilt — see below)
  * ------------------------------------------------------------------------------------------ */
+
+/*
+ * WHY THIS WAS REBUILT. The legacy fight was not a contest. An offline Monte Carlo over this
+ * very module (apps/client/test/playthrough-model.mjs, fixed seed, thousands of fights) measured:
+ * a trivial bang-bang bot won 100%, a 600 ms-reaction human 96%, and a 900 lb bluefin was landed
+ * as reliably as a 2 lb trout. Worse, drag was not a trade-off: 99.9-100% at every setting 1..5
+ * while mean fight length fell from 11.4 s to 6.7 s, so drag 5 was strictly best for every
+ * species (the per-species "best drag" sweep picked drag 1 for 49/49 purely by tie-breaking, the
+ * signature of a knob that does nothing). Root causes, all fixed here:
+ *   - tension was a free integrator the player merely had to keep < 1.06; nothing else could kill
+ *     a fight, and the fish started 11 m away so there was no time for anything to accumulate;
+ *   - line strength, spool and fish force were unrelated constants, so tackle could not matter;
+ *   - drag only scaled two multipliers by +-15%, never the physics of who wins.
+ *
+ * THE MODEL. Tension is normalised so 1.0 = the rated breaking strength of the weaker of
+ * line/leader (`Tackle`). The drag is a clutch that slips at `DRAG_FRAC[drag] * lineLb`:
+ *   - fish force below the clutch: the line just holds, the fish cannot take line, load = its pull;
+ *   - above it: the clutch slips, load is *capped at the setting*, and the fish takes line in
+ *     proportion to how far it exceeds it. A loose drag therefore gives line (long runs, a longer
+ *     fight, spooling, more time for chafe and hook wear); a tight one stops the fish (short
+ *     fight) but every transient the clutch cannot absorb - run-start bolt, head shake, a jump
+ *     landing on a tight line - rides on top of a high baseline and is amplified by `stiff`.
+ * Failure modes (each one an angler would name it): break-off from overload or shock
+ * (`snapped`), leader chafe weakening the line over a long fight (`frayed`), the hook tearing
+ * out under load or shaking out on slack during a jump (`pulled`), `slack`, `spooled`, `mangrove`.
+ * "Horsing" is real: reeling against a *green* running fish adds `HORSE` on top of the drag
+ * load; against a tired one it adds little. Pump while it rests, feather while it runs.
+ */
+
+/** Clutch slip force as a fraction of line rating at drag 1..5 (interpolated for 2.5 etc).
+ * Real anglers set ~1/4-1/3; 5 is a deliberately dangerous 'lock it down'. */
+export const DRAG_FRAC: readonly number[] = [0.14, 0.22, 0.30, 0.39, 0.49];
+/** Added load, in line ratings, from cranking against a fresh running fish. */
+const HORSE = 0.36;
+/** Fish burst force, lb, at str 1 and 1 lb: `FORCE_K * str^1.3 * sqrt(weight)`. Measured so a
+ * 100 lb yellowfin pulls ~0.9x a 30 lb line and a 900 lb bluefin ~3x it. */
+const FORCE_K = 1.7;
+
+/** Local species groups for failure rates. Kept here, not in content/species.ts, because they are
+ * fight-tuning and not catalogue facts; keys are checked by fight.test.ts. */
+const TOOTHY = new Set(['wahoo', 'barracuda', 'kingfish', 'cero', 'spanishmack', 'bluerunner', 'blacktip', 'bullshark', 'lemonshark', 'hammerhead']);
+const SOFT_MOUTH = new Set(['trout', 'tarpon', 'ladyfish', 'mahi', 'sheepshead', 'lookdown']);
+
+/** Fraction of line rating the clutch slips at, for a (possibly fractional) drag setting. */
+export function dragFraction(drag: number): number {
+  const p = clamp(drag, 1, 5) - 1;
+  const i = Math.min(3, Math.floor(p));
+  return lerp(DRAG_FRAC[i], DRAG_FRAC[i + 1], p - i);
+}
 
 /** Derived, constant for the whole fight (legacy `F.str`/`F.maxLine` + the species flags its
  * jump/sound logic reads). Computed once by `startFight`, passed back into every `stepFight`. */
@@ -135,7 +201,7 @@ export interface FightParams {
   weight: number;
   /** legacy `F.str = S.str*(.8+.55*sizeT)` — size-scaled fight strength. */
   str: number;
-  /** legacy `F.maxLine = S.str>1.2?320:200`. */
+  /** legacy `F.maxLine = S.str>1.2?320:200`, times the tackle's spool factor. */
   maxLine: number;
   /** legacy `S.jump`. */
   jump: boolean;
@@ -147,7 +213,22 @@ export interface FightParams {
   /** Scaled fish length in meters (legacy `VIS[key].len*s`, `s` from `showHooked`/`setupPhoto`'s
    * `clamp(Math.cbrt(weight/avgWeight),.75,1.5)`), used only to flavor jump duration/height. */
   lenM: number;
+  /** Drag setting at the start of the fight; `FightInput.drag` overrides it live. */
   drag: number;
+  tackle: Tackle;
+  /** Rated breaking strength the tension is normalised to: min(line, leader), lb. */
+  ratingLb: number;
+  /** Fish burst force, lb (see `FORCE_K`). */
+  forceLb: number;
+  /** `forceLb / ratingLb`: how many line-ratings of pull a fully fresh run exerts. The single
+   * number that says whether this fish is a formality or a gamble on this tackle. */
+  pullN: number;
+  /** Stamina scale: bigger fish last longer under the same pressure. */
+  endure: number;
+  /** Relative hook-throw tendency: jumpers and soft-mouthed fish are worse. */
+  hookRisk: number;
+  /** Relative leader-chafe rate: teeth, rocks, wrecks. */
+  rough: number;
 }
 
 /** legacy `showHooked`/`setupPhoto`'s `clamp(Math.cbrt(weight/avgWeight),.75,1.5)` size scale,
@@ -160,33 +241,44 @@ export function scaledLenM(key: string, weight: number): number {
   return VIS[key].len * scale;
 }
 
-export function fightParamsFor(key: string, weight: number, drag: number): FightParams {
+export function fightParamsFor(key: string, weight: number, drag: number, tackle: Tackle = tackleById(STARTER_TACKLE)): FightParams {
   const S = SPECIES[key];
   const sizeT = (weight - S.min) / (S.max - S.min);
   const str = S.str * (0.8 + 0.55 * sizeT);
+  const ratingLb = Math.min(tackle.lineLb, tackle.leaderLb);
+  const sounder = SOUNDERS.has(key);
+  const forceLb = FORCE_K * Math.pow(str, 1.3) * Math.sqrt(weight);
   return {
     key, weight, str,
-    maxLine: S.str > 1.2 ? 320 : 200,
+    maxLine: (S.str > 1.2 ? 320 : 200) * tackle.spool,
     jump: !!S.jump,
     kingfish: key === 'kingfish',
     billfish: BILLFISH.has(key),
-    sounder: SOUNDERS.has(key),
+    sounder,
     lenM: scaledLenM(key, weight),
     drag,
+    tackle, ratingLb, forceLb, pullN: forceLb / ratingLb,
+    endure: 0.8 + 0.5 * Math.log10(1 + weight),
+    hookRisk: 1 + (S.jump ? 0.3 : 0) + (SOFT_MOUTH.has(key) ? 0.4 : 0),
+    rough: TOOTHY.has(key) ? 2.4 : sounder ? 1.6 : 1,
   };
 }
 
-export type FightOutcome = 'fighting' | 'landed' | 'snapped' | 'slack' | 'spooled' | 'mangrove';
+export type FightOutcome = 'fighting' | 'landed' | 'snapped' | 'frayed' | 'pulled' | 'slack' | 'spooled' | 'mangrove';
 
 export type FightEvent =
   | { type: 'splash'; x: number; z: number; big: boolean }
   | { type: 'startRun' }
   | { type: 'startJump'; low: boolean }
-  | { type: 'sounding' };
+  | { type: 'sounding' }
+  /** A transient the clutch could not absorb (bolt, head shake, jump landing on a tight line).
+   * `mag` is the added tension. Presentation-only: the rod kicks and the line twangs. */
+  | { type: 'shock'; mag: number };
 
 export interface FightState {
   x: number;
   z: number;
+  /** Line load as a fraction of the rated breaking strength; may exceed 1 transiently. */
   tension: number;
   stam: number;
   running: boolean;
@@ -227,6 +319,16 @@ export interface FightState {
    * line speed. Purely a function of `dist`, so it needs no state of its own.
    */
   spoolR: number;
+  /** Seconds since the hook set. A long fight is a risky fight: hook wear scales with this. */
+  t: number;
+  /** Leader chafe, 0..1. Lowers `limit` (and so what a given load can do) for the rest of the fight. */
+  abrasion: number;
+  /** Hook security, 1 = buried, 0 = out. Starts random (how well it set), then only wears down. */
+  hookHold: number;
+  /** Load (fraction of rating) at which the line parts right now: 1 less chafe. For the HUD. */
+  limit: number;
+  /** True while the clutch is slipping, i.e. the fish is taking line against the drag. */
+  slipping: boolean;
   outcome: FightOutcome;
   events: FightEvent[];
 }
@@ -236,13 +338,14 @@ export interface FightState {
 export function startFight(params: FightParams, fishX: number, fishZ: number, rng: Rng): FightState {
   const state: FightState = {
     x: fishX, z: fishZ,
-    tension: 0.55, stam: 1,
+    tension: 0.3, stam: 1,
     running: true, runT: rand(rng, 2, 4), runAng: rand(rng, -0.7, 0.7), pull: params.str * 1.05,
     slackT: 0, overT: 0,
     shake: 0.5, shakeT: rand(rng, 0.6, 1.4),
     jumpQ: 0, airborne: false, airT: 0,
     deep: 0, deepT: 0,
     dist: 0, lineSpeed: 0, spoolR: SPOOL_FULL_R,
+    t: 0, abrasion: 0, hookHold: rand(rng, 0.55, 1), limit: 1, slipping: false,
     outcome: 'fighting',
     events: [{ type: 'splash', x: fishX, z: fishZ, big: true }],
   };
@@ -254,6 +357,9 @@ export function startFight(params: FightParams, fishX: number, fishZ: number, rn
 
 export interface FightInput {
   reeling: boolean;
+  /** Live drag setting 1..5. Omitted = `params.drag`. The client passes its current knob every
+   * tick; before this, turning the drag mid-fight changed the clicker's sound and nothing else. */
+  drag?: number;
 }
 
 export interface FightEnv {
@@ -269,8 +375,13 @@ export interface FightEnv {
 export function stepFight(state: FightState, input: FightInput, params: FightParams, env: FightEnv, rng: Rng, dt: number): FightState {
   if (state.outcome !== 'fighting') return state;
   const next: FightState = { ...state, events: [] };
-  const { str, jump: jumper, billfish: bill, sounder } = params;
+  const { str, jump: jumper, billfish: bill, sounder, pullN } = params;
   const reel = input.reeling;
+  const Dn = dragFraction(input.drag ?? params.drag) * params.tackle.lineLb / params.ratingLb;
+  // Shock stiffness: a locked-down clutch cannot give, so the same bolt or shake lands harder.
+  const stiff = 0.3 + 4.0 * Math.pow(Dn, 1.2);
+  const shock = (mag: number): void => { next.tension += mag; next.events.push({ type: 'shock', mag }); };
+  next.t += dt;
 
   next.runT -= dt;
   if (next.running && next.runT <= 0) {
@@ -282,6 +393,8 @@ export function stepFight(state: FightState, input: FightInput, params: FightPar
     next.runAng = rand(rng, -1.1, 1.1);
     next.pull = str * rand(rng, 0.7, 1.1) * (0.45 + 0.55 * next.stam);
     next.events.push({ type: 'splash', x: next.x, z: next.z, big: false }, { type: 'startRun' });
+    // The bolt: a fresh fish leaving hits a tight line hard, a slack-ish one barely.
+    shock(0.2 * Math.min(1.6, pullN * (next.pull / str)) * stiff * (reel ? 1.2 : 0.35));
     if (jumper && rng() < 0.4 + 0.4 * next.stam) {
       next.jumpQ = bill ? 2 + Math.floor(rng() * 3) : 1 + (rng() < 0.3 ? 1 : 0);
     } else if (sounder && rng() < 0.6) {
@@ -302,6 +415,8 @@ export function stepFight(state: FightState, input: FightInput, params: FightPar
     if (next.airT <= 0) {
       next.airborne = false;
       next.events.push({ type: 'splash', x: next.x, z: next.z, big: true });
+      // Re-entry on a tight line is the classic jump break-off; on a bowed one it is nothing.
+      shock(0.3 * Math.min(1.2, pullN + 0.3) * stiff * clamp((next.tension - 0.15) / 0.4, 0, 1));
     }
   }
 
@@ -309,7 +424,7 @@ export function stepFight(state: FightState, input: FightInput, params: FightPar
   if (next.shakeT <= 0) {
     next.shakeT = rand(rng, 0.5, 1.8) * (1.4 - next.stam * 0.6);
     next.shake = 0.35;
-    next.tension += (reel ? 0.08 : 0.04) * str;
+    shock(0.16 * Math.min(1.6, pullN * (0.35 + 0.65 * next.stam) + 0.2) * stiff * (reel ? 1.4 : 0.8));
     if (!(next.deepT > 0) && !next.airborne) next.events.push({ type: 'splash', x: next.x, z: next.z, big: false });
   }
   next.shake = Math.max(0, next.shake - dt);
@@ -317,39 +432,65 @@ export function stepFight(state: FightState, input: FightInput, params: FightPar
   next.deep = lerp(next.deep, next.deepT > 0 ? Math.max(0, Math.min(depthAt(next.x, next.z) - 1, 4 + 8 * str)) : 0, Math.min(1, dt * 0.8));
 
   const air = next.airborne;
-  const dg = params.drag;
-  const pullK = (0.55 + 0.15 * dg) * (next.deepT > 0 ? 1.25 : 1);
-  if (reel) {
-    next.tension = clamp(next.tension + (0.36 + (next.running ? next.pull * 0.72 * pullK : 0.04) + (air ? 0.65 : 0)) * dt, 0, 1.15);
-  } else {
-    const tgt = air ? 0.05 : next.running ? clamp(0.28 + 0.11 * dg + 0.17 * next.pull * (next.deepT > 0 ? 1.2 : 1), 0, 0.97) : 0.08;
-    next.tension += (tgt - next.tension) * Math.min(1, dt * 1.6);
-  }
+  // What the fish is pulling with right now, in line ratings. A resting fish only hangs on the line.
+  const surge = 1 + 0.2 * Math.sin(next.t * 4.1 + next.runAng * 3);
+  const fN = next.running ? pullN * (next.pull / str) * surge * (next.deepT > 0 ? 1.25 : 1) : pullN * 0.15 * (0.5 + next.stam);
+  next.slipping = next.running && !air && fN > Dn;
+  // Cranking adds load, but only as much as the fish gives you something to crank against: a 2 lb
+  // snapper offers almost no resistance, so reeling it in never loads the line like reeling a green
+  // tuna does. Without this cap a trout on 30 lb line was being "horsed" to 0.5 of rating.
+  const horse = Math.min(HORSE * (0.5 + 0.9 * next.stam) * (next.running ? 1 : 0.4), 0.08 + 0.9 * pullN * (0.5 + 0.5 * next.stam));
+  let tgt: number;
+  if (air) tgt = reel ? 0.9 : 0.04;
+  else if (next.running) tgt = Math.min(fN, Dn) + 0.05 + (reel ? horse : 0);
+  else tgt = 0.07 + 0.5 * Math.min(fN, Dn) + (reel ? horse : 0);
+  next.tension += (tgt - next.tension) * Math.min(1, dt * (tgt > next.tension ? 5 : 2.5));
+  next.tension = clamp(next.tension, 0, 1.4);
 
   let dx = next.x - env.boatX, dz = next.z - env.boatZ;
   const dist = Math.hypot(dx, dz) || 1;
   dx /= dist; dz /= dist;
   if (next.running) {
+    // How hard the clutch is being overpowered decides how much line the fish takes; a fish the
+    // drag can hold still swims, but cannot peel line.
+    const slip = clamp(0.2 + 0.533 * (fN / Math.max(Dn, 0.05) - 0.5), 0.2, 1.3);
     const a = Math.atan2(dz, dx) + next.runAng;
-    const sp = (3 + str * 6.5) * (0.4 + 0.6 * next.stam) * (reel ? 0.5 : 1) * (1.45 - 0.15 * dg);
+    const sp = (3 + str * 6.5) * (0.4 + 0.6 * next.stam) * slip * (reel ? 0.75 : 1);
     next.x += Math.cos(a) * sp * dt;
     next.z += Math.sin(a) * sp * dt;
   }
   if (reel) {
-    const r = Math.max(4, 10.5 * (1 - 0.22 * str)) * (next.running ? 0.3 : 1) * (0.75 + 0.35 * (1 - next.stam)) * (0.7 + 0.1 * dg);
+    const r = params.tackle.reelMs * (0.3 + 0.7 * (1 - next.stam)) * (next.running ? 0.25 : 1) * (1 - Math.min(0.6, fN * 0.5));
     next.x -= dx * r * dt;
     next.z -= dz * r * dt;
   }
-  next.stam = Math.max(0, next.stam - dt * 0.1 * (0.45 + next.tension) / Math.sqrt(str));
+  // Fish tire from exertion and from pressure *relative to their own strength*: the same drag
+  // wears a 3 lb trout out in seconds and barely troubles a 400 lb marlin.
+  const pressureRel = Math.min(2.5, (next.tension * params.ratingLb) / params.forceLb);
+  next.stam = Math.max(0, next.stam - dt * (0.02 * (next.running ? 1 : 0.3) + 0.05 * pressureRel) / params.endure);
 
-  if (next.tension >= 1.06) {
-    next.overT += dt;
-    if (next.overT > 0.6) { next.outcome = 'snapped'; return next; }
+  // Leader chafe: rises with load and with a fish that is actually running through rock, teeth
+  // or structure; a heavier leader resists. It never heals.
+  next.abrasion = Math.min(1, next.abrasion + dt * 0.012 * params.rough * (0.3 + 1.2 * next.tension) * (next.running ? 1 : 0.4) * Math.sqrt(30 / params.tackle.leaderLb));
+  next.limit = 1 - 0.55 * next.abrasion;
+
+  // Hook wear: always creeping, faster the longer the fight has gone (a hole in a mouth works
+  // bigger), quadratic in load above ~0.4 (tearing out), and brutal on slack during a jump or
+  // head shake (the hook simply falls out).
+  const over = Math.max(0, next.tension - 0.4);
+  let wear = 0.0045 * (1 + next.t / 40) * (0.4 + (next.running ? 0.4 : 0)) + 0.25 * Math.pow(over, 1.5);
+  if (next.tension < 0.12 && (air || next.shake > 0.05)) wear += 0.4 * (0.12 - next.tension) / 0.12 * (air ? 1.5 : 0.5);
+  next.hookHold -= dt * wear * params.hookRisk;
+  if (next.hookHold <= 0) { next.hookHold = 0; next.outcome = 'pulled'; return next; }
+
+  if (next.tension >= next.limit) {
+    next.overT += dt * (1 + (next.tension - next.limit) * 6);
+    if (next.overT > 0.3) { next.outcome = next.abrasion > 0.25 ? 'frayed' : 'snapped'; return next; }
   } else next.overT = Math.max(0, next.overT - dt);
 
-  if (next.tension < 0.06) {
+  if (next.tension < 0.05) {
     next.slackT += dt;
-    if (next.slackT > 2.6) { next.outcome = 'slack'; return next; }
+    if (next.slackT > 2.2) { next.outcome = 'slack'; return next; }
   } else next.slackT = 0;
 
   const prevDist = next.dist;
@@ -367,7 +508,17 @@ export function stepFight(state: FightState, input: FightInput, params: FightPar
   if (next.dist > params.maxLine) { next.outcome = 'spooled'; return next; }
   if (landH(next.x, next.z) > 0.2) { next.outcome = 'mangrove'; return next; }
   if (rng() < dt * 1.5) next.events.push({ type: 'splash', x: next.x, z: next.z, big: false });
-  if (next.dist < 4.5) { next.outcome = 'landed'; return next; }
+  if (next.dist < 4.5) {
+    // A green fish at the boat is not landed, it bolts: you can reel it to the leader and still
+    // lose it. Only a worn-out one comes over the gunwale.
+    if (next.stam < 0.4) { next.outcome = 'landed'; return next; }
+    if (!next.running) {
+      next.running = true; next.runT = rand(rng, 1.2, 2.2); next.runAng = rand(rng, -0.6, 0.6);
+      next.pull = str * rand(rng, 0.9, 1.1) * (0.45 + 0.55 * next.stam);
+      next.events.push({ type: 'splash', x: next.x, z: next.z, big: false }, { type: 'startRun' });
+      shock(0.2 * Math.min(1.6, pullN * (next.pull / str)) * stiff * (reel ? 1.2 : 0.35));
+    }
+  }
 
   return next;
 }

@@ -236,6 +236,16 @@ for ≥2 ticks beforehand — which makes it visible to nearby players.
 exploit surface. At 80 ms RTT the bar lags 40 ms against time constants of
 0.3–2.6 s — imperceptible.
 
+The fight integrator is `shared/sim/fight.ts`'s `stepFight`, and its inputs are
+`{reeling, drag}` plus the equipped `Tackle` (`shared/content/tackle.ts`). `drag`
+(1..5) is a live client input like `reeling` — the server clamps it, and it is
+safe to trust because it is a *trade-off* (a tighter drag shortens the fight and
+raises snap/hook-pull odds), not a free win. **Tackle is not a client assertion:**
+the line class sets the breaking point every fight is normalised against, so the
+server must read it from the player's server-held economy row, never from
+`INPUT`. (The wallet is client-local today — see `sim/economy.ts` — so until
+that moves server-side, only the starter rung may be accepted.)
+
 Sanity envelopes: 1 cast / 0.4 s, max 120 landed fish/player/hour, and a
 **minimum fight duration** of `0.8 + (weight/species.max) × species.str × 6`
 seconds — a 400 lb marlin landed in 4 s voids the catch. Also run a per-player

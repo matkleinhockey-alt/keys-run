@@ -322,7 +322,7 @@ export function initWorld(wrap: HTMLElement): World {
       return {
         mode: f.running ? 'fightRunning' : 'fightHeld', drag: FishF.drag,
         bobX: FishF.bob.x, bobZ: FishF.bob.z,
-        lineSpeed: f.lineSpeed, spoolR: f.spoolR,
+        lineSpeed: f.lineSpeed, spoolR: f.spoolR, tension: f.tension,
       };
     }
     // Reeling in with nothing hooked: the handle's retrieve pawl. Negative = line coming back on.

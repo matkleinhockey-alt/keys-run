@@ -109,21 +109,19 @@
         "depth": 0.3
       },
       "distinctSpecies": 8,
-      "effectiveSpecies": 6.76,
+      "effectiveSpecies": 6.74,
       "top5": [
-        "bonefish 30.1%",
-        "barracuda 17.7%",
-        "ladyfish 12.3%",
-        "permit 12%",
-        "palometa 10.2%"
+        "bonefish 30.5%",
+        "barracuda 18.1%",
+        "permit 12.1%",
+        "ladyfish 11.8%",
+        "palometa 9.1%"
       ],
-      "avgWeightLb": 24,
-      "avgPointsPerCatch": 249,
+      "avgWeightLb": 25.4,
+      "avgPointsPerCatch": 265,
       "exclusive": [
         "bonefish",
         "permit",
-        "lemonshark",
-        "blacktip",
         "palometa"
       ]
     },
@@ -134,17 +132,17 @@
         "zoneAt": "Hawk Channel",
         "depth": 5.6
       },
-      "distinctSpecies": 15,
-      "effectiveSpecies": 13.6,
+      "distinctSpecies": 19,
+      "effectiveSpecies": 16.04,
       "top5": [
-        "mangrove 13.8%",
-        "yellowtail 10.2%",
-        "bluerunner 10%",
-        "lanesnapper 8.3%",
-        "spanishmack 8.3%"
+        "mangrove 12.7%",
+        "yellowtail 10.4%",
+        "bluerunner 9.3%",
+        "lanesnapper 7.6%",
+        "spanishmack 7.3%"
       ],
-      "avgWeightLb": 7.8,
-      "avgPointsPerCatch": 83,
+      "avgWeightLb": 11.4,
+      "avgPointsPerCatch": 111,
       "exclusive": [
         "mangrove",
         "pompano",
@@ -158,17 +156,17 @@
         "zoneAt": "Reef",
         "depth": 6.2
       },
-      "distinctSpecies": 17,
-      "effectiveSpecies": 15.64,
+      "distinctSpecies": 20,
+      "effectiveSpecies": 17.19,
       "top5": [
-        "yellowtail 13.3%",
-        "hogfish 7.5%",
-        "mutton 7.3%",
+        "yellowtail 12.3%",
+        "mutton 7.6%",
+        "hogfish 7.1%",
         "schoolmaster 7%",
-        "vermilion 6.8%"
+        "bluerunner 6.4%"
       ],
-      "avgWeightLb": 12.2,
-      "avgPointsPerCatch": 109,
+      "avgWeightLb": 15.8,
+      "avgPointsPerCatch": 130,
       "exclusive": [
         "hogfish",
         "grouper",
@@ -186,16 +184,16 @@
         "depth": 77.8
       },
       "distinctSpecies": 16,
-      "effectiveSpecies": 11.3,
+      "effectiveSpecies": 12.13,
       "top5": [
-        "mahi 20.5%",
-        "blackfin 12.9%",
-        "skipjack 10.3%",
-        "wahoo 10.3%",
-        "sailfish 9.3%"
+        "mahi 19.6%",
+        "blackfin 13.1%",
+        "skipjack 9.2%",
+        "wahoo 9.1%",
+        "sailfish 8.4%"
       ],
-      "avgWeightLb": 95.4,
-      "avgPointsPerCatch": 612,
+      "avgWeightLb": 112.2,
+      "avgPointsPerCatch": 692,
       "exclusive": [
         "mahi",
         "blackfin",
@@ -207,7 +205,6 @@
         "yellowfin",
         "albacore",
         "bluefin",
-        "amberjack",
         "hammerhead",
         "skipjack",
         "bigeye"
@@ -216,594 +213,2780 @@
   },
   "speciesReachableByRod": 48,
   "totalSpecies": 49,
+  "castM": 35,
+  "tackle": "mono30",
+  "fightByZoneTackle": {
+    "mono12": {
+      "Hawk Channel": "90% in 22.2s",
+      "Reef": "90% in 25.1s",
+      "Offshore": "47% in 48.7s"
+    },
+    "mono30": {
+      "Hawk Channel": "99.3% in 17.9s",
+      "Reef": "98% in 19.6s",
+      "Offshore": "77.7% in 32s"
+    },
+    "braid50": {
+      "Hawk Channel": "99.7% in 15.6s",
+      "Reef": "99.7% in 17.4s",
+      "Offshore": "84.3% in 26.4s"
+    },
+    "braid80": {
+      "Hawk Channel": "100% in 14.5s",
+      "Reef": "99.7% in 15.4s",
+      "Offshore": "90.7% in 23.2s"
+    },
+    "braid130": {
+      "Hawk Channel": "100% in 14.1s",
+      "Reef": "100% in 14.7s",
+      "Offshore": "94% in 20.3s"
+    }
+  },
   "fightByDrag": {
     "1": {
-      "n": 1200,
-      "winPct": 99.9,
-      "snappedPct": 0,
-      "slackPct": 0,
-      "spooledPct": 0,
-      "mangrovePct": 0.1,
-      "timeoutPct": 0,
-      "avgFightSecWhenLanded": 11.4
+      "n": 900,
+      "winPct": 88.1,
+      "landedPct": 88.1,
+      "pulledPct": 8,
+      "spooledPct": 2.6,
+      "mangrovePct": 1.3,
+      "avgFightSecWhenLanded": 26.8
     },
     "2": {
-      "n": 1200,
-      "winPct": 100,
-      "snappedPct": 0,
-      "slackPct": 0,
-      "spooledPct": 0,
-      "mangrovePct": 0,
-      "timeoutPct": 0,
-      "avgFightSecWhenLanded": 9.8
+      "n": 900,
+      "winPct": 90.6,
+      "landedPct": 90.6,
+      "snappedPct": 0.9,
+      "frayedPct": 0.8,
+      "pulledPct": 5.7,
+      "spooledPct": 1.2,
+      "mangrovePct": 0.9,
+      "avgFightSecWhenLanded": 24.3
     },
     "3": {
-      "n": 1200,
-      "winPct": 100,
-      "snappedPct": 0,
-      "slackPct": 0,
-      "spooledPct": 0,
-      "mangrovePct": 0,
-      "timeoutPct": 0,
-      "avgFightSecWhenLanded": 9.1
+      "n": 900,
+      "winPct": 91.6,
+      "landedPct": 91.6,
+      "snappedPct": 3.9,
+      "frayedPct": 0.8,
+      "pulledPct": 2.8,
+      "spooledPct": 0.7,
+      "mangrovePct": 0.3,
+      "avgFightSecWhenLanded": 22.7
     },
     "4": {
-      "n": 1200,
-      "winPct": 100,
-      "snappedPct": 0,
-      "slackPct": 0,
-      "spooledPct": 0,
-      "mangrovePct": 0,
-      "timeoutPct": 0,
-      "avgFightSecWhenLanded": 7.8
+      "n": 900,
+      "winPct": 91.8,
+      "landedPct": 91.8,
+      "snappedPct": 6.1,
+      "frayedPct": 0.4,
+      "pulledPct": 1.4,
+      "mangrovePct": 0.2,
+      "avgFightSecWhenLanded": 21.1
     },
     "5": {
-      "n": 1200,
-      "winPct": 100,
-      "snappedPct": 0,
-      "slackPct": 0,
-      "spooledPct": 0,
-      "mangrovePct": 0,
-      "timeoutPct": 0,
-      "avgFightSecWhenLanded": 6.7
+      "n": 900,
+      "winPct": 90.6,
+      "landedPct": 90.6,
+      "snappedPct": 7.2,
+      "frayedPct": 0.6,
+      "pulledPct": 1.7,
+      "avgFightSecWhenLanded": 19.7
     }
   },
   "fightByPolicy": {
     "bangbang": {
-      "landedPct": 100
+      "n": 900,
+      "frayedPct": 0.1,
+      "landedPct": 81.1,
+      "mangrovePct": 0.1,
+      "pulledPct": 16.9,
+      "snappedPct": 1.8,
+      "contested": {
+        "n": 266,
+        "frayedPct": 0.4,
+        "landedPct": 45.9,
+        "mangrovePct": 0.4,
+        "pulledPct": 47.4,
+        "snappedPct": 6
+      }
     },
     "sloppy": {
-      "landedPct": 99.3,
-      "snappedPct": 0.7
+      "n": 900,
+      "landedPct": 80.9,
+      "mangrovePct": 0.1,
+      "pulledPct": 5.2,
+      "snappedPct": 13.8,
+      "contested": {
+        "n": 266,
+        "landedPct": 41.7,
+        "mangrovePct": 0.4,
+        "pulledPct": 16.2,
+        "snappedPct": 41.7
+      }
     },
     "slow": {
-      "landedPct": 96.2,
-      "snappedPct": 3.8
+      "n": 900,
+      "landedPct": 82.9,
+      "mangrovePct": 0.1,
+      "pulledPct": 10.8,
+      "snappedPct": 6.2,
+      "contested": {
+        "n": 266,
+        "landedPct": 49.6,
+        "mangrovePct": 0.4,
+        "pulledPct": 28.9,
+        "snappedPct": 21.1
+      }
     },
     "timid": {
-      "landedPct": 100
+      "n": 900,
+      "frayedPct": 0.1,
+      "landedPct": 84.1,
+      "mangrovePct": 0.3,
+      "pulledPct": 13.4,
+      "snappedPct": 0.3,
+      "spooledPct": 1.7,
+      "contested": {
+        "n": 266,
+        "frayedPct": 0.4,
+        "landedPct": 57.1,
+        "mangrovePct": 1.1,
+        "pulledPct": 34.6,
+        "snappedPct": 1.1,
+        "spooledPct": 5.6
+      }
     },
     "hold": {
-      "snappedPct": 100
+      "n": 900,
+      "frayedPct": 0.1,
+      "landedPct": 79.3,
+      "pulledPct": 2.9,
+      "snappedPct": 17.7,
+      "contested": {
+        "n": 266,
+        "frayedPct": 0.4,
+        "landedPct": 40.6,
+        "pulledPct": 7.5,
+        "snappedPct": 51.5
+      }
+    },
+    "angler": {
+      "n": 900,
+      "frayedPct": 0.4,
+      "landedPct": 91.6,
+      "mangrovePct": 0.3,
+      "pulledPct": 3.6,
+      "snappedPct": 3.6,
+      "spooledPct": 0.6,
+      "contested": {
+        "n": 266,
+        "frayedPct": 1.5,
+        "landedPct": 71.4,
+        "mangrovePct": 1.1,
+        "pulledPct": 12,
+        "snappedPct": 12,
+        "spooledPct": 1.9
+      }
+    },
+    "expert": {
+      "n": 900,
+      "frayedPct": 1.2,
+      "landedPct": 91.9,
+      "mangrovePct": 0.4,
+      "pulledPct": 4.3,
+      "snappedPct": 0.6,
+      "spooledPct": 1.6,
+      "contested": {
+        "n": 266,
+        "frayedPct": 4.1,
+        "landedPct": 72.6,
+        "mangrovePct": 1.5,
+        "pulledPct": 14.7,
+        "snappedPct": 1.9,
+        "spooledPct": 5.3
+      }
     }
   },
   "fightBySpecies": {
     "bonefish": {
-      "winPct": 100,
-      "avgSec": 7.4,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 16.2,
+      "losses3": {},
       "str": 0.65,
       "maxLb": 12,
       "mult": 30
     },
     "permit": {
-      "winPct": 100,
-      "avgSec": 9.3,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 22.9,
+      "losses3": {},
       "str": 0.85,
       "maxLb": 40,
       "mult": 28
     },
     "tarpon": {
-      "winPct": 100,
-      "avgSec": 12,
-      "losses": {},
+      "winPct3": 57,
+      "avgSec3": 34,
+      "losses3": {
+        "pulled": 77,
+        "snapped": 9
+      },
       "str": 1.05,
       "maxLb": 160,
       "mult": 10
     },
     "barracuda": {
-      "winPct": 100,
-      "avgSec": 8.4,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 21.2,
+      "losses3": {},
       "str": 0.7,
       "maxLb": 45,
       "mult": 6
     },
     "snook": {
-      "winPct": 100,
-      "avgSec": 6.9,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 17.4,
+      "losses3": {},
       "str": 0.6,
       "maxLb": 30,
       "mult": 12
     },
     "redfish": {
-      "winPct": 100,
-      "avgSec": 6.6,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 17,
+      "losses3": {},
       "str": 0.55,
       "maxLb": 28,
       "mult": 10
     },
     "trout": {
-      "winPct": 100,
-      "avgSec": 4.8,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 14.4,
+      "losses3": {},
       "str": 0.3,
       "maxLb": 8,
       "mult": 12
     },
     "mangrove": {
-      "winPct": 100,
-      "avgSec": 5.1,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 14.6,
+      "losses3": {},
       "str": 0.35,
       "maxLb": 12,
       "mult": 14
     },
     "yellowtail": {
-      "winPct": 100,
-      "avgSec": 4.9,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 14.3,
+      "losses3": {},
       "str": 0.3,
       "maxLb": 7,
       "mult": 16
     },
     "mutton": {
-      "winPct": 100,
-      "avgSec": 6.5,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 15.8,
+      "losses3": {},
       "str": 0.5,
       "maxLb": 22,
       "mult": 12
     },
     "hogfish": {
-      "winPct": 100,
-      "avgSec": 5.7,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 15.4,
+      "losses3": {},
       "str": 0.4,
       "maxLb": 20,
       "mult": 15
     },
     "grouper": {
-      "winPct": 100,
-      "avgSec": 10.2,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 33.8,
+      "losses3": {},
       "str": 0.95,
       "maxLb": 80,
       "mult": 8
     },
     "mahi": {
-      "winPct": 100,
-      "avgSec": 9.4,
-      "losses": {},
+      "winPct3": 99,
+      "avgSec3": 23.8,
+      "losses3": {
+        "pulled": 2
+      },
       "str": 0.8,
       "maxLb": 55,
       "mult": 9
     },
     "blackfin": {
-      "winPct": 100,
-      "avgSec": 9.5,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 22.9,
+      "losses3": {},
       "str": 0.85,
       "maxLb": 40,
       "mult": 9
     },
     "wahoo": {
-      "winPct": 100,
-      "avgSec": 10.4,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 39.9,
+      "losses3": {},
       "str": 1,
       "maxLb": 90,
       "mult": 8
     },
     "sailfish": {
-      "winPct": 100,
-      "avgSec": 17.7,
-      "losses": {},
+      "winPct3": 60.5,
+      "avgSec3": 37.9,
+      "losses3": {
+        "pulled": 78,
+        "snapped": 1
+      },
       "str": 1.1,
       "maxLb": 100,
       "mult": 12
     },
     "yellowfin": {
-      "winPct": 100,
-      "avgSec": 12.4,
-      "losses": {},
+      "winPct3": 72.5,
+      "avgSec3": 47.4,
+      "losses3": {
+        "spooled": 14,
+        "pulled": 36,
+        "snapped": 5
+      },
       "str": 1.15,
       "maxLb": 220,
       "mult": 8
     },
     "bluefin": {
-      "winPct": 100,
-      "avgSec": 17.8,
-      "losses": {},
+      "winPct3": 8.5,
+      "avgSec3": 109.4,
+      "losses3": {
+        "pulled": 68,
+        "snapped": 89,
+        "frayed": 25,
+        "spooled": 1
+      },
       "str": 1.55,
       "maxLb": 900,
       "mult": 5
     },
     "albacore": {
-      "winPct": 100,
-      "avgSec": 9.3,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 28.1,
+      "losses3": {},
       "str": 0.85,
       "maxLb": 60,
       "mult": 10
     },
     "cobia": {
-      "winPct": 100,
-      "avgSec": 10.7,
-      "losses": {},
+      "winPct3": 99.5,
+      "avgSec3": 37.9,
+      "losses3": {
+        "pulled": 1
+      },
       "str": 1,
       "maxLb": 90,
       "mult": 9
     },
     "amberjack": {
-      "winPct": 100,
-      "avgSec": 12.4,
-      "losses": {},
+      "winPct3": 89.5,
+      "avgSec3": 44.4,
+      "losses3": {
+        "spooled": 2,
+        "pulled": 19
+      },
       "str": 1.15,
       "maxLb": 120,
       "mult": 7
     },
     "kingfish": {
-      "winPct": 100,
-      "avgSec": 9.8,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 27.4,
+      "losses3": {},
       "str": 0.9,
       "maxLb": 60,
       "mult": 9
     },
     "cero": {
-      "winPct": 100,
-      "avgSec": 6.1,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 15.4,
+      "losses3": {},
       "str": 0.5,
       "maxLb": 12,
       "mult": 14
     },
     "jackcrevalle": {
-      "winPct": 100,
-      "avgSec": 9.1,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 21.1,
+      "losses3": {},
       "str": 0.85,
       "maxLb": 35,
       "mult": 8
     },
     "ladyfish": {
-      "winPct": 100,
-      "avgSec": 5.3,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 15.4,
+      "losses3": {},
       "str": 0.35,
       "maxLb": 4,
       "mult": 20
     },
     "sheepshead": {
-      "winPct": 100,
-      "avgSec": 5.8,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 15.2,
+      "losses3": {},
       "str": 0.45,
       "maxLb": 12,
       "mult": 14
     },
     "pompano": {
-      "winPct": 100,
-      "avgSec": 5.3,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 14.5,
+      "losses3": {},
       "str": 0.4,
       "maxLb": 6,
       "mult": 22
     },
     "tripletail": {
-      "winPct": 100,
-      "avgSec": 7.1,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 17.5,
+      "losses3": {},
       "str": 0.6,
       "maxLb": 30,
       "mult": 14
     },
     "lionfish": {
-      "winPct": 100,
-      "avgSec": 4.3,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 13.8,
+      "losses3": {},
       "str": 0.2,
       "maxLb": 3,
       "mult": 60
     },
     "goliath": {
-      "winPct": 100,
-      "avgSec": 15.8,
-      "losses": {},
+      "winPct3": 31.5,
+      "avgSec3": 82.5,
+      "losses3": {
+        "snapped": 57,
+        "pulled": 63,
+        "frayed": 17
+      },
       "str": 1.4,
       "maxLb": 500,
       "mult": 4
     },
     "graytrigger": {
-      "winPct": 100,
-      "avgSec": 5.8,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 15.1,
+      "losses3": {},
       "str": 0.45,
       "maxLb": 10,
       "mult": 15
     },
     "blacktip": {
-      "winPct": 100,
-      "avgSec": 12.1,
-      "losses": {},
+      "winPct3": 63,
+      "avgSec3": 37.7,
+      "losses3": {
+        "snapped": 10,
+        "frayed": 35,
+        "pulled": 29
+      },
       "str": 1.05,
       "maxLb": 150,
       "mult": 5
     },
     "bullshark": {
-      "winPct": 100,
-      "avgSec": 14.8,
-      "losses": {},
+      "winPct3": 34,
+      "avgSec3": 77.4,
+      "losses3": {
+        "frayed": 64,
+        "snapped": 40,
+        "pulled": 28
+      },
       "str": 1.35,
       "maxLb": 350,
       "mult": 4
     },
     "lemonshark": {
-      "winPct": 100,
-      "avgSec": 12.5,
-      "losses": {},
+      "winPct3": 67.5,
+      "avgSec3": 58.9,
+      "losses3": {
+        "frayed": 33,
+        "spooled": 10,
+        "pulled": 14,
+        "snapped": 8
+      },
       "str": 1.15,
       "maxLb": 250,
       "mult": 4
     },
     "hammerhead": {
-      "winPct": 100,
-      "avgSec": 17.5,
-      "losses": {},
+      "winPct3": 3,
+      "avgSec3": 101.5,
+      "losses3": {
+        "pulled": 32,
+        "frayed": 99,
+        "snapped": 63
+      },
       "str": 1.5,
       "maxLb": 700,
       "mult": 3
     },
     "marlin": {
-      "winPct": 100,
-      "avgSec": 28.2,
-      "losses": {},
+      "winPct3": 0,
+      "avgSec3": 0,
+      "losses3": {
+        "pulled": 96,
+        "snapped": 103,
+        "spooled": 1
+      },
       "str": 1.45,
       "maxLb": 800,
       "mult": 5
     },
     "swordfish": {
-      "winPct": 100,
-      "avgSec": 14,
-      "losses": {},
+      "winPct3": 48.5,
+      "avgSec3": 71,
+      "losses3": {
+        "pulled": 62,
+        "snapped": 30,
+        "frayed": 11
+      },
       "str": 1.3,
       "maxLb": 400,
       "mult": 6
     },
     "blackmarlin": {
-      "winPct": 100,
-      "avgSec": 33.1,
-      "losses": {},
+      "winPct3": 0,
+      "avgSec3": 0,
+      "losses3": {
+        "snapped": 133,
+        "pulled": 66,
+        "spooled": 1
+      },
       "str": 1.55,
       "maxLb": 900,
       "mult": 5
     },
     "bluerunner": {
-      "winPct": 100,
-      "avgSec": 6.1,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 14.9,
+      "losses3": {},
       "str": 0.5,
       "maxLb": 8,
       "mult": 16
     },
     "schoolmaster": {
-      "winPct": 100,
-      "avgSec": 5.6,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 14.7,
+      "losses3": {},
       "str": 0.4,
       "maxLb": 8,
       "mult": 15
     },
     "lanesnapper": {
-      "winPct": 100,
-      "avgSec": 4.8,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 14.2,
+      "losses3": {},
       "str": 0.3,
       "maxLb": 6,
       "mult": 17
     },
     "vermilion": {
-      "winPct": 100,
-      "avgSec": 5.2,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 14.6,
+      "losses3": {},
       "str": 0.35,
       "maxLb": 7,
       "mult": 16
     },
     "lookdown": {
-      "winPct": 100,
-      "avgSec": 5,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 14.2,
+      "losses3": {},
       "str": 0.35,
       "maxLb": 4,
       "mult": 20
     },
     "palometa": {
-      "winPct": 100,
-      "avgSec": 5.4,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 14.2,
+      "losses3": {},
       "str": 0.4,
       "maxLb": 3,
       "mult": 22
     },
     "spanishmack": {
-      "winPct": 100,
-      "avgSec": 6.3,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 15.1,
+      "losses3": {},
       "str": 0.55,
       "maxLb": 9,
       "mult": 14
     },
     "bigeye": {
-      "winPct": 100,
-      "avgSec": 12.7,
-      "losses": {},
+      "winPct3": 67,
+      "avgSec3": 51.6,
+      "losses3": {
+        "pulled": 32,
+        "spooled": 23,
+        "snapped": 11
+      },
       "str": 1.2,
       "maxLb": 300,
       "mult": 7
     },
     "skipjack": {
-      "winPct": 100,
-      "avgSec": 8.6,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 20.1,
+      "losses3": {},
       "str": 0.8,
       "maxLb": 30,
       "mult": 11
     },
     "gag": {
-      "winPct": 100,
-      "avgSec": 9.5,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 23.8,
+      "losses3": {},
       "str": 0.9,
       "maxLb": 45,
       "mult": 7
     },
     "redgrouper": {
-      "winPct": 100,
-      "avgSec": 9,
-      "losses": {},
+      "winPct3": 100,
+      "avgSec3": 21,
+      "losses3": {},
       "str": 0.85,
       "maxLb": 30,
       "mult": 7
     }
   },
+  "dragSummary": {
+    "1": {
+      "strictBestSpecies": 0,
+      "tiedBestSpecies": 42,
+      "meanWinPct": 82.3,
+      "meanFightSec": 38.1,
+      "worstSpeciesWinPct": 0,
+      "decisiveSpecies": 9
+    },
+    "2": {
+      "strictBestSpecies": 0,
+      "tiedBestSpecies": 43,
+      "meanWinPct": 83.2,
+      "meanFightSec": 33.7,
+      "worstSpeciesWinPct": 0,
+      "decisiveSpecies": 9
+    },
+    "3": {
+      "strictBestSpecies": 3,
+      "tiedBestSpecies": 48,
+      "meanWinPct": 83.7,
+      "meanFightSec": 30.5,
+      "worstSpeciesWinPct": 0,
+      "decisiveSpecies": 9
+    },
+    "4": {
+      "strictBestSpecies": 4,
+      "tiedBestSpecies": 44,
+      "meanWinPct": 83,
+      "meanFightSec": 25.9,
+      "worstSpeciesWinPct": 0,
+      "decisiveSpecies": 9
+    },
+    "5": {
+      "strictBestSpecies": 2,
+      "tiedBestSpecies": 37,
+      "meanWinPct": 81.2,
+      "meanFightSec": 22.2,
+      "worstSpeciesWinPct": 0,
+      "decisiveSpecies": 9
+    }
+  },
+  "speciesDrag": {
+    "bonefish": {
+      "bestDrag": 4,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 16.9,
+        "2": 16.3,
+        "3": 16.2,
+        "4": 16,
+        "5": 16
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    },
+    "permit": {
+      "bestDrag": 5,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 30.3,
+        "2": 25.3,
+        "3": 22.9,
+        "4": 21.8,
+        "5": 20.9
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    },
+    "tarpon": {
+      "bestDrag": 5,
+      "tied": [
+        3,
+        4,
+        5
+      ],
+      "decisive": true,
+      "spread": 14,
+      "winByDrag": {
+        "1": 43.5,
+        "2": 51,
+        "3": 57,
+        "4": 57.5,
+        "5": 57
+      },
+      "secByDrag": {
+        "1": 43.8,
+        "2": 36.9,
+        "3": 34,
+        "4": 30.6,
+        "5": 28.7
+      },
+      "loseByDrag": {
+        "1": {
+          "pulled": 106,
+          "spooled": 7
+        },
+        "2": {
+          "pulled": 98
+        },
+        "3": {
+          "pulled": 77,
+          "snapped": 9
+        },
+        "4": {
+          "pulled": 56,
+          "snapped": 29
+        },
+        "5": {
+          "pulled": 32,
+          "snapped": 54
+        }
+      }
+    },
+    "barracuda": {
+      "bestDrag": 5,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0.5,
+      "winByDrag": {
+        "1": 100,
+        "2": 99.5,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 25.7,
+        "2": 22.7,
+        "3": 21.2,
+        "4": 20.7,
+        "5": 20.5
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {
+          "pulled": 1
+        },
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    },
+    "snook": {
+      "bestDrag": 5,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 19.1,
+        "2": 17.8,
+        "3": 17.4,
+        "4": 17.2,
+        "5": 17.1
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    },
+    "redfish": {
+      "bestDrag": 5,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 18.3,
+        "2": 17.3,
+        "3": 17,
+        "4": 16.9,
+        "5": 16.7
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    },
+    "trout": {
+      "bestDrag": 3,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 14.5,
+        "2": 14.5,
+        "3": 14.4,
+        "4": 14.4,
+        "5": 14.4
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    },
+    "mangrove": {
+      "bestDrag": 1,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 14.6,
+        "2": 14.7,
+        "3": 14.6,
+        "4": 14.6,
+        "5": 14.6
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    },
+    "yellowtail": {
+      "bestDrag": 1,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 14.3,
+        "2": 14.3,
+        "3": 14.3,
+        "4": 14.4,
+        "5": 14.4
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    },
+    "mutton": {
+      "bestDrag": 5,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 16.7,
+        "2": 16,
+        "3": 15.8,
+        "4": 15.8,
+        "5": 15.7
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    },
+    "hogfish": {
+      "bestDrag": 4,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 15.5,
+        "2": 15.3,
+        "3": 15.4,
+        "4": 15.2,
+        "5": 15.3
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    },
+    "grouper": {
+      "bestDrag": 5,
+      "tied": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 1,
+      "winByDrag": {
+        "1": 99,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 47.7,
+        "2": 39.4,
+        "3": 33.8,
+        "4": 29.8,
+        "5": 27.1
+      },
+      "loseByDrag": {
+        "1": {
+          "pulled": 2
+        },
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    },
+    "mahi": {
+      "bestDrag": 5,
+      "tied": [
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 8.5,
+      "winByDrag": {
+        "1": 90.5,
+        "2": 97,
+        "3": 99,
+        "4": 99,
+        "5": 98.5
+      },
+      "secByDrag": {
+        "1": 28.2,
+        "2": 25.7,
+        "3": 23.8,
+        "4": 22.7,
+        "5": 22.2
+      },
+      "loseByDrag": {
+        "1": {
+          "pulled": 19
+        },
+        "2": {
+          "pulled": 6
+        },
+        "3": {
+          "pulled": 2
+        },
+        "4": {
+          "pulled": 2
+        },
+        "5": {
+          "pulled": 3
+        }
+      }
+    },
+    "blackfin": {
+      "bestDrag": 5,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 30.7,
+        "2": 25.4,
+        "3": 22.9,
+        "4": 21.3,
+        "5": 20.3
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    },
+    "wahoo": {
+      "bestDrag": 4,
+      "tied": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "decisive": false,
+      "spread": 8,
+      "winByDrag": {
+        "1": 99.5,
+        "2": 99.5,
+        "3": 100,
+        "4": 99.5,
+        "5": 92
+      },
+      "secByDrag": {
+        "1": 56.8,
+        "2": 46.6,
+        "3": 39.9,
+        "4": 34.4,
+        "5": 28.6
+      },
+      "loseByDrag": {
+        "1": {
+          "pulled": 1
+        },
+        "2": {
+          "pulled": 1
+        },
+        "3": {},
+        "4": {
+          "pulled": 1
+        },
+        "5": {
+          "pulled": 7,
+          "snapped": 5,
+          "frayed": 4
+        }
+      }
+    },
+    "sailfish": {
+      "bestDrag": 5,
+      "tied": [
+        3,
+        4,
+        5
+      ],
+      "decisive": true,
+      "spread": 23,
+      "winByDrag": {
+        "1": 38.5,
+        "2": 50.5,
+        "3": 60.5,
+        "4": 61.5,
+        "5": 60.5
+      },
+      "secByDrag": {
+        "1": 47.6,
+        "2": 41,
+        "3": 37.9,
+        "4": 34.9,
+        "5": 32.7
+      },
+      "loseByDrag": {
+        "1": {
+          "pulled": 118,
+          "spooled": 5
+        },
+        "2": {
+          "pulled": 99
+        },
+        "3": {
+          "pulled": 78,
+          "snapped": 1
+        },
+        "4": {
+          "snapped": 20,
+          "pulled": 57
+        },
+        "5": {
+          "snapped": 46,
+          "pulled": 33
+        }
+      }
+    },
+    "yellowfin": {
+      "bestDrag": 4,
+      "tied": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "decisive": true,
+      "spread": 10,
+      "winByDrag": {
+        "1": 72,
+        "2": 71.5,
+        "3": 72.5,
+        "4": 71.5,
+        "5": 62.5
+      },
+      "secByDrag": {
+        "1": 66.9,
+        "2": 55.2,
+        "3": 47.4,
+        "4": 40,
+        "5": 31.1
+      },
+      "loseByDrag": {
+        "1": {
+          "spooled": 34,
+          "pulled": 22
+        },
+        "2": {
+          "spooled": 27,
+          "pulled": 30
+        },
+        "3": {
+          "spooled": 14,
+          "pulled": 36,
+          "snapped": 5
+        },
+        "4": {
+          "snapped": 19,
+          "pulled": 26,
+          "frayed": 9,
+          "spooled": 3
+        },
+        "5": {
+          "pulled": 18,
+          "snapped": 51,
+          "frayed": 6
+        }
+      }
+    },
+    "bluefin": {
+      "bestDrag": 3,
+      "tied": [
+        1,
+        3
+      ],
+      "decisive": false,
+      "spread": 8.5,
+      "winByDrag": {
+        "1": 6,
+        "2": 5,
+        "3": 8.5,
+        "4": 2,
+        "5": 0
+      },
+      "secByDrag": {
+        "1": 131.2,
+        "2": 115.5,
+        "3": 109.4,
+        "4": 91.1,
+        "5": 0
+      },
+      "loseByDrag": {
+        "1": {
+          "pulled": 114,
+          "spooled": 74
+        },
+        "2": {
+          "pulled": 111,
+          "frayed": 37,
+          "spooled": 34,
+          "snapped": 8
+        },
+        "3": {
+          "pulled": 68,
+          "snapped": 89,
+          "frayed": 25,
+          "spooled": 1
+        },
+        "4": {
+          "snapped": 141,
+          "pulled": 46,
+          "frayed": 9
+        },
+        "5": {
+          "snapped": 176,
+          "frayed": 7,
+          "pulled": 17
+        }
+      }
+    },
+    "albacore": {
+      "bestDrag": 5,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 39.8,
+        "2": 32.5,
+        "3": 28.1,
+        "4": 25.3,
+        "5": 23.6
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    },
+    "cobia": {
+      "bestDrag": 4,
+      "tied": [
+        3,
+        4
+      ],
+      "decisive": false,
+      "spread": 5,
+      "winByDrag": {
+        "1": 97,
+        "2": 99,
+        "3": 99.5,
+        "4": 100,
+        "5": 95
+      },
+      "secByDrag": {
+        "1": 51.7,
+        "2": 43.8,
+        "3": 37.9,
+        "4": 33.1,
+        "5": 28.2
+      },
+      "loseByDrag": {
+        "1": {
+          "pulled": 6
+        },
+        "2": {
+          "pulled": 2
+        },
+        "3": {
+          "pulled": 1
+        },
+        "4": {},
+        "5": {
+          "pulled": 8,
+          "snapped": 2
+        }
+      }
+    },
+    "amberjack": {
+      "bestDrag": 4,
+      "tied": [
+        2,
+        3,
+        4
+      ],
+      "decisive": false,
+      "spread": 8,
+      "winByDrag": {
+        "1": 84,
+        "2": 87.5,
+        "3": 89.5,
+        "4": 88,
+        "5": 81.5
+      },
+      "secByDrag": {
+        "1": 58,
+        "2": 50.4,
+        "3": 44.4,
+        "4": 37.2,
+        "5": 30.3
+      },
+      "loseByDrag": {
+        "1": {
+          "spooled": 9,
+          "pulled": 23
+        },
+        "2": {
+          "spooled": 8,
+          "pulled": 17
+        },
+        "3": {
+          "spooled": 2,
+          "pulled": 19
+        },
+        "4": {
+          "pulled": 21,
+          "snapped": 3
+        },
+        "5": {
+          "snapped": 21,
+          "pulled": 12,
+          "frayed": 4
+        }
+      }
+    },
+    "kingfish": {
+      "bestDrag": 5,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0.5,
+      "winByDrag": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 99.5
+      },
+      "secByDrag": {
+        "1": 38.2,
+        "2": 31,
+        "3": 27.4,
+        "4": 24.8,
+        "5": 23.3
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {
+          "snapped": 1
+        }
+      }
+    },
+    "cero": {
+      "bestDrag": 5,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 15.6,
+        "2": 15.4,
+        "3": 15.4,
+        "4": 15.4,
+        "5": 15.3
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    },
+    "jackcrevalle": {
+      "bestDrag": 5,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 26.8,
+        "2": 22.8,
+        "3": 21.1,
+        "4": 20.1,
+        "5": 19.6
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    },
+    "ladyfish": {
+      "bestDrag": 1,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 15.3,
+        "2": 15.4,
+        "3": 15.4,
+        "4": 15.5,
+        "5": 15.4
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    },
+    "sheepshead": {
+      "bestDrag": 5,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 15.3,
+        "2": 15.2,
+        "3": 15.2,
+        "4": 15.2,
+        "5": 15.1
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    },
+    "pompano": {
+      "bestDrag": 2,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 14.5,
+        "2": 14.4,
+        "3": 14.5,
+        "4": 14.5,
+        "5": 14.4
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    },
+    "tripletail": {
+      "bestDrag": 5,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 18.9,
+        "2": 17.8,
+        "3": 17.5,
+        "4": 17.2,
+        "5": 17.1
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    },
+    "lionfish": {
+      "bestDrag": 1,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 13.8,
+        "2": 13.8,
+        "3": 13.8,
+        "4": 13.8,
+        "5": 13.9
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    },
+    "goliath": {
+      "bestDrag": 4,
+      "tied": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "decisive": true,
+      "spread": 18,
+      "winByDrag": {
+        "1": 32.5,
+        "2": 31.5,
+        "3": 31.5,
+        "4": 28,
+        "5": 14.5
+      },
+      "secByDrag": {
+        "1": 107.7,
+        "2": 93.9,
+        "3": 82.5,
+        "4": 67,
+        "5": 53.5
+      },
+      "loseByDrag": {
+        "1": {
+          "pulled": 103,
+          "spooled": 32
+        },
+        "2": {
+          "pulled": 102,
+          "spooled": 14,
+          "frayed": 17,
+          "snapped": 4
+        },
+        "3": {
+          "snapped": 57,
+          "pulled": 63,
+          "frayed": 17
+        },
+        "4": {
+          "snapped": 101,
+          "pulled": 39,
+          "frayed": 4
+        },
+        "5": {
+          "snapped": 132,
+          "pulled": 30,
+          "frayed": 9
+        }
+      }
+    },
+    "graytrigger": {
+      "bestDrag": 2,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 15.1,
+        "2": 15,
+        "3": 15.1,
+        "4": 15,
+        "5": 15
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    },
+    "blacktip": {
+      "bestDrag": 4,
+      "tied": [
+        3,
+        4
+      ],
+      "decisive": true,
+      "spread": 12.5,
+      "winByDrag": {
+        "1": 50.5,
+        "2": 56.5,
+        "3": 63,
+        "4": 60.5,
+        "5": 56
+      },
+      "secByDrag": {
+        "1": 48.4,
+        "2": 41.5,
+        "3": 37.7,
+        "4": 32.9,
+        "5": 29.7
+      },
+      "loseByDrag": {
+        "1": {
+          "spooled": 7,
+          "pulled": 72,
+          "frayed": 20
+        },
+        "2": {
+          "frayed": 24,
+          "pulled": 60,
+          "spooled": 3
+        },
+        "3": {
+          "snapped": 10,
+          "frayed": 35,
+          "pulled": 29
+        },
+        "4": {
+          "frayed": 45,
+          "snapped": 23,
+          "pulled": 11
+        },
+        "5": {
+          "snapped": 53,
+          "frayed": 29,
+          "pulled": 6
+        }
+      }
+    },
+    "bullshark": {
+      "bestDrag": 3,
+      "tied": [
+        1,
+        2,
+        3
+      ],
+      "decisive": true,
+      "spread": 19,
+      "winByDrag": {
+        "1": 30.5,
+        "2": 32.5,
+        "3": 34,
+        "4": 28,
+        "5": 15
+      },
+      "secByDrag": {
+        "1": 104.6,
+        "2": 91.5,
+        "3": 77.4,
+        "4": 61.8,
+        "5": 49.1
+      },
+      "loseByDrag": {
+        "1": {
+          "pulled": 127,
+          "spooled": 11,
+          "frayed": 1
+        },
+        "2": {
+          "frayed": 36,
+          "snapped": 1,
+          "pulled": 96,
+          "spooled": 2
+        },
+        "3": {
+          "frayed": 64,
+          "snapped": 40,
+          "pulled": 28
+        },
+        "4": {
+          "snapped": 81,
+          "frayed": 49,
+          "pulled": 14
+        },
+        "5": {
+          "snapped": 122,
+          "frayed": 29,
+          "pulled": 19
+        }
+      }
+    },
+    "lemonshark": {
+      "bestDrag": 3,
+      "tied": [
+        1,
+        2,
+        3
+      ],
+      "decisive": true,
+      "spread": 17,
+      "winByDrag": {
+        "1": 69.5,
+        "2": 70.5,
+        "3": 67.5,
+        "4": 64,
+        "5": 53.5
+      },
+      "secByDrag": {
+        "1": 84.9,
+        "2": 72.8,
+        "3": 58.9,
+        "4": 47.8,
+        "5": 38
+      },
+      "loseByDrag": {
+        "1": {
+          "spooled": 29,
+          "pulled": 32
+        },
+        "2": {
+          "spooled": 27,
+          "pulled": 31,
+          "frayed": 1
+        },
+        "3": {
+          "frayed": 33,
+          "spooled": 10,
+          "pulled": 14,
+          "snapped": 8
+        },
+        "4": {
+          "snapped": 24,
+          "frayed": 36,
+          "pulled": 12
+        },
+        "5": {
+          "frayed": 23,
+          "snapped": 61,
+          "pulled": 9
+        }
+      }
+    },
+    "hammerhead": {
+      "bestDrag": 2,
+      "tied": [
+        1,
+        2
+      ],
+      "decisive": false,
+      "spread": 7,
+      "winByDrag": {
+        "1": 5.5,
+        "2": 7,
+        "3": 3,
+        "4": 0,
+        "5": 0
+      },
+      "secByDrag": {
+        "1": 129.8,
+        "2": 119.3,
+        "3": 101.5,
+        "4": 0,
+        "5": 0
+      },
+      "loseByDrag": {
+        "1": {
+          "spooled": 72,
+          "pulled": 114,
+          "frayed": 3
+        },
+        "2": {
+          "spooled": 12,
+          "frayed": 84,
+          "pulled": 78,
+          "snapped": 12
+        },
+        "3": {
+          "pulled": 32,
+          "frayed": 99,
+          "snapped": 63
+        },
+        "4": {
+          "frayed": 56,
+          "snapped": 126,
+          "pulled": 18
+        },
+        "5": {
+          "frayed": 26,
+          "snapped": 166,
+          "pulled": 8
+        }
+      }
+    },
+    "marlin": {
+      "bestDrag": 1,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 0,
+        "2": 0,
+        "3": 0,
+        "4": 0,
+        "5": 0
+      },
+      "secByDrag": {
+        "1": 0,
+        "2": 0,
+        "3": 0,
+        "4": 0,
+        "5": 0
+      },
+      "loseByDrag": {
+        "1": {
+          "pulled": 189,
+          "spooled": 10,
+          "snapped": 1
+        },
+        "2": {
+          "pulled": 171,
+          "snapped": 29
+        },
+        "3": {
+          "pulled": 96,
+          "snapped": 103,
+          "spooled": 1
+        },
+        "4": {
+          "pulled": 35,
+          "snapped": 165
+        },
+        "5": {
+          "snapped": 197,
+          "pulled": 3
+        }
+      }
+    },
+    "swordfish": {
+      "bestDrag": 3,
+      "tied": [
+        1,
+        2,
+        3
+      ],
+      "decisive": true,
+      "spread": 12.5,
+      "winByDrag": {
+        "1": 47,
+        "2": 48.5,
+        "3": 48.5,
+        "4": 43,
+        "5": 36
+      },
+      "secByDrag": {
+        "1": 94.8,
+        "2": 82.5,
+        "3": 71,
+        "4": 56.9,
+        "5": 45.8
+      },
+      "loseByDrag": {
+        "1": {
+          "pulled": 93,
+          "spooled": 13
+        },
+        "2": {
+          "pulled": 89,
+          "spooled": 6,
+          "frayed": 7,
+          "snapped": 1
+        },
+        "3": {
+          "pulled": 62,
+          "snapped": 30,
+          "frayed": 11
+        },
+        "4": {
+          "snapped": 79,
+          "pulled": 34,
+          "frayed": 1
+        },
+        "5": {
+          "snapped": 107,
+          "pulled": 18,
+          "frayed": 3
+        }
+      }
+    },
+    "blackmarlin": {
+      "bestDrag": 1,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 0,
+        "2": 0,
+        "3": 0,
+        "4": 0,
+        "5": 0
+      },
+      "secByDrag": {
+        "1": 0,
+        "2": 0,
+        "3": 0,
+        "4": 0,
+        "5": 0
+      },
+      "loseByDrag": {
+        "1": {
+          "pulled": 181,
+          "spooled": 19
+        },
+        "2": {
+          "pulled": 149,
+          "snapped": 43,
+          "spooled": 8
+        },
+        "3": {
+          "snapped": 133,
+          "pulled": 66,
+          "spooled": 1
+        },
+        "4": {
+          "snapped": 181,
+          "pulled": 19
+        },
+        "5": {
+          "snapped": 196,
+          "pulled": 4
+        }
+      }
+    },
+    "bluerunner": {
+      "bestDrag": 2,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 15,
+        "2": 14.8,
+        "3": 14.9,
+        "4": 14.8,
+        "5": 14.8
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    },
+    "schoolmaster": {
+      "bestDrag": 1,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 14.7,
+        "2": 14.7,
+        "3": 14.7,
+        "4": 14.7,
+        "5": 14.7
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    },
+    "lanesnapper": {
+      "bestDrag": 1,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 14.2,
+        "2": 14.2,
+        "3": 14.2,
+        "4": 14.2,
+        "5": 14.2
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    },
+    "vermilion": {
+      "bestDrag": 1,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 14.5,
+        "2": 14.5,
+        "3": 14.6,
+        "4": 14.5,
+        "5": 14.5
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    },
+    "lookdown": {
+      "bestDrag": 1,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 14.2,
+        "2": 14.2,
+        "3": 14.2,
+        "4": 14.2,
+        "5": 14.2
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    },
+    "palometa": {
+      "bestDrag": 1,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 14,
+        "2": 14,
+        "3": 14.2,
+        "4": 14.1,
+        "5": 14
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    },
+    "spanishmack": {
+      "bestDrag": 3,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 15.4,
+        "2": 15.2,
+        "3": 15.1,
+        "4": 15.1,
+        "5": 15.1
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    },
+    "bigeye": {
+      "bestDrag": 4,
+      "tied": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "decisive": true,
+      "spread": 12.5,
+      "winByDrag": {
+        "1": 67.5,
+        "2": 69,
+        "3": 67,
+        "4": 65.5,
+        "5": 56.5
+      },
+      "secByDrag": {
+        "1": 75,
+        "2": 63.2,
+        "3": 51.6,
+        "4": 43.8,
+        "5": 34.7
+      },
+      "loseByDrag": {
+        "1": {
+          "spooled": 48,
+          "pulled": 17
+        },
+        "2": {
+          "spooled": 38,
+          "pulled": 24
+        },
+        "3": {
+          "pulled": 32,
+          "spooled": 23,
+          "snapped": 11
+        },
+        "4": {
+          "snapped": 38,
+          "pulled": 30,
+          "spooled": 1
+        },
+        "5": {
+          "snapped": 64,
+          "pulled": 23
+        }
+      }
+    },
+    "skipjack": {
+      "bestDrag": 5,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 24.5,
+        "2": 21.2,
+        "3": 20.1,
+        "4": 19.4,
+        "5": 18.8
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    },
+    "gag": {
+      "bestDrag": 5,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 32.1,
+        "2": 26.3,
+        "3": 23.8,
+        "4": 22.3,
+        "5": 21.4
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    },
+    "redgrouper": {
+      "bestDrag": 5,
+      "tied": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "decisive": false,
+      "spread": 0,
+      "winByDrag": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100
+      },
+      "secByDrag": {
+        "1": 26.8,
+        "2": 22.5,
+        "3": 21,
+        "4": 20,
+        "5": 19.5
+      },
+      "loseByDrag": {
+        "1": {},
+        "2": {},
+        "3": {},
+        "4": {},
+        "5": {}
+      }
+    }
+  },
+  "tackleView": {
+    "mono12": {
+      "tarpon": "0/0",
+      "amberjack": "34/0",
+      "yellowfin": "0/0",
+      "wahoo": "39/0",
+      "sailfish": "0/0",
+      "marlin": "0/0",
+      "bluefin": "0/0",
+      "goliath": "0/0",
+      "hammerhead": "0/0",
+      "cobia": "70/0",
+      "snook": "100/100",
+      "mahi": "74/0",
+      "permit": "100/65"
+    },
+    "mono30": {
+      "tarpon": "45/0",
+      "amberjack": "100/15",
+      "yellowfin": "100/0",
+      "wahoo": "100/96",
+      "sailfish": "55/0",
+      "marlin": "0/0",
+      "bluefin": "0/0",
+      "goliath": "4/0",
+      "hammerhead": "0/0",
+      "cobia": "100/98",
+      "snook": "100/100",
+      "mahi": "100/84",
+      "permit": "100/100"
+    },
+    "braid50": {
+      "tarpon": "96/1",
+      "amberjack": "100/100",
+      "yellowfin": "100/54",
+      "wahoo": "100/100",
+      "sailfish": "99/20",
+      "marlin": "0/0",
+      "bluefin": "9/0",
+      "goliath": "80/0",
+      "hammerhead": "18/0",
+      "cobia": "100/100",
+      "snook": "100/100",
+      "mahi": "100/99",
+      "permit": "100/100"
+    },
+    "braid80": {
+      "tarpon": "100/73",
+      "amberjack": "100/100",
+      "yellowfin": "100/100",
+      "wahoo": "100/100",
+      "sailfish": "100/79",
+      "marlin": "6/0",
+      "bluefin": "75/0",
+      "goliath": "100/0",
+      "hammerhead": "85/0",
+      "cobia": "100/100",
+      "snook": "100/100",
+      "mahi": "100/100",
+      "permit": "100/100"
+    },
+    "braid130": {
+      "tarpon": "100/98",
+      "amberjack": "100/100",
+      "yellowfin": "100/100",
+      "wahoo": "100/100",
+      "sailfish": "100/100",
+      "marlin": "68/0",
+      "bluefin": "100/0",
+      "goliath": "100/98",
+      "hammerhead": "100/26",
+      "cobia": "100/100",
+      "snook": "100/100",
+      "mahi": "100/100",
+      "permit": "100/100"
+    }
+  },
   "bestDragHistogram": {
-    "1": 49
+    "1": 0,
+    "2": 0,
+    "3": 3,
+    "4": 4,
+    "5": 2
   },
   "bestDragPerSpecies": {
-    "bonefish": 1,
-    "permit": 1,
-    "tarpon": 1,
-    "barracuda": 1,
-    "snook": 1,
-    "redfish": 1,
-    "trout": 1,
+    "bonefish": 4,
+    "permit": 5,
+    "tarpon": 5,
+    "barracuda": 5,
+    "snook": 5,
+    "redfish": 5,
+    "trout": 3,
     "mangrove": 1,
     "yellowtail": 1,
-    "mutton": 1,
-    "hogfish": 1,
-    "grouper": 1,
-    "mahi": 1,
-    "blackfin": 1,
-    "wahoo": 1,
-    "sailfish": 1,
-    "yellowfin": 1,
-    "bluefin": 1,
-    "albacore": 1,
-    "cobia": 1,
-    "amberjack": 1,
-    "kingfish": 1,
-    "cero": 1,
-    "jackcrevalle": 1,
+    "mutton": 5,
+    "hogfish": 4,
+    "grouper": 5,
+    "mahi": 5,
+    "blackfin": 5,
+    "wahoo": 4,
+    "sailfish": 5,
+    "yellowfin": 4,
+    "bluefin": 3,
+    "albacore": 5,
+    "cobia": 4,
+    "amberjack": 4,
+    "kingfish": 5,
+    "cero": 5,
+    "jackcrevalle": 5,
     "ladyfish": 1,
-    "sheepshead": 1,
-    "pompano": 1,
-    "tripletail": 1,
+    "sheepshead": 5,
+    "pompano": 2,
+    "tripletail": 5,
     "lionfish": 1,
-    "goliath": 1,
-    "graytrigger": 1,
-    "blacktip": 1,
-    "bullshark": 1,
-    "lemonshark": 1,
-    "hammerhead": 1,
+    "goliath": 4,
+    "graytrigger": 2,
+    "blacktip": 4,
+    "bullshark": 3,
+    "lemonshark": 3,
+    "hammerhead": 2,
     "marlin": 1,
-    "swordfish": 1,
+    "swordfish": 3,
     "blackmarlin": 1,
-    "bluerunner": 1,
+    "bluerunner": 2,
     "schoolmaster": 1,
     "lanesnapper": 1,
     "vermilion": 1,
     "lookdown": 1,
     "palometa": 1,
-    "spanishmack": 1,
-    "bigeye": 1,
-    "skipjack": 1,
-    "gag": 1,
-    "redgrouper": 1
+    "spanishmack": 3,
+    "bigeye": 4,
+    "skipjack": 5,
+    "gag": 5,
+    "redgrouper": 5
   },
   "sessions": {
     "Hawk Channel": {
       "simMinutes": 30,
-      "casts": 83.2,
-      "catches": 83,
-      "catchesPerMin": 2.77,
-      "firstCatchSec": 22.1,
-      "score": 8867.4,
-      "speciesSeen": 14.7,
-      "speciesInZoneTable": 15,
-      "noveltyEvents": 16.1,
-      "lastNoveltyAtSec": 1319.8,
-      "longestGapSec": 678.7,
-      "medianGapSec": 39.8
+      "casts": 54.9,
+      "catches": 53.6,
+      "catchesPerMin": 1.79,
+      "firstCatchSec": 34.3,
+      "score": 6451.4,
+      "speciesSeen": 16.1,
+      "speciesInZoneTable": 19,
+      "noveltyEvents": 17.3,
+      "lastNoveltyAtSec": 1530.7,
+      "longestGapSec": 473.1,
+      "medianGapSec": 53.9
     },
     "Reef": {
       "simMinutes": 30,
-      "casts": 82.3,
-      "catches": 82.3,
-      "catchesPerMin": 2.74,
-      "firstCatchSec": 22.4,
-      "score": 11366,
-      "speciesSeen": 16.4,
-      "speciesInZoneTable": 17,
-      "noveltyEvents": 17.7,
-      "lastNoveltyAtSec": 1424.7,
-      "longestGapSec": 661.6,
-      "medianGapSec": 34.6
+      "casts": 52.1,
+      "catches": 51.3,
+      "catchesPerMin": 1.71,
+      "firstCatchSec": 33.3,
+      "score": 7285.5,
+      "speciesSeen": 16.1,
+      "speciesInZoneTable": 20,
+      "noveltyEvents": 17.2,
+      "lastNoveltyAtSec": 1511.3,
+      "longestGapSec": 452.4,
+      "medianGapSec": 55
     },
     "Offshore": {
       "simMinutes": 30,
-      "casts": 63.8,
-      "catches": 63.8,
-      "catchesPerMin": 2.13,
-      "firstCatchSec": 29.5,
-      "score": 47431.4,
-      "speciesSeen": 13.5,
+      "casts": 36.5,
+      "catches": 26.9,
+      "catchesPerMin": 0.9,
+      "firstCatchSec": 62.8,
+      "score": 10191.1,
+      "speciesSeen": 8.7,
       "speciesInZoneTable": 16,
-      "noveltyEvents": 14.6,
-      "lastNoveltyAtSec": 1435.5,
-      "longestGapSec": 560.9,
-      "medianGapSec": 59.3
+      "noveltyEvents": 9.5,
+      "lastNoveltyAtSec": 1449.8,
+      "longestGapSec": 591,
+      "medianGapSec": 116.7
     }
   },
   "discovery": {
     "Hawk Channel": {
-      "speciesInTable": 15,
-      "medianCatchesTo50pct": 11,
-      "to80pct": 25,
-      "to95pct": 67
+      "speciesInTable": 19,
+      "medianCatchesTo50pct": 16,
+      "to80pct": 45,
+      "to95pct": 130
     },
     "Reef": {
-      "speciesInTable": 17,
-      "medianCatchesTo50pct": 13,
-      "to80pct": 31,
-      "to95pct": 94
+      "speciesInTable": 20,
+      "medianCatchesTo50pct": 14,
+      "to80pct": 37,
+      "to95pct": 87
     },
     "Offshore": {
       "speciesInTable": 16,
-      "medianCatchesTo50pct": 13,
-      "to80pct": 45,
-      "to95pct": 174
+      "medianCatchesTo50pct": 14,
+      "to80pct": 46,
+      "to95pct": 145
     }
   },
   "economy": {
     "releaseBonusPct": 25,
     "weighInPointsPerLb": 6,
-    "pointsPerCatchP50": 98,
-    "pointsPerCatchP90": 595,
+    "pointsPerCatchP50": 109,
+    "pointsPerCatchP90": 720,
     "pointsPerCatchMax": 4500,
     "speciesWithMeatPrice": 28,
     "speciesNoSale": 12,

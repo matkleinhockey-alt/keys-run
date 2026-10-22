@@ -92,24 +92,50 @@ export function createFishingVisuals(scene: THREE.Scene): FishingVisuals {
   }
 
   const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3();
+  const LINE_WHITE = new THREE.Color(0xffffff), LINE_HOT = new THREE.Color(0xff6a3d);
+  /**
+   * The line from the rod tip to the fish/bobber, as a rope that is either hanging or taut.
+   *
+   * Was a fixed parabola whose sag shrank linearly with tension: it could neither lie on the water
+   * when slack nor sit ruler-straight when loaded, and a static curve cannot show a line going
+   * tight (the thing a player watches to know the fish is on). Now: sag follows the catenary
+   * limit (sag ~ length * slack), is floored at the water (a slack line lies on the surface, it
+   * does not hang through it), a slack line carries a travelling ripple, a loaded one that is
+   * paying out through the drag hums at a few mm, and the colour warms as load nears the line's
+   * (chafe-reduced) limit so the player can see the break coming before the bar says so.
+   */
   function drawLine(t: number, boat: BoatState, sw: number, ch: number, rodTipWorld: THREE.Vector3): void {
     fishLine.visible = true;
     tmpA.copy(rodTipWorld);
     const isFight = F.state === 'fight';
     const bx = isFight ? F.fx : F.bob.x;
     const bz = isFight ? F.fz : F.bob.z;
-    const by = isFight ? sampleWaterHeight(boat, F.fx, F.fz, t, 0, sw, ch) + 0.05 : F.bob.y;
+    const waterEnd = sampleWaterHeight(boat, bx, bz, t, 0, sw, ch);
+    const by = isFight ? waterEnd + 0.05 : F.bob.y;
     tmpB.set(bx, by, bz);
-    const tension = F.fight ? F.fight.tension : 0;
-    const sag = isFight ? (1 - clamp(tension, 0, 1)) * 2.5 : F.state === 'casting' ? 0 : 2;
+    const f = isFight ? F.fight : null;
+    const tension = f ? f.tension : 0;
+    // 0 = bar taut, 1 = hanging in a full bow. Fully slack by ~0.12, ruler-straight past ~0.45.
+    const slack = isFight ? clamp(1 - (tension - 0.1) / 0.35, 0, 1) : F.state === 'casting' ? 0.15 : F.reeling ? 0.2 : 0.75;
+    const len = Math.hypot(tmpB.x - tmpA.x, tmpB.y - tmpA.y, tmpB.z - tmpA.z);
+    const sag = Math.min(6, len * (0.015 + 0.16 * slack * slack));
+    const floorY = Math.min(waterEnd, tmpA.y) + 0.03;
+    const hum = f && f.slipping ? 0.05 * Math.min(1, Math.abs(f.lineSpeed) / 6) * clamp(tension / 0.4, 0, 1) : 0;
+    const dx = tmpB.x - tmpA.x, dz = tmpB.z - tmpA.z, hl = Math.hypot(dx, dz) || 1;
+    const px = -dz / hl, pz = dx / hl; // horizontal perpendicular to the line
     const arr = lineGeo.attributes.position.array as Float32Array;
     for (let i = 0; i <= LSEG; i++) {
-      const u = i / LSEG;
-      arr[i * 3] = lerp(tmpA.x, tmpB.x, u);
-      arr[i * 3 + 1] = lerp(tmpA.y, tmpB.y, u) - Math.sin(u * Math.PI) * sag * u;
-      arr[i * 3 + 2] = lerp(tmpA.z, tmpB.z, u);
+      const u = i / LSEG, env = Math.sin(u * Math.PI);
+      let y = lerp(tmpA.y, tmpB.y, u) - env * sag;
+      const ripple = slack * (0.18 * env * Math.sin(u * 11 - t * 4.5)) + hum * env * Math.sin(u * 23 + t * 70);
+      if (isFight || F.state === 'waiting') y = Math.max(y, floorY);
+      arr[i * 3] = lerp(tmpA.x, tmpB.x, u) + px * ripple;
+      arr[i * 3 + 1] = y + (hum ? hum * env * Math.sin(u * 19 + t * 83) : 0);
+      arr[i * 3 + 2] = lerp(tmpA.z, tmpB.z, u) + pz * ripple;
     }
     lineGeo.attributes.position.needsUpdate = true;
+    const heat = f ? clamp((tension / f.limit - 0.65) / 0.3, 0, 1) : 0;
+    (fishLine.material as THREE.LineBasicMaterial).color.copy(LINE_WHITE).lerp(LINE_HOT, heat);
     bobber.position.set(F.bob.x, F.bob.y, F.bob.z);
   }
 

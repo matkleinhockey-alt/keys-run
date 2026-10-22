@@ -58,6 +58,10 @@
       "types": "./dist/content/boats.d.ts",
       "default": "./dist/content/boats.js"
     },
+    "./content/tackle": {
+      "types": "./dist/content/tackle.d.ts",
+      "default": "./dist/content/tackle.js"
+    },
     "./content/economy": {
       "types": "./dist/content/economy.d.ts",
       "default": "./dist/content/economy.js"
