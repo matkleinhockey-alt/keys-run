@@ -14,6 +14,7 @@
  */
 import { VENUES, type Venue } from '@keysrun/shared/content/venues';
 import { describeItem, fmtClock, rowsText, type ShopPort } from '../../ui/gear.js';
+import { mountChangingRoom } from './changing-room.js';
 import './land.css';
 
 function $(id: string): HTMLElement | null { return document.getElementById(id); }
@@ -117,6 +118,9 @@ export function createLandHud(touch: boolean, shop: ShopPort): LandHudHandles {
       open('', cb);
       render();
       const p = $('landPanel')!;
+      // The gift shop also has a changing room — swap or take off what you already bought. Mounted
+      // after the first render because render() owns the panel's innerHTML; see changing-room.ts.
+      if (id === 'gifts') mountChangingRoom(p);
       // One delegated listener: render() replaces the whole subtree on every purchase, so
       // per-button handlers would be rebuilt (and leaked) each time. `open` already installed the
       // close handler on the first button, which at that moment did not exist — hence the

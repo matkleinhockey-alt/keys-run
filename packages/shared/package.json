@@ -133,6 +133,14 @@
     "./sim/services": {
       "types": "./dist/sim/services.d.ts",
       "default": "./dist/sim/services.js"
+    },
+    "./sim/wardrobe": {
+      "types": "./dist/sim/wardrobe.d.ts",
+      "default": "./dist/sim/wardrobe.js"
+    },
+    "./content/cosmetics": {
+      "types": "./dist/content/cosmetics.d.ts",
+      "default": "./dist/content/cosmetics.js"
     }
   },
   "scripts": {

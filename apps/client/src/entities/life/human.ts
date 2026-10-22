@@ -102,7 +102,20 @@ export interface HumanOptions {
    * kept exactly as legacy named it despite the confusing name: true means "has real jointed legs
    * for walking", false/undefined skips building them). */
   walker?: boolean;
+  /* ---- cosmetics (content/cosmetics.ts). All optional; absent = the original look, byte for byte. ---- */
+  /** Second torso colour for `shirtPattern`. Painted into the SAME vertex-colour attribute the plain
+   * shirt already uses, so a patterned shirt costs no texture, no material and no draw call. */
+  shirtAccent?: number;
+  shirtPattern?: 'hawaiian' | 'stripe' | 'fade';
+  /** 'bucket' puts a brim all the way round; default 'ball' is the existing peaked cap. */
+  capStyle?: 'ball' | 'bucket';
+  /** Frame/lens colour and shape for `glasses: true`. Default is the original black bar. */
+  glassesColor?: number;
+  glassesStyle?: 'wide' | 'round' | 'aviator';
 }
+
+/** The subset of options a cosmetic can change after the figure is built (see `Human.dress`). */
+export type HumanDress = Pick<HumanOptions, 'shirt' | 'shirtAccent' | 'shirtPattern' | 'cap' | 'capStyle' | 'glasses' | 'glassesColor' | 'glassesStyle'>;
 
 export interface Human {
   group: THREE.Group;
@@ -120,6 +133,18 @@ export interface Human {
   /** Luigi-mode scratch fields (legacy adds these ad hoc: `h.beer`, `h.sip`, `h.sipT`, `h.sipAmt`). */
   beer: THREE.Group | null;
   sip: number; sipT: number; sipAmt: number;
+  /**
+   * Re-dress in place: `over` is merged onto the options this figure was BUILT with (so `dress({})`
+   * restores the everyday look), and the torso, head and sleeve materials are swapped for freshly
+   * merged ones. Rebuilds the same two merged geometries the constructor made, so a dressed figure is
+   * still exactly 3 body draw calls -- cosmetics add none. Nothing runs per frame: this is called
+   * only when the worn outfit changes (a purchase, a swap), never from `update`, so the distance
+   * culling in `updateHumans` is untouched and an undressed figure pays nothing at all.
+   * Not for bikini figures (their hair/eyes depend on the glasses flag via lids).
+   */
+  dress(over: HumanDress): void;
+  /** Meshes `dress` swaps geometry/materials on. Internal. */
+  _dressParts: { body: THREE.Mesh; headMesh: THREE.Mesh; sleeveMeshes: THREE.Mesh[]; lowerArms: THREE.Mesh[] };
   pose(a: THREE.Vector3, b: THREE.Vector3): void;
   poseLegs(fl: THREE.Vector3, fr: THREE.Vector3): void;
   update(t: number, boatSpeed?: number): void;
@@ -130,6 +155,7 @@ export interface Human {
  * below, which keeps one for you) so repeated bikini figures cycle through `WOMAN_LOOKS` instead
  * of always getting the same look. */
 export function makeHuman(o: HumanOptions, womanIndex = 0): Human {
+  const built = o; // what `dress()` merges onto
   if (o.bikini) {
     const look = WOMAN_LOOKS[womanIndex % WOMAN_LOOKS.length];
     o = { ...o, hair: look.hair, skin: look.skin, hairStyle: look.hairStyle as HumanOptions['hairStyle'], eye: look.eye, longHair: true };
@@ -175,12 +201,45 @@ export function makeHuman(o: HumanOptions, womanIndex = 0): Human {
     ? [[0.168, 0], [0.172, 0.06], [0.14, 0.17], [0.116, 0.25], [0.128, 0.31], [0.148, 0.38], [0.15, 0.44], [0.136, 0.5], [0.085, 0.56], [0.05, 0.6]]
     : [[0.155, 0], [0.165, 0.07], [0.148, 0.18], [0.135, 0.25], [0.15, 0.33], [0.168, 0.41], [0.172, 0.46], [0.155, 0.52], [0.09, 0.57], [0.05, 0.6]]
   ).map((p) => new THREE.Vector2(p[0], p[1]));
-  const tg = new THREE.LatheGeometry(prof, fem ? 30 : 18);
+  // A patterned shirt needs vertices to hold the pattern: the stock lathe is 10 rings x 18 segments,
+  // far too coarse for flowers or a 2 cm stripe. So ONLY when a pattern is asked for, the profile is
+  // resampled to 28 rings and 36 segments (~1000 vertices, one-off at build/dress time). Measured
+  // against the alternatives: a CanvasTexture needs UVs, a second material and breaks the single
+  // shared `humanMat` that keeps every figure on one program; a decal mesh adds a draw call per
+  // wearer. Unpatterned figures keep the exact geometry they always had.
+  const pattern = o.bikini ? undefined : o.shirtPattern;
+  const accent = C(o.shirtAccent ?? 0xd7263d);
+  let latheProf = prof;
+  if (pattern) {
+    const N = 28;
+    latheProf = [];
+    for (let k = 0; k < N; k++) {
+      const u = (k / (N - 1)) * (prof.length - 1), i0 = Math.min(prof.length - 2, Math.floor(u)), f = u - i0;
+      latheProf.push(new THREE.Vector2(prof[i0].x + (prof[i0 + 1].x - prof[i0].x) * f, prof[i0].y + (prof[i0 + 1].y - prof[i0].y) * f));
+    }
+  }
+  const tg = new THREE.LatheGeometry(latheProf, pattern ? 36 : fem ? 30 : 18);
   tg.computeVertexNormals();
   const tc: number[] = [], tp = tg.attributes.position;
+  const petal = C(0xffffff);
   for (let i = 0; i < tp.count; i++) {
     const y = tp.getY(i);
     let c = o.bikini ? skin : shirt;
+    if (pattern && y >= 0.06) {
+      const ang = Math.atan2(tp.getZ(i), tp.getX(i));
+      if (pattern === 'stripe') c = Math.floor(y / 0.045) % 2 ? accent : shirt;
+      else if (pattern === 'fade') c = shirt.clone().lerp(accent, Math.min(1, Math.max(0, (0.6 - y) / 0.5)));
+      else {
+        // hawaiian: big blooms (accent, white centre) on a scatter of small leaves, laid out on a
+        // brick grid in (angle, height) so they do not line up into columns.
+        const row = Math.floor(y / 0.11), a = ang + (row % 2) * 0.39;
+        const du = ((a % 0.78) + 0.78) % 0.78 - 0.39, dv = (y % 0.11) - 0.055;
+        const r2 = du * du * 0.09 + dv * dv;
+        if (r2 < 0.0004) c = petal;
+        else if (r2 < 0.0016) c = accent;
+        else if (r2 < 0.0026) c = shirt.clone().multiplyScalar(0.72);
+      }
+    }
     if (y < 0.06) c = bottom;
     if (o.bikini && y > 0.35 && y < 0.45) c = bottom;
     if (o.bikini && y < 0.08) c = bottom;
@@ -226,7 +285,11 @@ export function makeHuman(o: HumanOptions, womanIndex = 0): Human {
   } else hadd(new THREE.BoxGeometry(0.036, 0.009, 0.01), TM(0, -0.052, 0.088, 0, 0, 0, 1, 1, 1), lip);
   if (o.cap) {
     hadd(new THREE.SphereGeometry(0.112, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), TM(0, 0.035, -0.005, 0, 0, 0, 1, 0.9, 1.02), C(o.cap));
-    hadd(new THREE.CylinderGeometry(0.09, 0.09, 0.012, 16, 1, false, -Math.PI / 2.4, Math.PI / 1.2), TM(0, 0.04, 0.06, -0.15, 0, 0, 1, 1, 1.25), C(o.cap));
+    if (o.capStyle === 'bucket') {
+      // a floppy all-round brim: a shallow downward cone frustum, open top and bottom so it reads from
+      // above and below, sitting at the dome's rim.
+      hadd(new THREE.CylinderGeometry(0.118, 0.178, 0.04, 20, 1, true), TM(0, 0.035, 0, 0, 0, 0, 1, 1, 1), C(o.cap).multiplyScalar(0.92));
+    } else hadd(new THREE.CylinderGeometry(0.09, 0.09, 0.012, 16, 1, false, -Math.PI / 2.4, Math.PI / 1.2), TM(0, 0.04, 0.06, -0.15, 0, 0, 1, 1, 1.25), C(o.cap));
     hadd(sph(0.104, 12, 8), TM(0, 0.0, -0.02, 0, 0, 0, 0.95, 0.6, 0.95), hair);
   } else hadd(new THREE.SphereGeometry(0.108, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.56), TM(0, 0.022, -0.012, -0.12, 0, 0, 0.97, 1.06, 1.07), hair);
   let hairStyleUsed: string | undefined;
@@ -263,8 +326,23 @@ export function makeHuman(o: HumanOptions, womanIndex = 0): Human {
     }
   }
   if (o.glasses) {
-    hadd(new THREE.BoxGeometry(0.165, 0.034, 0.014), TM(0, 0.022, 0.095, 0, 0, 0, 1, 1, 1), C(0x0b0d10));
-    for (const sx of [-1, 1]) hadd(new THREE.BoxGeometry(0.006, 0.008, 0.11), TM(sx * 0.085, 0.025, 0.04, 0, 0, 0, 1, 1, 1), C(0x0b0d10));
+    const gc = C(o.glassesColor ?? 0x0b0d10);
+    if (o.glassesStyle === 'round') {
+      // two round lenses in a thin dark rim, joined by a bridge
+      for (const sx of [-1, 1]) {
+        hadd(new THREE.CylinderGeometry(0.036, 0.036, 0.012, 16), TM(sx * 0.044, 0.024, 0.097, Math.PI / 2, 0, 0, 1, 1, 1), gc);
+        hadd(new THREE.TorusGeometry(0.037, 0.0045, 6, 16), TM(sx * 0.044, 0.024, 0.101, 0, 0, 0, 1, 1, 1), C(0x0b0d10));
+      }
+      hadd(new THREE.BoxGeometry(0.03, 0.006, 0.008), TM(0, 0.03, 0.1, 0, 0, 0, 1, 1, 1), C(0x0b0d10));
+    } else if (o.glassesStyle === 'aviator') {
+      // teardrop lenses (a squashed sphere) in gold wire, with a brow bar
+      for (const sx of [-1, 1]) {
+        hadd(sph(0.04, 14, 10), TM(sx * 0.044, 0.016, 0.097, 0, 0, sx * 0.12, 1, 0.95, 0.18), gc);
+        hadd(new THREE.TorusGeometry(0.041, 0.003, 6, 18), TM(sx * 0.044, 0.016, 0.102, 0, 0, 0, 1, 0.95, 1), C(0xd8b84a));
+      }
+      hadd(new THREE.BoxGeometry(0.1, 0.004, 0.006), TM(0, 0.04, 0.103, 0, 0, 0, 1, 1, 1), C(0xd8b84a));
+    } else hadd(new THREE.BoxGeometry(0.165, 0.034, 0.014), TM(0, 0.022, 0.095, 0, 0, 0, 1, 1, 1), gc);
+    for (const sx of [-1, 1]) hadd(new THREE.BoxGeometry(0.006, 0.008, 0.11), TM(sx * 0.085, 0.025, 0.04, 0, 0, 0, 1, 1, 1), o.glassesStyle === 'aviator' ? C(0xd8b84a) : C(o.glassesStyle === 'wide' ? (o.glassesColor ?? 0x0b0d10) : 0x0b0d10));
   }
   if (fem) {
     for (const sx of [-1, 1]) {
@@ -336,6 +414,27 @@ export function makeHuman(o: HumanOptions, womanIndex = 0): Human {
   const h: Human = {
     group: g, head, hipY, hands: arms.map((a) => a.hd), hair: hairPiv, lids, blinkT: 2 + Math.random() * 2, ph: Math.random() * 10,
     legs, _pose: null, beer: null, sip: 0, sipT: 0, sipAmt: 0,
+    _dressParts: {
+      body, headMesh: hm,
+      sleeveMeshes: arms.flatMap((a) => [a.up, a.el]),
+      lowerArms: arms.map((a) => a.lo),
+    },
+    dress(over: HumanDress): void {
+      if (built.bikini) return;
+      // Build the new look as a throwaway figure and steal its merged geometry. This reuses every
+      // line of the constructor, so a dressed figure can never drift from a freshly built one; the
+      // cost is one extra makeHuman's worth of CPU on a purchase/swap (a few ms), paid never per frame.
+      const t = makeHuman({ ...built, ...over });
+      const mine = h._dressParts, theirs = t._dressParts;
+      mine.body.geometry.dispose(); mine.body.geometry = theirs.body.geometry;
+      mine.headMesh.geometry.dispose(); mine.headMesh.geometry = theirs.headMesh.geometry;
+      const sleeve = theirs.sleeveMeshes[0].material;
+      for (const m of mine.sleeveMeshes) m.material = sleeve;
+      if (!(built.shortSleeve || built.bikini)) for (const m of mine.lowerArms) m.material = sleeve;
+      // The throwaway's other geometry (limbs, hair, eyelids) is discarded; its shared materials are
+      // module-level caches and must NOT be disposed.
+      t.group.traverse((n) => { if (n instanceof THREE.Mesh && n !== theirs.body && n !== theirs.headMesh) n.geometry.dispose(); });
+    },
     poseLegs(fl: THREE.Vector3, fr: THREE.Vector3): void {
       if (!legs) return;
       [fl, fr].forEach((tgt, i) => {
