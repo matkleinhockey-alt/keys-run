@@ -150,16 +150,17 @@ export function createPistolViewModel(camera: THREE.Camera): PistolViewModel {
 
   // --- muzzle flash: two crossed additive planes (a star from any angle) + a short-lived light
   const flashMat = new THREE.MeshBasicMaterial({
-    color: 0xffd48a, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+    color: 0xffd48a, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
   });
   const flash = new THREE.Group();
-  const plane = new THREE.PlaneGeometry(0.12, 0.05);
+  const plane = new THREE.PlaneGeometry(0.1, 0.1);
   const p1 = new THREE.Mesh(plane, flashMat);
   const p2 = new THREE.Mesh(plane, flashMat);
   p2.rotation.z = Math.PI / 2;
   flash.add(p1, p2);
-  flash.position.set(0, 0, -0.05);
-  flash.rotation.y = Math.PI / 2; // planes lie along the line of fire
+  flash.position.set(0, 0, -0.02);
+  // Planes face the shooter (a flash seen from behind the gun is a star, not an edge-on sliver; the first
+  // version laid them along the line of fire and the flash was invisible in every screenshot).
   const flashHolder = new THREE.Group();
   flashHolder.add(flash);
   muzzle.add(flashHolder);
@@ -191,12 +192,11 @@ export function createPistolViewModel(camera: THREE.Camera): PistolViewModel {
     kickV += (-K * kickX - C * kickV) * dt;
     kickX += kickV * dt;
     slideT = Math.max(0, slideT - dt / 0.08);
-    if (holdFlashOn) flashT = Math.max(flashT, 0.05);
-    if (flashT > 0) {
+    if (flashT > 0 || holdFlashOn) {
       flashT -= dt;
-      const on = flashT > 0;
+      const on = flashT > 0 || holdFlashOn;
       flashHolder.visible = on;
-      flashLight.intensity = on ? 7 * clamp(flashT / 0.06, 0, 1) : 0;
+      flashLight.intensity = on ? 7 * (holdFlashOn ? 1 : clamp(flashT / 0.06, 0, 1)) : 0;
       if (on) { flashHolder.rotation.z = Math.random() * Math.PI; flashHolder.scale.setScalar(0.8 + Math.random() * 0.7); }
     }
 

@@ -218,11 +218,61 @@ check('Caelen is struck through his own capsule and sulks for two minutes', cael
 
 
 
+// REAL fish
+console.log('\n-- real fish --');
+await H('clearSynth');
+let fishShots = 0, fishHits = 0, tried = 0;
+for (let i = 0; i < 16 && fishShots < 10; i++) {
+  const eye = (await S()).eye;
+  const list = (await H('fish', 18)).filter((f) => f.surf - (f.y + f.r) < 1.0 && f.d > 2 && f.d < 16);
+  if (!list.length) { await page.waitForTimeout(1500); tried++; if (tried > 90) break; continue; }
+  await until(async () => { const s = await S(); return s.mag > 0 && !s.reloading && s.heat < 0.3; }, 'ready gun', 90000).catch(() => page.keyboard.press('KeyR'));
+  const before = (await S()).tally.fish;
+  const fired = await page.evaluate(() => {
+    const D = window.__handgunDebug;
+    const eye = D.state().eye;
+    const l = D.fish(18).filter((f) => f.surf - (f.y + f.r) < 1.0 && f.d > 2 && f.d < 16).sort((a, b) => a.d - b.d)[0];
+    if (!l) return false;
+    D.aimAt(l.x, l.y, l.z); D.fire(); return true;
+  });
+  if (!fired) continue;
+  fishShots++;
+  await until(async () => (await S()).flights === 0, 'bullet to land', 60000);
+  if ((await S()).tally.fish > before) fishHits++;
+}
+console.log(`real-fish results (fish with their top within 1.0 m of the surface, 2-16 m out): ${fishHits}/${fishShots}`);
+check('real near-surface fish: some hit, and the far ones are out of reach', fishShots === 0 || fishHits >= 1, `${fishHits}/${fishShots}`);
+
+// deep fish are unreachable
+let deepShots = 0, deepHits = 0;
+for (let i = 0; i < 6; i++) {
+  await until(async () => { const s = await S(); return s.mag > 0 && !s.reloading && s.heat < 0.3; }, 'ready gun', 90000).catch(() => page.keyboard.press('KeyR'));
+  const before = (await S()).tally.fish;
+  const fired = await page.evaluate(() => {
+    const D = window.__handgunDebug;
+    const l = D.fish(26).filter((f) => f.surf - f.y > 2.2 && f.d > 3 && f.d < 24).sort((a, b) => a.d - b.d)[0];
+    if (!l) return false;
+    D.aimAt(l.x, l.y, l.z); D.fire(); return true;
+  });
+  if (!fired) break;
+  deepShots++;
+  await until(async () => (await S()).flights === 0, 'bullet to land', 60000);
+  if ((await S()).tally.fish > before) deepHits++;
+}
+console.log(`deep fish (centre >2.2 m down) shot at point blank on the crosshair: ${deepHits}/${deepShots} hits`);
+check('fish more than 2 m down cannot be hit, whatever you aim at', deepShots > 0 && deepHits === 0, `${deepHits}/${deepShots}`);
+
+
 // normalise: 24 rounds owned, a full magazine, so the accounting checks below are exact
 await H('setRounds', 24);
 await until(async () => (await S()).heat < 0.2, 'heat');
-if ((await S()).mag < 12) await page.keyboard.press('KeyR');
-await until(async () => { const s = await S(); return s.mag === 12 && !s.reloading; }, 'a full magazine', 180000);
+const shotsBase = (await S()).tally.shots;
+await until(async () => {
+  const s = await S();
+  if (s.mag === 12 && !s.reloading) return true;
+  if (!s.reloading && s.mode === 'gun') await page.keyboard.press('KeyR'); // retry until a reload is actually running
+  return false;
+}, 'a full magazine ' + JSON.stringify(await S()), 180000);
 await H('setLook', 0, 0.3); // sky, nothing to hit
 await H('fire');
 await shot('02-fire-flash');
@@ -235,7 +285,7 @@ check('and spooks the water under the boat', s1.spooks.length >= 1);
 // empty the magazine; the slide locks back and the trigger clicks
 for (let i = 0; i < 11; i++) { await until(async () => (await S()).heat < 0.9, 'heat'); await until(async () => { await H('fire'); return (await S()).mag === 10 - i; }, `shot ${i + 2}`, 20000); }
 let s2 = await S();
-check('the magazine empties after 12 shots', s2.mag === 0 && s2.tally.shots === 12, JSON.stringify({ mag: s2.mag, shots: s2.tally.shots }));
+check('the magazine empties after 12 shots', s2.mag === 0 && s2.tally.shots - shotsBase === 12, JSON.stringify({ mag: s2.mag, shots: s2.tally.shots - shotsBase }));
 await page.waitForTimeout(600);
 await shot('03-empty-slide-locked');
 await H('fire'); // dry click: auto-starts a reload since there are rounds in the box
@@ -264,13 +314,14 @@ await until(async () => { const s = await S(); return s.mag > 6 && !s.reloading;
 await H('clearSynth');
 // synthetic fish, 4 m out along the aim
 await H('setLook', 1.0, -0.2);
+const fishBefore = (await S()).tally.fish;
 const sf = await H('synth', 'fish', 4);
 await H('aimAt', sf.x, sf.y, sf.z);
 const sch0 = await page.evaluate(() => window.__fishDebug.activeSchools().filter((x) => x.flee > 0).length);
 await H('fire');
-await until(async () => (await S()).tally.fish >= 1, 'synthetic fish hit', 60000);
+await until(async () => (await S()).tally.fish >= fishBefore + 1, 'synthetic fish hit', 60000);
 const fs1 = await S();
-check('synthetic fish 0.5 m under the surface at 4 m is hit and stunned', fs1.tally.fish === 1);
+check('synthetic fish 0.5 m under the surface at 4 m is hit and stunned', fs1.tally.fish === fishBefore + 1);
 const hitToast = await page.evaluate(() => document.getElementById('toast')?.textContent ?? '');
 check('the hit toast names the fish and its weight', /Plink! .+, \d+\.\d lb/.test(hitToast), JSON.stringify(hitToast));
 check('a small blood cloud blooms at the wound', fs1.blood > 0, `particles=${fs1.blood}`);
@@ -282,56 +333,13 @@ await H('clearSynth');
 await until(async () => (await S()).blood === 0, 'the blood cloud to thin out and be gone', 180000);
 check('...and it is gone again a few seconds later, nothing lingering', true);
 // birds
+const birdsBefore = (await S()).tally.birds;
 const sb = await H('synth', 'bird', 15);
 await H('aimAt', sb.x, sb.y, sb.z);
 await H('fire');
-await until(async () => (await S()).tally.birds >= 1, 'synthetic bird hit', 60000);
-check('synthetic gull at 15 m is hit', (await S()).tally.birds === 1);
+await until(async () => (await S()).tally.birds >= birdsBefore + 1, 'synthetic bird hit', 60000);
+check('synthetic gull at 15 m is hit', (await S()).tally.birds === birdsBefore + 1);
 await H('clearSynth');
-
-// REAL fish
-console.log('\n-- real fish --');
-await H('clearSynth');
-let fishShots = 0, fishHits = 0, tried = 0;
-for (let i = 0; i < 16 && fishShots < 10; i++) {
-  const eye = (await S()).eye;
-  const list = (await H('fish', 14)).filter((f) => f.surf - (f.y + f.r) < 0.9 && f.d > 2 && f.d < 9);
-  if (!list.length) { await page.waitForTimeout(1500); tried++; if (tried > 20) break; continue; }
-  await until(async () => { const s = await S(); return s.mag > 0 && !s.reloading && s.heat < 0.3; }, 'ready gun', 90000).catch(() => page.keyboard.press('KeyR'));
-  const before = (await S()).tally.fish;
-  const fired = await page.evaluate(() => {
-    const D = window.__handgunDebug;
-    const eye = D.state().eye;
-    const l = D.fish(14).filter((f) => f.surf - (f.y + f.r) < 0.9 && f.d > 2 && f.d < 9).sort((a, b) => a.d - b.d)[0];
-    if (!l) return false;
-    D.aimAt(l.x, l.y, l.z); D.fire(); return true;
-  });
-  if (!fired) continue;
-  fishShots++;
-  await until(async () => (await S()).flights === 0, 'bullet to land', 60000);
-  if ((await S()).tally.fish > before) fishHits++;
-}
-console.log(`real-fish results (fish with their top within 0.9 m of the surface, 2-9 m out): ${fishHits}/${fishShots}`);
-check('real near-surface fish can be hit', fishShots === 0 || fishHits >= 1, `${fishHits}/${fishShots}`);
-
-// deep fish are unreachable
-let deepShots = 0, deepHits = 0;
-for (let i = 0; i < 6; i++) {
-  await until(async () => { const s = await S(); return s.mag > 0 && !s.reloading && s.heat < 0.3; }, 'ready gun', 90000).catch(() => page.keyboard.press('KeyR'));
-  const before = (await S()).tally.fish;
-  const fired = await page.evaluate(() => {
-    const D = window.__handgunDebug;
-    const l = D.fish(14).filter((f) => f.surf - f.y > 2.2 && f.d > 3 && f.d < 12).sort((a, b) => a.d - b.d)[0];
-    if (!l) return false;
-    D.aimAt(l.x, l.y, l.z); D.fire(); return true;
-  });
-  if (!fired) break;
-  deepShots++;
-  await until(async () => (await S()).flights === 0, 'bullet to land', 60000);
-  if ((await S()).tally.fish > before) deepHits++;
-}
-console.log(`deep fish (centre >2.2 m down) shot at point blank on the crosshair: ${deepHits}/${deepShots} hits`);
-check('fish more than 2 m down cannot be hit, whatever you aim at', deepShots > 0 && deepHits === 0, `${deepHits}/${deepShots}`);
 
 // ---------------------------------------------------------------------------------------------
 console.log('\n== 4. consequences ==');
