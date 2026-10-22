@@ -24,8 +24,16 @@
 import { WRECK_CHART_M, wreckEdgeDist, wrecksFor, type Wreck } from '@keysrun/shared/world/wrecks';
 import { WORLD_SEED } from '../../state/constants.js';
 
-/** Flip to `true` to chart every wreck from the first frame (see header). */
-export const WRECKS_PRECHARTED = false;
+/**
+ * Every wreck is on the chart from the first frame.
+ *
+ * The discover-by-sounder design above is the better game, and the reasoning for it stands — but
+ * it was not what was asked for. The request was "shipwrecks will be marked on the map", and a
+ * chart that is empty until you have swept 260 m past each of six wrecks reads, correctly, as the
+ * feature not working. Discovery is still implemented and one flag away; it wants to come back as
+ * something the player opts into, not as the default that silently hides the content.
+ */
+export const WRECKS_PRECHARTED = true;
 const STORE_KEY = 'keysrun.wrecks.charted.v1';
 
 const charted = new Set<string>();

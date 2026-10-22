@@ -114,7 +114,7 @@ export function createCrewSystem(
     action.time = rand(0, loaded.clip.duration);
     mixer.update(0); // apply that starting pose immediately, don't wait a frame to pop in
 
-    return createAnimatedFigure(obj, mixer, action, slot.rotationY);
+    return createAnimatedFigure(obj, mixer, action, slot.rotationY, slot.heightM);
   }
 
   function rebuild(): void {

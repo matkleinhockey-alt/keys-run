@@ -75,6 +75,8 @@ const AMBIENT_LINES: readonly string[] = [
   'you didn’t make this… you didn’t make this',
   'I’m an executive, braow',
   'I don’t even fish, I own the fish',
+  'I’m at a conference in Toronto right now… really important stuff…',
+  'can I bring Dan on your boat?',
 ];
 const TAUNT_LINE = 'you suck at this braowww';
 const HIT_LINE = 'AYO— that’s assault braowww';
