@@ -69,7 +69,8 @@ import { createMinimap, type MinimapContact } from '../ui/minimap.js';
 import { populateBoatCards, showHud, showStart } from '../ui/start.js';
 import { toast } from '../ui/toast.js';
 import { createBuffRuntime } from './buffs.js';
-import { emptyInventory, type Inventory } from '@keysrun/shared/sim/shop';
+import { has, countOf } from '@keysrun/shared/sim/shop';
+import { setDiverGearSource, setDiverFillSpender } from '../entities/diver/gear.js';
 import { handWobble, tooDrunkToDive } from '@keysrun/shared/sim/steady';
 import { spotClear, findClearSpot } from '../state/game.js';
 import { SPAWN_X, SPAWN_DZ, SPAWN_H } from '../state/constants.js';
@@ -441,6 +442,8 @@ export function initWorld(wrap: HTMLElement): World {
   // shared landing path both it and entities/speargun (once the diver lands) feed into for the
   // catch card / cooler / weigh-in.
   const catchFlow = createCatchFlow({
+    // Ice: a bag is spent when the first fish of a load is kept, and lifts the cooler cap.
+    gear: econ.gear,
     // `fishing` is constructed below and closes over `catchFlow`, so this is deliberately a
     // late-bound arrow rather than a direct reference: by the time a catch card can be dismissed
     // both exist. Without it the rod stays stuck in 'caught' and you can never cast again.
@@ -453,11 +456,29 @@ export function initWorld(wrap: HTMLElement): World {
   // Food/drink buffs. `inventory` is a stand-in holder until the shop agent's persisted inventory
   // lands: swap these two accessors for theirs and nothing else changes. Buff state is only ever
   // `inventory.buffs` (see game/buffs.ts). The window hook is a dev/test seam, like __fishDebugCamera.
-  let inventory: Inventory = emptyInventory();
-  const buffs = createBuffRuntime({ getInventory: () => inventory, setInventory: (i) => { inventory = i; }, toast, mount: wrap });
-  (window as unknown as { __krInv?: unknown }).__krInv = { get: () => inventory, set: (i: Inventory) => { inventory = i; }, buffs, now: () => simTime };
+  // The buff strip reads and writes the SAME inventory the shop sells into — it was built against
+  // a placeholder holder because the two landed in parallel, and this is the join. Keeping one
+  // inventory is what lets the gear screen list buffs for free and a reload restore them.
+  const buffs = createBuffRuntime({
+    getInventory: () => econ.shop.inventory(),
+    setInventory: (i) => { econ.setInventory(i); },
+    toast, mount: wrap,
+  });
+
+  // Dive gear (entities/diver/gear.ts) and the rod/spear gear port (shared/sim/gear.ts) are both
+  // pull-based seams that default to "no gear owned", so until these two calls everything bought
+  // in town was inert in play. The air fill is spent through the economy so the spend is saved.
+  setDiverGearSource(() => ({
+    mods: econ.modifiers(),
+    hasTank: has(econ.shop.inventory(), 'dive.tank'),
+    fills: countOf(econ.shop.inventory(), 'dive.fill'),
+  }));
+  setDiverFillSpender(() => { econ.useConsumable('dive.fill'); });
   const fishing = createFishing({
     getModifiers: () => buffs.mods,
+    // Rod, reel, bait and leader. Without this the rod is permanently the stock outfit no matter
+    // what the tackle store sold you.
+    gear: econ.gear,
     scene,
     camera,
     getModel: () => model,
@@ -532,6 +553,8 @@ export function initWorld(wrap: HTMLElement): World {
   const diverAim: DiverAimInput = { position: { x: 0, y: 0, z: 0 }, aimDir: { x: 0, y: 0, z: -1 }, breath: 1, blackedOut: false, speed: 0 };
   const speargun = createSpeargun({
     scene, camera, getTargets: getSpearTargets,
+    // Long gun range and shaft count. Unwired, the gun ignores both and never runs out.
+    gear: econ.gear,
     onLanded(fish) { catchFlow.landFish(fish); },
   });
   bindSpeargunInput(renderer.domElement, speargun, () => diverAim, () => diver.mode === 'diver' && !diver.state?.blackedOut);

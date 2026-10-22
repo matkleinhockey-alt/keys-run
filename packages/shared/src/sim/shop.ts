@@ -44,6 +44,17 @@ export const emptyInventory = (): Inventory =>
   ({ gear: [], consumables: {}, buffs: {}, cosmetics: [], wearing: {} });
 
 /**
+ * What a BRAND-NEW player starts with, as opposed to `emptyInventory`, which means literally
+ * nothing and is what tests and ports want.
+ *
+ * The speargun spends a shaft per shot, so a genuinely empty inventory means a new player's very
+ * first shot is already the bent-spare fallback at 60% range. One pack is enough that the gun
+ * works out of the box and few enough that the gun counter still has something to sell.
+ */
+export const startingInventory = (): Inventory =>
+  ({ ...emptyInventory(), consumables: { 'spear.shafts': 3 } });
+
+/**
  * How long a bought buff lasts, in simulated seconds, by `effect.key`.
  *
  * Deliberately short relative to a session: a buff is a reason to stop in town on the way out, not

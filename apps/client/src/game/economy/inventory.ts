@@ -21,7 +21,7 @@
  * on a heavy rod") on the server, where `buy` from sim/shop.ts runs unchanged against the server's
  * wallet. That swap is confined to the two functions marked SERVER SEAM.
  */
-import { emptyInventory, type Inventory } from '@keysrun/shared/sim/shop';
+import { startingInventory, type Inventory } from '@keysrun/shared/sim/shop';
 
 const STORAGE_KEY = 'keysrun.inventory.v1';
 
@@ -64,9 +64,11 @@ export function sanitizeInventory(raw: unknown): StoredInventory {
 export function loadInventory(): StoredInventory {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? sanitizeInventory(JSON.parse(raw)) : { inventory: emptyInventory(), clockS: 0 };
+    // No save yet = a new player, who gets a pack of shafts so the speargun works out of the
+    // box. A reloaded save is taken exactly as stored.
+    return raw ? sanitizeInventory(JSON.parse(raw)) : { inventory: startingInventory(), clockS: 0 };
   } catch {
-    return { inventory: emptyInventory(), clockS: 0 };
+    return { inventory: startingInventory(), clockS: 0 };
   }
 }
 
