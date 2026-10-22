@@ -72,6 +72,7 @@ import { populateBoatCards, showHud, showStart } from '../ui/start.js';
 import { toast } from '../ui/toast.js';
 import { createBuffRuntime } from './buffs.js';
 import { has, countOf } from '@keysrun/shared/sim/shop';
+import { ownedTackle } from '@keysrun/shared/content/tackle';
 import { setDiverGearSource, setDiverFillSpender } from '../entities/diver/gear.js';
 import { handWobble, tooDrunkToDive } from '@keysrun/shared/sim/steady';
 import { spotClear, findClearSpot } from '../state/game.js';
@@ -493,6 +494,9 @@ export function initWorld(wrap: HTMLElement): World {
     // Rod, reel, bait and leader. Without this the rod is permanently the stock outfit no matter
     // what the tackle store sold you.
     gear: econ.gear,
+    // The line itself, which is a separate ladder: `gear` above MULTIPLIES whatever rung this
+    // returns (content/tackle.ts), so the two roads stack rather than replacing each other.
+    getTackle: () => ownedTackle(econ.shop.inventory().gear),
     scene,
     camera,
     getModel: () => model,

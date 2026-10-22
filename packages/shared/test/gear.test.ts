@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { mulberry32 } from '../src/rng/index.js';
 import { VENUES } from '../src/content/venues.js';
 import { COOLER_CAP } from '../src/content/boats.js';
-import { STARTER_TACKLE, tackleById } from '../src/content/tackle.js';
+import { STARTER_TACKLE, TACKLE, TACKLE_PRICE, ownedTackle, tackleById, tackleKey } from '../src/content/tackle.js';
 import { SPECIES, ZONE_TABLE } from '../src/content/species.js';
 import { buy, countOf, emptyInventory, modifiersFor, NO_MODIFIERS, type Inventory } from '../src/sim/shop.js';
 import {
@@ -229,6 +229,13 @@ function winPct(drag: number, gear: FightGear | undefined, n: number, seed: numb
   const rng = mulberry32(seed);
   let w = 0, tot = 0;
   for (const [k, wt] of CONTESTED) for (let i = 0; i < n; i++) { tot++; if (fightOnce(k, wt, drag, rng, gear).outcome === 'landed') w++; }
+  return 100 * w / tot;
+}
+/** Same, holding the modifier bag empty and varying the ladder rung instead. */
+function winPctOnRung(tackleId: string, n: number, seed: number): number {
+  const rng = mulberry32(seed);
+  let w = 0, tot = 0;
+  for (const [k, wt] of CONTESTED) for (let i = 0; i < n; i++) { tot++; if (fightOnce(k, wt, 3, rng, undefined, tackleId).outcome === 'landed') w++; }
   return 100 * w / tot;
 }
 
@@ -454,7 +461,9 @@ describe('the GearPort seam', () => {
 
   it('every item these two shops sell is covered above (guards against a new shelf item with no effect)', () => {
     const covered = new Set(['spear.long', 'spear.reel', 'spear.shafts', 'rod.heavy', 'rod.used', 'reel.lever',
-      'bait.shrimp', 'bait.ballyhoo', 'leader.fluoro', 'cooler.ice']);
+      'bait.shrimp', 'bait.ballyhoo', 'leader.fluoro', 'cooler.ice',
+      // the ladder rungs — measured in the 'tackle.braid80 / tackle.braid130' block below
+      tackleKey('braid80'), tackleKey('braid130')]);
     const mine = [...VENUES.guns.sells, ...VENUES.tackle.sells, ...VENUES.pawn.sells]
       .map((s) => s.effect.key).filter((k) => k !== 'safety.flare');
     for (const k of mine) expect(covered.has(k), k).toBe(true);
@@ -462,3 +471,60 @@ describe('the GearPort seam', () => {
   });
 });
 
+
+/* ------------------------------------------------------------------------------------------ *
+ * tackle.braid80 / tackle.braid130 — the line ladder, bought at the tackle shop
+ * ------------------------------------------------------------------------------------------ */
+describe('tackle.braid80 / tackle.braid130 — through ownedTackle into fightParamsFor', () => {
+  it('sells every rung above the starter, at the price content/tackle.ts publishes', () => {
+    // The shop and TACKLE_PRICE are two tables that have to agree; this is what stops them
+    // drifting. A rung priced above zero and NOT on a shelf is the bug this whole block exists
+    // for — the ladder sat unreachable behind a "someone should wire a shop" comment for a long
+    // time, so the starter rung was in practice the only rung in the game.
+    for (const t of TACKLE) {
+      const price = TACKLE_PRICE[t.id];
+      const shelf = VENUES.tackle.sells.find((x) => x.effect.key === tackleKey(t.id));
+      if (price > 0) {
+        expect(shelf, `${t.id} costs $${price} and nothing sells it`).toBeDefined();
+        expect(shelf!.price, t.id).toBe(price);
+        expect(shelf!.status, t.id).toBe('live');
+      }
+    }
+  });
+
+  it('a bought rung is the rung the fight uses, and the heaviest one wins', () => {
+    expect(ownedTackle([]).id).toBe(STARTER_TACKLE);
+    expect(ownedTackle(buyAll(['tackle', 'line-braid80']).gear).id).toBe('braid80');
+    expect(ownedTackle(buyAll(['tackle', 'line-braid130']).gear).id).toBe('braid130');
+    // order of purchase must not matter: buying a lighter rung later cannot downgrade the rig
+    const both = buy(buyAll(['tackle', 'line-braid130']), 'tackle', 'line-braid80', 1e6, 0).inventory;
+    expect(ownedTackle(both.gear).id).toBe('braid130');
+  });
+
+  it('the rung reaches the fight: heavier line raises the rating it is normalised against', () => {
+    const p50 = fightParamsFor('marlin', 400, 3, tackleById('braid50'));
+    const p80 = fightParamsFor('marlin', 400, 3, tackleById('braid80'));
+    const p130 = fightParamsFor('marlin', 400, 3, tackleById('braid130'));
+    expect(p80.ratingLb).toBeGreaterThan(p50.ratingLb);
+    expect(p130.ratingLb).toBeGreaterThan(p80.ratingLb);
+    expect(p130.pullN).toBeLessThan(p50.pullN);
+  });
+
+  it('lands more contested fish each rung up, and still does not make big game a formality', () => {
+    const r50 = winPctOnRung('braid50', 30, 707);
+    const r80 = winPctOnRung('braid80', 30, 707);
+    const r130 = winPctOnRung('braid130', 30, 707);
+    expect(r80).toBeGreaterThan(r50 + 2);
+    expect(r130).toBeGreaterThan(r80);
+    expect(r130).toBeLessThan(95);
+  });
+
+  it('stacks with the town rod and reel instead of being replaced by them', () => {
+    // The reason braid80 is priced 6,500 and not 12,000 (see content/tackle.ts): $6,400 of town
+    // gear reproduces its lift, so if the two roads did not stack the rung would be a trap.
+    const kit = modifiersFor(buy(buyAll(['tackle', 'rod-heavy']), 'tackle', 'reel-lever', 1e6, 0).inventory, 0);
+    const onStarter = fightParamsFor('marlin', 400, 3, tackleById('braid50'), kit);
+    const on80 = fightParamsFor('marlin', 400, 3, tackleById('braid80'), kit);
+    expect(on80.ratingLb).toBeGreaterThan(onStarter.ratingLb);
+  });
+});

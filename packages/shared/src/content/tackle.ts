@@ -9,9 +9,12 @@
  * 3 lb trout is a formality on either. Rejected: a flat "+X% catch chance" stat, which would
  * have hidden the mechanism and let the server fudge outcomes instead of simulating them.
  *
- * SEAM (not wired, on purpose): `EconomyState` would gain `tackle: string` (owned ladder rung),
- * mirroring `boat`/`BOAT_PRICE`/`stepBuy`, and the client would pass `tackleById(economy.tackle)`
- * into `fightParamsFor`. Nothing here imports the economy; the economy may import this.
+ * WIRED: the two rungs above the starter are sold by the tackle shop as ordinary `gear`
+ * (`tackle.braid80`, `tackle.braid130` in content/venues.ts), and `ownedTackle()` below collapses
+ * an inventory's gear keys into the rung in use, which game/fishing passes to `fightParamsFor`.
+ * A rung acts through `baseTackle`, NOT through the `Modifiers` bag — the town's rod and reel
+ * multiply the rung you own, so folding a rung into the same bag would count it twice.
+ * Nothing here imports the economy or the shop; they may import this.
  */
 
 export interface Tackle {
@@ -49,15 +52,16 @@ export const TACKLE: readonly Tackle[] = [
  * do least about. "The rod hooks monsters you never see aboard" is not the same feature as
  * "bigger fish on the rod", and it is the one that shipped.
  *
- * The ladder above this still matters — braid80 roughly doubles trophy conversion again — but it
- * is not purchasable yet (no tackle shop is wired), so the starting rung is the *only* rung in
- * practice and has to be able to land the fish the tables now produce.
+ * The ladder above this still matters — braid80 roughly doubles trophy conversion again — and is
+ * now bought at the tackle shop. The starting rung still has to be able to land the fish the
+ * tables produce on its own, because it is what you fish with until you can afford 6,500.
  */
 export const STARTER_TACKLE = 'braid50';
 
 /**
- * Rung prices, dollars. NOT wired to a shop yet (nothing buys a rung today), but they are the third
- * ladder next to BOAT_PRICE and the town's rod/reel, and they must agree with both.
+ * Rung prices, dollars. The third ladder next to BOAT_PRICE and the town's rod/reel; they must
+ * agree with both, and content/venues.ts sells the paid rungs at exactly these numbers (a test
+ * asserts the shop and this table cannot drift apart).
  *
  * Measured lift over braid50 in dollars per 30 sim-min (apps/client/test/playthrough-economy.mjs):
  *            Hawk    Reef    Offshore     (stock rung, angler, drag 3)
@@ -85,4 +89,28 @@ export const TACKLE_PRICE: Readonly<Record<string, number>> = {
 
 export function tackleById(id: string | undefined | null): Tackle {
   return TACKLE.find((t) => t.id === id) ?? TACKLE.find((t) => t.id === STARTER_TACKLE)!;
+}
+
+/** Shop gear keys for the rungs are this plus the rung id, e.g. `tackle.braid80`. */
+export const TACKLE_KEY_PREFIX = 'tackle.';
+
+/** The rung a given rung id is sold under, for content/venues.ts and the shop tests. */
+export function tackleKey(id: string): string { return TACKLE_KEY_PREFIX + id; }
+
+/**
+ * The rung an inventory actually fishes with: the heaviest one it owns, or the starter.
+ *
+ * "Heaviest owned" rather than "last bought" so buying braid130 and then idly buying braid80
+ * cannot downgrade you, and so the light rungs could be sold later as a sporting choice without
+ * silently replacing a rig you paid for.
+ */
+export function ownedTackle(gearKeys: readonly string[]): Tackle {
+  const rank = (t: Tackle): number => TACKLE.indexOf(t);
+  let best = tackleById(STARTER_TACKLE);
+  for (const k of gearKeys) {
+    if (!k.startsWith(TACKLE_KEY_PREFIX)) continue;
+    const t = TACKLE.find((x) => x.id === k.slice(TACKLE_KEY_PREFIX.length));
+    if (t && rank(t) > rank(best)) best = t;
+  }
+  return best;
 }

@@ -3,6 +3,7 @@
  * collapses into one `Modifiers` bag instead of each system asking about item ids.
  */
 import { describe, expect, it } from 'vitest';
+import { STARTER_TACKLE, TACKLE_KEY_PREFIX, ownedTackle, tackleById } from '../src/content/tackle.js';
 import { VENUES } from '../src/content/venues.js';
 import {
   buy, emptyInventory, modifiersFor, useOne, countOf, has, pruneBuffs, buffActive,
@@ -51,7 +52,18 @@ describe('the shelf', () => {
     for (const v of Object.values(VENUES)) {
       for (const s of v.sells) {
         if (s.effect.kind !== 'gear' && s.effect.kind !== 'buff') continue;
-        const m = modifiersFor(own([v.id, s.id]), 0);
+        const inv = own([v.id, s.id]);
+        // A line rung does not act through the modifier bag and must not: the bag is what the rod
+        // and reel MULTIPLY the rung by, so folding a rung in there would count it twice. Its
+        // effect is that it replaces the outfit the fight is normalised against, so that is what
+        // gets checked — the guarantee ("it does something for your money") is the same one.
+        if (s.effect.key.startsWith(TACKLE_KEY_PREFIX)) {
+          const got = ownedTackle(inv.gear);
+          expect(got.id, `${v.id}/${s.id} did not become the rung in use`).toBe(s.effect.key.slice(TACKLE_KEY_PREFIX.length));
+          expect(got.lineLb, `${v.id}/${s.id} is not an upgrade on the starter`).toBeGreaterThan(tackleById(STARTER_TACKLE).lineLb);
+          continue;
+        }
+        const m = modifiersFor(inv, 0);
         expect(JSON.stringify(m), `${v.id}/${s.id} (${s.effect.key}) is inert`).not.toBe(JSON.stringify(NO_MODIFIERS));
       }
     }

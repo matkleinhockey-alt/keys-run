@@ -22,6 +22,7 @@
  * Register: this game has a bikini deck party, a Luigi mode and a seagull who calls you a loser.
  * The strip club is a neon sign, a rope and a bouncer with opinions. Atmosphere over anatomy.
  */
+import { TACKLE, TACKLE_PRICE, tackleKey } from './tackle.js';
 
 export type VenueId =
   | 'tackle' | 'guns' | 'bar' | 'club' | 'diner'
@@ -90,11 +91,17 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       'Live shrimp are in the tank by the door. Pilchards are in the freezer. Dignity is not in stock.',
       'You want the good braid or the braid you can afford?',
     ],
-    blurb: 'Rods, reels, leader, live bait and bagged ice, run by a man who has opinions about every one of them. This is where better tackle will be bought.',
+    blurb: 'Rods, reels, line, leader, live bait and bagged ice, run by a man who has opinions about every one of them. The braid on the back wall is the line your fight is normalised against: heavier line, bigger fish landed.',
     sells: [
       // PRICE 240 -> 2,400. lineMul 1.35 on the starter braid50 = 67 lb. Measured (playthrough-economy.mjs, 30 sim-min): Hawk
       // +1%, Reef +1%, Offshore +21% ($21.0k -> $25.4k). It is an offshore tool: ~$1.3k per effective session there, so
       // 2,400 pays back in ~2 offshore sessions (~5 if you stay inshore). At 240 it was 4 minutes of income.
+      // The line ladder itself (content/tackle.ts). A rung replaces the outfit the fight is
+      // normalised against, where the rod and reel below multiply whatever rung you are on, so the
+      // two roads stack: braid80 + heavy + lever lands between braid80 and braid130. Prices come
+      // from TACKLE_PRICE, and a test holds the shop and that table together.
+      item('line-braid80', TACKLE.find((t) => t.id === 'braid80')!.name, 'Steps the fight up from 50 lb line to 80 lb. Offshore trophies stop breaking you off.', TACKLE_PRICE.braid80, 'gear', tackleKey('braid80')),
+      item('line-braid130', TACKLE.find((t) => t.id === 'braid130')!.name, 'The billfish rig: 130 lb line, 150 lb leader. Overkill inshore, the difference offshore.', TACKLE_PRICE.braid130, 'gear', tackleKey('braid130')),
       item('rod-heavy', 'Heavy-action trolling rod', 'Stops a run the stock rod cannot. Changes the fight sim\'s line strength.', 2_400, 'gear', 'rod.heavy'),
       // PRICE 520 -> 4,000. reelMul 1.3 + lineMul 1.05. The best single rod-side buy: Hawk +13%, Reef +11%, Offshore +25%
       // (faster retrieve = more fish per minute AND fewer losses). ~$0.8k per effective session blended, so 4,000 is a ~5-session
