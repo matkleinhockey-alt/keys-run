@@ -22,7 +22,7 @@
  * otherwise silently reintroduce the same precision problem up there, and clip the 1,900 m skirt.
  */
 import * as THREE from 'three';
-import { AIR_MAX, type DiverState } from '@keysrun/shared/sim/diver';
+import { type DiverState } from '@keysrun/shared/sim/diver';
 import type { HandWobble } from '@keysrun/shared/sim/steady';
 import { beginGesture, moveGesture, type Gesture } from './gesture.js';
 
@@ -105,7 +105,7 @@ const tmpPos = new THREE.Vector3();
 
 export function updateDiverCamera(camera: THREE.PerspectiveCamera, cam: DiverCamState, state: DiverState, t: number, dt: number, hand?: HandWobble): void {
   const depth = Math.max(0, -state.y);
-  const airFrac = clamp(state.air / AIR_MAX, 0, 1);
+  const airFrac = clamp(state.air / state.airMax, 0, 1);
   const tunnel = airFrac < 0.25 ? Math.min(1, (0.25 - airFrac) / 0.25) : 0;
   const baseFov = depth > 0.15 ? MASK_FOV : SURFACE_FOV;
   // Speed widens the view a little (sprinting reads as speed, not just a faster number), capped so

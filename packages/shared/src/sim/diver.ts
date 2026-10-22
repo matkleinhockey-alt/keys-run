@@ -41,13 +41,27 @@ import { steadyCurrentAt, surgeAt } from '../world/current.js';
 /** Breath-hold budget at the surface, at rest (ATA=1, exertion=0) — doc: "~90 s at the surface". */
 export const AIR_MAX = 90;
 
+/**
+ * Per-dive air budget for a given `Modifiers.breathMul` (sim/shop.ts). Gear raises the BUDGET
+ * (`DiverState.airMax`) rather than slowing the burn, because the two are the same thing for the
+ * physics (budget/rate) but only a bigger budget keeps everything that reads "fraction of air"
+ * (HUD gauge, warnings, tunnel vision, blackout) honest without each of them learning about gear.
+ * ATA scaling is untouched: at 4 ATA a 2.8x budget still drains 4x as fast, so depth stays
+ * self-limiting. Full kit = 2.2 * 1.18 * 1.08 = 2.804 -> 252.4 s at the surface at rest.
+ * Clamped so a bad/NaN modifier can neither zero the budget (instant blackout) nor make it silly.
+ */
+export function airMaxFor(breathMul: number): number {
+  const m = Number.isFinite(breathMul) ? breathMul : 1;
+  return AIR_MAX * clamp(m, 1, 6);
+}
+
 /** |y| within this of the y=0 datum counts as "at the surface" for refill/shallow-blackout exemption. */
 export const SURFACE_EPS = 0.3;
 
 /** A fresh breath at the surface tops off in ~3 s — fast enough that surfacing feels like relief,
  * not another chore, without being instant (instant would remove the "breathe, then dive again"
  * rhythm the whole mechanic depends on). */
-export const SURFACE_REFILL_RATE = AIR_MAX / 3;
+export const SURFACE_REFILL_RATE = AIR_MAX / 3; // base; stepDiver uses airMax / 3 so a bigger budget still refills in ~3 s
 
 /** Depth at which buoyancy crosses zero — doc: "neutral ~10-12 m". Exactly in that band. */
 export const NEUTRAL_DEPTH = 11;
@@ -64,7 +78,9 @@ export const NARCOSIS_DEPTH = 25;
 /** Doc: "Shallow-water blackout can trigger in the final 5 m of ascent". */
 export const SHALLOW_BLACKOUT_DEPTH = 5;
 
-/** Below this fraction of AIR_MAX (~7 s) inside the shallow band, an active ascent risks SWB. */
+/** Below this fraction of the BASE AIR_MAX (~7 s; deliberately NOT scaled by gear: shallow-water
+ * blackout is about the last few seconds of oxygen in the lungs, not about how big your reserve
+ * was, and a fraction of a 252 s budget would be a 20 s "blackout zone") inside the shallow band, an active ascent risks SWB. */
 export const SHALLOW_BLACKOUT_AIR_FRACTION = 0.08;
 
 /** Must be actively ascending (m/s, +y) for the shallow-water-blackout rule to apply — resting at
@@ -233,6 +249,11 @@ export interface SeafloorSampler {
 }
 
 export interface DiverEnv {
+  /** Fin thrust multiplier (Modifiers.swimMul), default 1. Scales the KICK ACCELERATION only, so
+   * drag, buoyancy, current coupling and the along/across-body split are untouched and top speed
+   * rises sub-linearly (quadratic drag): measured x1.28 thrust -> ~+14% terminal speed. Scaling
+   * the final velocity instead would bypass drag and make fins feel like a speed hack. */
+  swimMul?: number;
   /** Absolute sim time in seconds (never read from a clock here — see sim/boat.ts's env.t). */
   t: number;
   seafloor: SeafloorSampler;
@@ -255,8 +276,10 @@ export interface DiverState {
   /** Facing/look direction, radians — same convention as `BoatState.h`. */
   yaw: number;
   pitch: number;
-  /** Breath-hold budget remaining, 0..AIR_MAX. */
+  /** Breath-hold budget remaining, 0..airMax. */
   air: number;
+  /** This dive's budget (airMaxFor(breathMul)); AIR_MAX with no gear. Fixed for the dive. */
+  airMax: number;
   /** Smoothed 0..1 exertion level — see EXERTION_RISE_RATE/EXERTION_FALL_RATE. */
   exertion: number;
   /** Fin-kick cycle phase 0..1 (see `kickPulse`). Advances only while a kick input is held and
@@ -278,12 +301,13 @@ export interface DiverState {
 }
 
 /** A fresh diver entering the water at (x,y,z) facing `yaw`, full air, conscious. */
-export function createDiverState(x: number, y: number, z: number, yaw: number): DiverState {
+export function createDiverState(x: number, y: number, z: number, yaw: number, airMax: number = AIR_MAX): DiverState {
   return {
     x, y, z,
     vx: 0, vy: 0, vz: 0,
     yaw, pitch: 0,
-    air: AIR_MAX,
+    air: airMax,
+    airMax,
     exertion: 0,
     kickPhase: 0,
     kicking: false,
@@ -334,12 +358,13 @@ function integrateMotion(state: DiverState, input: DiverInput, env: DiverEnv, dt
       state.kickPhase = 0;
     }
     const pulse = kickPulse(state.kickPhase);
-    const accel = SWIM_KICK_ACCEL * sprintK * pulse;
+    const swimMul = env.swimMul !== undefined && Number.isFinite(env.swimMul) ? clamp(env.swimMul, 0.5, 3) : 1;
+    const accel = SWIM_KICK_ACCEL * sprintK * pulse * swimMul;
     state.vx += kx * accel * dt;
     state.vy += ky * accel * dt;
     state.vz += kz * accel * dt;
 
-    const vAccel = VERTICAL_KICK_ACCEL * sprintK * pulse;
+    const vAccel = VERTICAL_KICK_ACCEL * sprintK * pulse * swimMul;
     if (input.ascend) state.vy += vAccel * dt;
     if (input.descend) state.vy -= vAccel * dt;
   } else {
@@ -434,7 +459,7 @@ export function stepDiver(state: DiverState, input: DiverInput, env: DiverEnv, d
 
   const atSurface = depth <= SURFACE_EPS && next.vy >= -0.05;
   if (atSurface) {
-    next.air = Math.min(AIR_MAX, next.air + SURFACE_REFILL_RATE * dt);
+    next.air = Math.min(next.airMax, next.air + (next.airMax / 3) * dt);
   } else {
     next.air = Math.max(0, next.air - airBurnRate(depth, next.exertion) * dt);
   }
@@ -446,7 +471,7 @@ export function stepDiver(state: DiverState, input: DiverInput, env: DiverEnv, d
     triggerBlackout(next, 'airOut');
   } else if (
     newDepth > SURFACE_EPS && newDepth < SHALLOW_BLACKOUT_DEPTH &&
-    next.air < AIR_MAX * SHALLOW_BLACKOUT_AIR_FRACTION &&
+    next.air < AIR_MAX * SHALLOW_BLACKOUT_AIR_FRACTION /* base, see constant */ &&
     next.vy > SHALLOW_BLACKOUT_MIN_ASCENT
   ) {
     triggerBlackout(next, 'shallowWaterBlackout');

@@ -44,7 +44,7 @@ import { applyBoatVisuals, sampleWaterHeight } from '../entities/boat/visuals.js
 import { createBoatInput, bindBoatInput, type BoatStateBox } from '../entities/boat/input.js';
 import { createCamState, createFpState, updateCamera, cycleView, bindCameraPointerControls } from '../entities/camera.js';
 
-import { AIR_MAX, waterVelocity, type DiverEvent } from '@keysrun/shared/sim/diver';
+import { waterVelocity, type DiverEvent } from '@keysrun/shared/sim/diver';
 import { createDiverController, NEUTRAL_BOAT_INPUT } from '../entities/diver/controller.js';
 import { createDiverModel } from '../entities/diver/model.js';
 import { applyDiverVisuals } from '../entities/diver/visuals.js';
@@ -793,7 +793,7 @@ export function initWorld(wrap: HTMLElement): World {
         diverAim.aimDir.x = -Math.sin(yaw) * Math.cos(pitch);
         diverAim.aimDir.y = Math.sin(pitch);
         diverAim.aimDir.z = -Math.cos(yaw) * Math.cos(pitch);
-        diverAim.breath = Math.max(0, Math.min(1, ds.air / AIR_MAX));
+        diverAim.breath = Math.max(0, Math.min(1, ds.air / ds.airMax));
         diverAim.blackedOut = ds.blackedOut;
         diverAim.speed = Math.hypot(ds.vx, ds.vy, ds.vz);
         speargun.update(DT, simTime, diverAim, sw, ch);

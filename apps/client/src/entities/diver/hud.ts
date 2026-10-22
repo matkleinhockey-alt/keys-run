@@ -4,7 +4,7 @@
  * frightening" — the meter reddens, the warning gets louder, and the vignette closes in well
  * before air actually hits zero, so the scary part is the anticipation, not just the blackout cut.
  */
-import { AIR_MAX, SHALLOW_BLACKOUT_DEPTH, type DiverState } from '@keysrun/shared/sim/diver';
+import { SHALLOW_BLACKOUT_DEPTH, type DiverState } from '@keysrun/shared/sim/diver';
 
 function $(id: string): HTMLElement | null { return document.getElementById(id); }
 
@@ -22,7 +22,7 @@ const ASSUMED_ASCENT_SPEED = 1.2;
 
 export function updateDiverHud(state: DiverState, ctx: DiverHudCtx): void {
   const depth = Math.max(0, -state.y);
-  const airFrac = Math.max(0, Math.min(1, state.air / AIR_MAX));
+  const airFrac = Math.max(0, Math.min(1, state.air / state.airMax));
 
   const fill = $('breathFill');
   if (fill) fill.style.width = (airFrac * 100).toFixed(1) + '%';

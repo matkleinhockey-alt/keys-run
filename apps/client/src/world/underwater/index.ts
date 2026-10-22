@@ -26,6 +26,7 @@ import { createSeepBubbles, type SeepBubbles } from './seep-bubbles.js';
 import { CausticsEffect } from './caustics.js';
 import { LensWettingEffect } from './lens-wetting.js';
 import { createGodRays, type GodRaysRig } from './godrays.js';
+import { FOG_NEAR_BASE, getUnderwaterViewBonus } from './fog-override.js';
 import { MARINE_SNOW_FULL_DEPTH, INSCATTER_COLOR, AMBIENT_HALF_DEPTH } from './depth-bands.js';
 import { seafloorHeightAt as terrainHeightAt } from '../terrain/heightfield.js';
 
@@ -192,6 +193,10 @@ export function createUnderwaterWorld(deps: UnderwaterDeps): UnderwaterWorld {
       camera.updateProjectionMatrix();
       camera.updateMatrixWorld(true);
     }
+
+    // Wide-view mask: publish the bonus to the global fog shader via fogNear (encoding and the
+    // reason it is not a uniform are documented at setUnderwaterViewBonus in fog-override.ts).
+    if (scene.fog instanceof THREE.Fog) scene.fog.near = FOG_NEAR_BASE + getUnderwaterViewBonus();
 
     transition.update(dt);
     applySkyUnderwaterState();
