@@ -17,12 +17,24 @@
  *
  * Pixel density is 24 px/m, capped at 1024 px wide. That reads cleanly from the sidewalk and costs
  * ~2 MB per decal; the biggest frontage is the 34 m club.
+ *
+ * (Polish pass: the DRAWING is still laid out at 24 px/m, but every facade except the club's is now RENDERED at
+ * `DENS` = 40 px/m, capped at 2048 px wide. The canvas transform scales the vector drawing, so the sign lettering is
+ * sharp where it used to be soft inside about 3 m, with no change to any layout number. Small print that must be read
+ * up close, the notices in the windows, is not painted here at all: it is a separate atlas, see notices.ts.)
  */
 import * as THREE from 'three';
 import { VENUES } from '@keysrun/shared/content/venues';
 import { DOOR_W, type Lot, type LotStyle } from '@keysrun/shared/world/town';
 
 export const PPM = 24;
+/** Rendered texture density for facades, px per metre (see the header). */
+const DENS = 40;
+
+/** Sun-bleach: a Keys building after ten summers is the colour it was painted mixed with the colour of salt. */
+export function fadeColor(c: number, k = 0.14): number {
+  return new THREE.Color(c).lerp(new THREE.Color(0xe9e2d2), k).getHex();
+}
 const FONT = '"Big Shoulders Display", Impact, "Arial Narrow", sans-serif';
 const BODY = '"Instrument Sans", system-ui, sans-serif';
 
@@ -141,6 +153,11 @@ function paintPattern(g: CanvasRenderingContext2D, look: Look, w: number, h: num
   grad.addColorStop(0, lighten(look.wall, 1.05)); grad.addColorStop(1, lighten(look.wall, 0.86));
   g.fillStyle = look.pattern === 'chrome' ? grad : base; g.fillRect(0, 0, w, h);
   if (look.pattern !== 'chrome') { g.fillStyle = grad; g.globalAlpha = 0.5; g.fillRect(0, 0, w, h); g.globalAlpha = 1; }
+  if (look.pattern !== 'dark') {
+    // sun-bleach, strongest where the sun hits (the top), so no two neighbours are quite the colour on the paint chip
+    const wash = g.createLinearGradient(0, 0, 0, h); wash.addColorStop(0, 'rgba(240,232,214,0.20)'); wash.addColorStop(0.6, 'rgba(240,232,214,0.09)'); wash.addColorStop(1, 'rgba(60,50,38,0.14)');
+    g.fillStyle = wash; g.fillRect(0, 0, w, h);
+  }
   if (look.pattern === 'brick') {
     g.strokeStyle = 'rgba(20,10,8,0.45)'; g.lineWidth = 1;
     for (let y = 0; y < h; y += 7) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); for (let x = (Math.floor(y / 7) % 2) * 9; x < w; x += 18) { g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + 7); g.stroke(); } }
@@ -215,7 +232,8 @@ export interface FacadeTex {
 /** Paint the front of `lot`. Call once per building; textures are owned by the caller. */
 export function paintFacade(lot: Lot): FacadeTex {
   const look = LOOKS[lot.style], venue = VENUES[lot.venue], L = layoutFor(lot);
-  const cw = Math.min(1024, Math.round(L.W * PPM)), scale = cw / (L.W * PPM);
+  const club = lot.style === 'club'; // not ours to touch: it keeps its original density and paint
+  const cw = club ? Math.min(1024, Math.round(L.W * PPM)) : Math.min(2048, Math.round(L.W * DENS)), scale = cw / (L.W * PPM);
   const ch = Math.round(L.H * PPM * scale);
   // Draw at PPM and let the canvas transform scale down to the capped width.
   const day = makeCanvas(cw, ch), glow = makeCanvas(cw, ch);
@@ -311,7 +329,57 @@ export function paintFacade(lot: Lot): FacadeTex {
     }
   }
 
+  if (!club) livedIn(dg, lot, L, pxY, wPx, hPx);
+
   return { day: toTexture(day.c), glow: toTexture(glow.c), w: L.W, h: L.H, layout: L };
+}
+
+/** A deterministic stream of 0..1, so the same wall is stained the same way every build. */
+function lcg(seed: number): () => number {
+  let s = (Math.floor(Math.abs(seed) * 1000) + 12345) >>> 0;
+  return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; };
+}
+
+/**
+ * What ten summers and one hurricane do to a storefront: salt streaks under every sill, a rain-line of
+ * grime where the wall meets the pavement, rust weeping from the sign band's corners, a patch of paint that
+ * does not match, a door that has been pushed open a thousand times. Day layer only.
+ *
+ * Why these and not a noise overlay: a uniform dirt texture reads as a filter; stains that start AT something
+ * (a sill, a bracket, a ground line) read as the thing having been there for years.
+ */
+function livedIn(g: CanvasRenderingContext2D, lot: Lot, L: Layout, pxY: (m: number) => number, wPx: number, hPx: number): void {
+  const r = lcg(lot.u0 * 7.3 + lot.v0 * 1.7 + lot.h);
+  g.save();
+  // grime where the wall meets the sidewalk: rain splash and a century of shoes
+  const base = g.createLinearGradient(0, hPx - 0.75 * PPM, 0, hPx);
+  base.addColorStop(0, 'rgba(48,40,30,0)'); base.addColorStop(1, 'rgba(48,40,30,0.30)');
+  g.fillStyle = base; g.fillRect(0, hPx - 0.75 * PPM, wPx, 0.75 * PPM);
+  // salt and rust streaks down from every sill
+  for (const win of L.windows) {
+    const x = win.x * PPM, w = win.w * PPM, yb = pxY(win.y);
+    for (let k = 0; k < 3; k++) {
+      const sx = x + w * (0.12 + 0.3 * k + r() * 0.12), len = (0.5 + r() * 1.1) * PPM, sw = 1.5 + r() * 2.5;
+      const gr = g.createLinearGradient(0, yb, 0, yb + len);
+      gr.addColorStop(0, 'rgba(70,58,44,0.18)'); gr.addColorStop(1, 'rgba(70,58,44,0)');
+      g.fillStyle = gr; g.fillRect(sx, yb + 1, sw, len);
+    }
+  }
+  // rust weeping from the sign band's lower corners
+  const sb = L.signBand, sy = pxY(sb.y);
+  for (const sx of [sb.x * PPM + 5, (sb.x + sb.w) * PPM - 7]) {
+    const gr = g.createLinearGradient(0, sy, 0, sy + 1.3 * PPM);
+    gr.addColorStop(0, 'rgba(150,80,40,0.28)'); gr.addColorStop(1, 'rgba(150,80,40,0)');
+    g.fillStyle = gr; g.fillRect(sx, sy, 3, 1.3 * PPM);
+  }
+  // a repainted patch that does not quite match, and one sun-faded panel
+  g.fillStyle = 'rgba(255,255,255,0.06)'; g.fillRect(wPx * (0.1 + r() * 0.7), hPx - (2.4 + r() * 0.8) * PPM, (0.9 + r()) * PPM, (0.8 + r() * 0.5) * PPM);
+  g.fillStyle = 'rgba(0,0,0,0.05)'; g.fillRect(wPx * (0.1 + r() * 0.7), hPx - (1.6 + r() * 0.6) * PPM, (0.6 + r()) * PPM, (0.7 + r() * 0.4) * PPM);
+  // a handprint-high scuff either side of the door, where every hand goes
+  const dx = L.door.x * PPM, dw = L.door.w * PPM;
+  g.fillStyle = 'rgba(40,32,24,0.12)';
+  for (const sx of [dx - 6, dx + dw + 2]) g.fillRect(sx, hPx - 1.25 * PPM, 4, 0.5 * PPM);
+  g.restore();
 }
 
 function glassFill(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): CanvasGradient {

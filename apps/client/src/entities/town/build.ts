@@ -26,8 +26,13 @@ import {
 import { VENUES } from '@keysrun/shared/content/venues';
 import { GeoBatch } from './batch.js';
 import { createKit, type TownKit } from './kit.js';
-import { paintFacade, paintHero, LOOKS, type HeroKind } from './paint.js';
+import { paintFacade, paintHero, fadeColor, LOOKS, type HeroKind } from './paint.js';
+import { createNotices } from './notices.js';
+import { buildWalls } from './walls.js';
 import { palm, lamp, bench, trashCan, car, marlinStatue, Zf } from './props.js';
+import { buildGround } from './ground.js';
+import { buildStreetLife } from './streetlife.js';
+import { TRASH_CANS } from '@keysrun/shared/world/town-life';
 import type { LightMatEntry } from '../../core/time-of-day.js';
 
 export interface LightSource { x: number; y: number; z: number; color: number; kind: 'lamp' | 'neon'; lot?: string }
@@ -39,6 +44,8 @@ export interface TownBuild {
   kit: TownKit;
   /** Every mesh whose material wants cascaded-shadow setup is already under `near`; this is for the caller's sweep. */
   triangleCount: number;
+  /** The sky blend (0 day .. 1 dusk), for the ground's day lift. Cheap; call when it changes. */
+  setTod(k: number): void;
   dispose(): void;
 }
 
@@ -78,6 +85,9 @@ export function* buildTown(lightMats: LightMatEntry[], todK: () => number): Gene
   const near = new THREE.Group(); near.name = 'townNear';
   const far = new THREE.Group(); far.name = 'townFar';
   const solid = new GeoBatch(false, 'street'), cars = new GeoBatch(false, 'street'), glow = new GeoBatch(true), farB = new GeoBatch(false, 'street'), farGlow = new GeoBatch(true);
+  // palms are seen from every side, so they cannot use the street lift (which brightens the south-facing frontage only)
+  const palms = new GeoBatch(false, 1.7);
+  const notices = createNotices();
   const lights: LightSource[] = [];
   const geos: THREE.BufferGeometry[] = [];
   const mats: THREE.Material[] = [];
@@ -89,11 +99,10 @@ export function* buildTown(lightMats: LightMatEntry[], todK: () => number): Gene
   // seawall face a shade darker, with a coping line along the top edge facing the harbour
   solid.span(PAD.u0, PAD.u1, -1.8, PAD_Y - 0.05, Zf(PAD.v0) + 0.08, Zf(PAD.v0) + 0.1, 0x7e8085);
   solid.span(PAD.u0 - 0.2, PAD.u1 + 0.2, PAD_Y - 0.35, PAD_Y, Zf(PAD.v0) + 0.25, Zf(PAD.v0) - 0.0, 0xcfcbc0);
-  const SURF: Record<string, number> = { road: 0x4e5258, sidewalk: 0xc2beb2, lot: 0x5a5d62 };
-  for (const s of SURFACES) {
-    if (s.kind === 'promenade') continue;
-    solid.span(s.u0, s.u1, PAD_Y, PAD_Y + 0.02, Zf(s.v1), Zf(s.v0), SURF[s.kind]);
-  }
+  // The roads, sidewalks and lots are decals drawn in SURFACES order, not slabs that fight for the same pixel: see ground.ts.
+  const ground = buildGround();
+  ground.setTod(todK());
+  for (const m of ground.meshes) near.add(m);
   // promenade: real planks
   {
     const p = SURFACES.find((s) => s.kind === 'promenade')!;
@@ -105,19 +114,8 @@ export function* buildTown(lightMats: LightMatEntry[], todK: () => number): Gene
     m.position.set((p.u0 + p.u1) / 2, PAD_Y + 0.03, Zf((p.v0 + p.v1) / 2));
     mats.push(mat);
   }
-  // road paint
-  const WHITE = 0xf0efe8, YEL = 0xe2b72e, PA = PAD_Y + 0.025;
-  const hline = (v: number, u0: number, u1: number, c: number, wd = 0.14): void => { solid.span(u0, u1, PA, PA + 0.012, Zf(v) - wd / 2, Zf(v) + wd / 2, c); };
-  const vline = (u: number, v0: number, v1: number, c: number, wd = 0.14): void => { solid.span(u - wd / 2, u + wd / 2, PA, PA + 0.012, Zf(v1), Zf(v0), c); };
-  for (const [vc, edge0, edge1] of [[34, 28.5, 39.5], [90, 84.5, 95.5]] as const) {
-    hline(vc - 0.15, PAD.u0, -7.5, YEL); hline(vc + 0.15, PAD.u0, -7.5, YEL);
-    hline(vc - 0.15, 7.5, PAD.u1, YEL); hline(vc + 0.15, 7.5, PAD.u1, YEL);
-    hline(edge0, PAD.u0, PAD.u1, WHITE); hline(edge1, PAD.u0, PAD.u1, WHITE);
-    for (let u = -6; u <= 6; u += 1.2) vline(u, edge0 + 0.4, edge1 - 0.4, WHITE, 0.55);
-  }
-  for (let v = 47; v < 94; v += 5) vline(0, v, v + 2.4, WHITE, 0.14);
-  CARS.filter((c) => c.id.startsWith('bk-')).forEach((c) => { vline(c.u - 1.45, 130.4, 138, WHITE, 0.1); vline(c.u + 1.45, 130.4, 138, WHITE, 0.1); });
-
+  // (road paint, kerbs and zebra crossings are in ground.ts, as flat quads drawn by order rather than 1 cm boxes)
+  const PA = PAD_Y + 0.025; // the life ring's height on the rail, below
   // rails: harbour front (with a gap at the ramp), then sides; hedge across the back
   for (let u = PAD.u0 + 1; u <= PAD.u1 - 1; u += 4) {
     if (Math.abs(u) < 3.4) continue;
@@ -157,6 +155,10 @@ export function* buildTown(lightMats: LightMatEntry[], todK: () => number): Gene
     mats.push(bm); texs.push(tex);
     const bg = track(new THREE.PlaneGeometry(7.6, 1.4));
     const banner = addMesh(near, bg, bm, { name: 'banner' }); banner.position.set(0, PAD_Y + 3.9, Zf(PAD.v0 + 1.2));
+    // ...and a second face for the street side: one double-sided plane read mirrored from the avenue (polish pass)
+    const bmBack = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.4 });
+    mats.push(bmBack);
+    const banner2 = addMesh(near, bg, bmBack, { name: 'banner-back' }); banner2.position.set(0, PAD_Y + 3.9, Zf(PAD.v0 + 1.2) - 0.02); banner2.rotation.y = Math.PI;
     for (const sx of [-1, 1]) solid.box(sx * 3.9, PAD_Y + 2.2, Zf(PAD.v0 + 1.2), 0.18, 4.4, 0.18, 0x2d3136);
   }
   yield;
@@ -166,13 +168,18 @@ export function* buildTown(lightMats: LightMatEntry[], todK: () => number): Gene
     buildLot(lot);
     yield;
   }
+  // the backs and open sides of the buildings (walls.ts): one merged decal mesh, a batch of door/AC/pipe geometry, and the wall lamps' night glow
+  const walls = buildWalls(near, glow, kit);
+  yield;
 
   function buildLot(lot: Lot): void {
     const look = LOOKS[lot.style], venue = VENUES[lot.venue];
     const W = lot.u1 - lot.u0, D = lot.v1 - lot.v0, cx = (lot.u0 + lot.u1) / 2, cz = Zf((lot.v0 + lot.v1) / 2);
     const top = PAD_Y + lot.h;
     // mass
-    for (const w of lotWalls(lot)) solid.span(w.u0, w.u1, PAD_Y, top, Zf(w.v1), Zf(w.v0), look.wall);
+    // sun-bleached to match the facade decal (paint.ts `fadeColor`); the club's paint is not ours to change
+    const wallC = lot.style === 'club' ? look.wall : fadeColor(look.wall);
+    for (const w of lotWalls(lot)) solid.span(w.u0, w.u1, PAD_Y, top, Zf(w.v1), Zf(w.v0), wallC);
     // roof
     const roofC = look.roof;
     if (lot.style === 'bar') {
@@ -193,6 +200,7 @@ export function* buildTown(lightMats: LightMatEntry[], todK: () => number): Gene
     }
     // facade decal + its night layer
     const f = paintFacade(lot);
+    notices.add(lot, f.layout);
     const fg = track(new THREE.PlaneGeometry(W, lot.h));
     const dm = kit.decal(f.day); const day = addMesh(near, fg, dm, { name: `facade-${lot.id}` });
     day.position.set(cx, PAD_Y + lot.h / 2, Zf(lot.v0) + 0.035);
@@ -314,14 +322,15 @@ export function* buildTown(lightMats: LightMatEntry[], todK: () => number): Gene
   yield;
 
   // ------------------------------------------------------------------ street furniture
-  for (const p of PALMS) palm(solid, p.u, p.v, p.h);
+  for (const p of PALMS) palm(palms, p.u, p.v, p.h);
   for (const l of LAMPS) {
     const head = lamp(solid, glow, l.u, l.v);
     lights.push({ x: head.x, y: head.y, z: head.z, color: 0xffe2a8, kind: 'lamp' });
   }
   for (const b of BENCHES) bench(solid, b.u, b.v);
-  for (const u of [-96, -70, -20, 20, 70, 96]) trashCan(solid, u, 42.4);
+  for (const c of TRASH_CANS) trashCan(solid, c.u, c.v);
   marlinStatue(solid, 16, 24);
+  const streetLife = buildStreetLife(solid, near);
   // dumpsters behind the bar and the diner
   for (const [u, v] of [[-24, 77.4], [30, 77.4]] as const) { solid.span(u - 1.6, u + 1.6, PAD_Y, PAD_Y + 1.25, Zf(v) - 0.8, Zf(v) + 0.8, 0x2f6b3a); solid.span(u - 1.65, u + 1.65, PAD_Y + 1.25, PAD_Y + 1.35, Zf(v) - 0.85, Zf(v) + 0.85, 0x23282a); }
   // motel pole sign: 9 m up, on the boulevard
@@ -343,6 +352,8 @@ export function* buildTown(lightMats: LightMatEntry[], todK: () => number): Gene
   // ------------------------------------------------------------------ merge to meshes
   const solidMesh = addMesh(near, track(solid.build()), kit.solid, { cast: true, receive: true, name: 'townSolid' });
   const carMesh = addMesh(near, track(cars.build()), kit.car, { cast: true, receive: true, name: 'townCars' });
+  addMesh(near, track(palms.build()), kit.solid, { cast: true, receive: true, name: 'townPalms' });
+  const noticeMesh = notices.build(near);
   const glowMesh = addMesh(near, track(glow.build()), kit.glowQuad, { receive: false, name: 'townGlow', order: 1 });
   void solidMesh; void carMesh; void glowMesh;
 
@@ -353,10 +364,12 @@ export function* buildTown(lightMats: LightMatEntry[], todK: () => number): Gene
   addMesh(far, track(farGlow.build()), kit.glowQuad, { receive: false, name: 'townFarGlow', order: 1 });
 
   void WALL_T; void DOOR_W; void INTERIOR_BOXES;
-  const triangleCount = solid.triangleCount + cars.triangleCount + glow.triangleCount;
+  const triangleCount = solid.triangleCount + cars.triangleCount + glow.triangleCount + palms.triangleCount + walls.triangles;
   return {
     near, far, lights, kit, triangleCount,
+    setTod: (k) => ground.setTod(k),
     dispose() {
+      ground.dispose(); streetLife.dispose(); noticeMesh.dispose(); walls.dispose();
       geos.forEach((g) => g.dispose());
       mats.forEach((m) => m.dispose());
       texs.forEach((t) => t.dispose());

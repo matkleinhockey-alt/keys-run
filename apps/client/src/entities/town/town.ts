@@ -33,6 +33,7 @@ import {
 import type { LightMatEntry } from '../../core/time-of-day.js';
 import { buildTown, type LightSource, type TownBuild } from './build.js';
 import { createPeople, type PeopleSystem } from './people.js';
+import { createWildlife, type Wildlife } from './wildlife.js';
 import { buildInterior, INTERIOR_BUILD_RANGE, INTERIOR_RANGE, type Interior } from './interiors.js';
 import { createLightPool, type LightPool } from './lights.js';
 
@@ -66,6 +67,10 @@ export interface Town {
   stats(): TownStats;
   /** VERIFICATION-ONLY: force the whole town out of the render so a harness can measure its cost as a delta. */
   debugHide(hidden: boolean): void;
+  /** VERIFICATION-ONLY: make the street's clock read T now (see town.ts). */
+  debugJump(T: number): void;
+  debugPeople(): ReturnType<PeopleSystem['debug']>;
+  debugWildlife(): unknown;
   dispose(): void;
 }
 
@@ -90,6 +95,7 @@ export function createTown(deps: TownDeps): Town {
   let stages = 0;
   let distance = Infinity;
   let people: PeopleSystem | null = null;
+  let wildlife: Wildlife | null = null;
   let pool: LightPool | null = null;
   const interiors = new Map<string, Interior>();
   const interiorHolder = new THREE.Group(); interiorHolder.name = 'interiors';
@@ -97,6 +103,9 @@ export function createTown(deps: TownDeps): Town {
   const camLocal = new THREE.Vector3();
   let inside: string | null = null;
   let forceHidden = false;
+  // VERIFICATION-ONLY: shifts the clock the street's scripts read, so a harness can put the squirrel on the palm
+  // or the loader at the tailgate. `jump(T)` makes the street's time T right now and lets it run on from there.
+  let clockOffset = 0, lastT = 0;
 
   const world: Array<{ i: Interact; x: number; z: number }> = INTERACTS.map((i) => { const [x, z] = toWorld(TOWN_FRAME, i.u, i.v); return { i, x, z }; });
   // Every walk-in lot, with its doorway in world space: interiors are built and drawn by distance to the
@@ -133,7 +142,7 @@ export function createTown(deps: TownDeps): Town {
     return Math.hypot(du, dv);
   }
 
-  return {
+  const town: Town = {
     root,
 
     built: () => !!build,
@@ -147,7 +156,9 @@ export function createTown(deps: TownDeps): Town {
       // are inside immediately and its neighbours one per frame as you approach, which is all anyone sees.
     },
 
-    update(dt, t, cam): void {
+    update(dt, tRaw, cam): void {
+      lastT = tRaw;
+      const t = tRaw + clockOffset;
       distance = nearEdgeDistance(cam);
       if (!build) {
         if (distance < BUILD_RANGE) pump(distance < 400 ? 2 : 1);
@@ -175,6 +186,8 @@ export function createTown(deps: TownDeps): Town {
       if (b.near.visible) {
         if (distance < NEAR_RANGE) ensurePeople();
         people?.update(t, dt, cam, (x, z) => toLocal(TOWN_FRAME, x, z));
+        b.setTod(todK);
+        wildlife?.update(t, dt, cam, { u: cu, v: cv }, todK);
         // The room you are standing in exists this frame (an empty shell for even one frame reads as a bug);
         // every other room is built at most one per frame, so crossing the street never stacks two builds.
         let built = false;
@@ -228,20 +241,32 @@ export function createTown(deps: TownDeps): Town {
     },
 
     debugHide(hidden): void { forceHidden = hidden; },
+    debugJump(T): void { clockOffset = T - lastT; },
+    debugPeople: () => people?.debug() ?? [],
+    debugWildlife: () => ({ ...(wildlife?.debug() ?? {}), animals: wildlife?.where() ?? [], crowd: people?.stats() }),
 
     dispose(): void {
-      pool?.dispose(); people?.dispose();
+      pool?.dispose(); people?.dispose(); wildlife?.dispose();
       interiors.forEach((i) => i.dispose());
       build?.dispose();
       deps.scene.remove(root);
     },
   };
+  // verification hooks (the sibling of `__landDebug`): jump the clock, list the crowd and the animals
+  if (typeof window !== 'undefined') {
+    (window as unknown as { __townDebug?: unknown }).__townDebug = {
+      jump: (T: number) => town.debugJump(T), people: () => town.debugPeople(), wildlife: () => town.debugWildlife(),
+    };
+  }
+  return town;
 
   function ensurePeople(): void {
     if (people || !build) return;
-    people = createPeople(NPCS, PAD_Y);
+    people = createPeople(NPCS, PAD_Y, (g) => deps.onBuilt(g));
     people.ensure();
     build.near.add(people.group);
+    wildlife = createWildlife(PAD_Y, (g) => deps.onBuilt(g));
+    build.near.add(wildlife.group);
   }
 
   function ensureInterior(id: string): void {

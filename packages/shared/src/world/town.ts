@@ -184,7 +184,7 @@ export function lotWalls(l: Lot): Array<{ u0: number; u1: number; v0: number; v1
 export interface Palm { u: number; v: number; h: number }
 export interface Lamp { u: number; v: number }
 export interface Bench { u: number; v: number }
-export type CarKind = 'sedan' | 'pickup' | 'convertible' | 'suv';
+export type CarKind = 'sedan' | 'pickup' | 'convertible' | 'suv' | 'van' | 'wagon' | 'cart';
 /** `rot`: radians about vertical in the local frame; 0 = nose toward +u. */
 export interface Car { id: string; u: number; v: number; rot: number; kind: CarKind; color: number; trailer?: boolean }
 export interface SolidProp { id: string; u: number; v: number; w: number; d: number }
@@ -227,21 +227,21 @@ const col = (i: number): number => CAR_COLORS[i % CAR_COLORS.length];
 export const CARS: readonly Car[] = [
   // Harbor Drive, parallel to the kerb (rot 0 / PI for direction of travel)
   { id: 'hd-1', u: -78, v: 29.4, rot: 0, kind: 'sedan', color: col(0) },
-  { id: 'hd-2', u: -44, v: 29.4, rot: 0, kind: 'pickup', color: col(1) },
-  { id: 'hd-3', u: 24, v: 29.4, rot: 0, kind: 'suv', color: col(3) },
+  { id: 'hd-2', u: -44, v: 29.4, rot: 0, kind: 'van', color: 0xe9e6dc },
+  { id: 'hd-3', u: 24, v: 29.4, rot: 0, kind: 'wagon', color: 0x8a5a36 },
   { id: 'hd-4', u: -56, v: 38.4, rot: Math.PI, kind: 'sedan', color: col(2) },
   { id: 'hd-5', u: 14, v: 38.4, rot: Math.PI, kind: 'pickup', color: col(4) },
   { id: 'hd-6', u: 51, v: 38.4, rot: Math.PI, kind: 'convertible', color: 0xe86aa8 },
-  { id: 'hd-7', u: 80, v: 38.4, rot: Math.PI, kind: 'sedan', color: col(5) },
+  { id: 'hd-7', u: 80, v: 38.4, rot: Math.PI, kind: 'cart', color: 0xe8e2c8 },
   // Back lane behind row 1
   { id: 'bl-1', u: -50, v: 77.4, rot: 0, kind: 'pickup', color: col(6) },
-  { id: 'bl-2', u: 14, v: 77.4, rot: 0, kind: 'sedan', color: col(7) },
+  { id: 'bl-2', u: 14, v: 77.4, rot: 0, kind: 'van', color: 0x2f6f8f },
   { id: 'bl-3', u: 50, v: 77.4, rot: 0, kind: 'suv', color: col(1) },
-  { id: 'bl-4', u: 78, v: 77.4, rot: Math.PI, kind: 'sedan', color: col(0) },
+  { id: 'bl-4', u: 78, v: 77.4, rot: Math.PI, kind: 'cart', color: 0x3f6b4d },
   // Sombrero Boulevard
   { id: 'sb-1', u: -60, v: 85.4, rot: 0, kind: 'sedan', color: col(3) },
   { id: 'sb-2', u: 30, v: 94.6, rot: Math.PI, kind: 'pickup', color: col(2) },
-  { id: 'sb-3', u: 70, v: 85.4, rot: 0, kind: 'suv', color: col(5) },
+  { id: 'sb-3', u: 70, v: 85.4, rot: 0, kind: 'wagon', color: 0xd9d4c0 },
   // Back lot, nose to the fence in rows
   ...[-84, -66, -48, -30, 30, 48, 66, 84].map((u, i): Car => ({
     id: `bk-${i}`, u, v: 134, rot: Math.PI / 2, kind: (['sedan', 'pickup', 'suv', 'sedan'] as const)[i % 4], color: col(i + 2),
@@ -444,16 +444,9 @@ export const INTERACTS: readonly Interact[] = [
 // People
 // ---------------------------------------------------------------------------------------------
 
-export interface Walkway { id: string; pts: ReadonlyArray<readonly [number, number]> }
-
-/** Lines people stroll back and forth along. All on sidewalk or promenade, clear of lamp posts. */
-export const WALKWAYS: readonly Walkway[] = [
-  { id: 'promenade', pts: [[-92, 25.2], [-24, 25.2], [-24, 26.4], [92, 26.4]] },
-  { id: 'harbor-sidewalk', pts: [[-95, 44.2], [95, 44.2]] },
-  { id: 'palm-ave-w', pts: [[-6.5, 48], [-6.5, 98]] },
-  { id: 'palm-ave-e', pts: [[6.5, 98], [6.5, 48]] },
-  { id: 'blvd-sidewalk', pts: [[-96, 82], [96, 82]] },
-];
+// The people who WALK the street (and sit, queue, jog, load trucks) live in world/town-life.ts as scripts: pure
+// functions of time, so the test can prove they stay on the sidewalks. What is left here are the figures that
+// stand at a fixed spot, and the interior staff.
 
 export type NpcLook =
   | 'tourist' | 'angler' | 'local' | 'woman' | 'bouncer' | 'bartender' | 'cook' | 'patron'
@@ -466,11 +459,6 @@ export type NpcLook =
 export interface Npc {
   id: string;
   look: NpcLook;
-  /** Walkway to follow; absent = stands still at `at`. */
-  route?: string;
-  speed?: number;
-  /** Starting fraction along the route, 0..1. */
-  phase?: number;
   /** Fixed spot (standers). `yaw` is local-frame: 0 faces +u, PI/2 faces +v (inland). */
   at?: { u: number; v: number; yaw: number };
   /** The interior group (by lot id) this person lives in, drawn only when it is. */
@@ -487,17 +475,9 @@ export interface Npc {
 }
 
 export const NPCS: readonly Npc[] = [
-  { id: 'w1', look: 'tourist', route: 'promenade', speed: 1.25, phase: 0.1 },
-  { id: 'w2', look: 'woman', route: 'promenade', speed: 1.1, phase: 0.55 },
-  { id: 'w3', look: 'angler', route: 'harbor-sidewalk', speed: 1.4, phase: 0.2 },
-  { id: 'w4', look: 'woman', route: 'harbor-sidewalk', speed: 1.2, phase: 0.7 },
-  { id: 'w5', look: 'local', route: 'harbor-sidewalk', speed: 1.0, phase: 0.45 },
-  { id: 'w6', look: 'tourist', route: 'palm-ave-w', speed: 1.3, phase: 0.3 },
-  { id: 'w7', look: 'woman', route: 'palm-ave-e', speed: 1.15, phase: 0.6 },
-  { id: 'w8', look: 'local', route: 'blvd-sidewalk', speed: 1.1, phase: 0.4 },
   { id: 's-bouncer', look: 'bouncer', at: { u: 41.2, v: 44.6, yaw: -Math.PI / 2 } },
-  { id: 's-chat-1', look: 'tourist', at: { u: -41, v: 23.4, yaw: 0.4 } },
-  { id: 's-chat-2', look: 'woman', at: { u: -39.4, v: 23.8, yaw: Math.PI + 0.4 } },
+  { id: 's-chat-1', look: 'tourist', at: { u: -41, v: 21.6, yaw: 0.4 } },
+  { id: 's-chat-2', look: 'woman', at: { u: -39.4, v: 21.9, yaw: Math.PI + 0.4 } },
   { id: 's-smoker', look: 'local', at: { u: 6.2, v: 44.4, yaw: Math.PI } },
   { id: 's-angler', look: 'angler', at: { u: 66, v: 20.8, yaw: -Math.PI / 2 } },
   { id: 'i-bartender', look: 'bartender', inside: 'bar', at: { u: 21, v: 63.6, yaw: -Math.PI / 2 } },
