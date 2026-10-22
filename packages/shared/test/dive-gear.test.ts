@@ -16,7 +16,13 @@ const CALM = { x: -3000, z: -2500 }; // slack water, so we measure the diver, no
 const IDLE: DiverInput = { fwd: false, back: false, left: false, right: false, ascend: false, descend: false, sprint: false, lookYaw: 0, lookPitch: 0 };
 const envFor = (floor: SeafloorSampler, swimMul = 1): DiverEnv => ({ t: 0, seafloor: floor, worldBounds: OPEN, swimMul });
 
-/** Seconds until blackout resting on the floor at `depth` (the pony-bottle use case: park and shoot). */
+/**
+ * Seconds until blackout starting on the floor at `depth` (the pony-bottle use case: park and
+ * shoot). NOT a constant-depth measurement any more: buoyancy no longer pulls a diver down below
+ * neutral (sim/diver.ts's `BUOY_DRIFT_UP_ACCEL`), so a diver who stops working drifts up off the
+ * bottom and burns air a little slower than the ATA rate at `depth` would suggest. That is the
+ * point of the change, not a flaw in it — see the assertions below, which account for it.
+ */
 function bottomTime(airMax: number, depth: number, input: Partial<DiverInput> = {}): number {
   const floor: SeafloorSampler = { heightAt: () => -depth - 0.35 };
   let s: DiverState = createDiverState(CALM.x, -depth, CALM.z, 0, airMax);
@@ -47,12 +53,25 @@ describe('scaled air budget', () => {
   });
 
   it('bottom time scales linearly with the budget and still obeys ATA (depth stays self-limiting)', () => {
-    const base = bottomTime(AIR_MAX, 15);
-    const full = bottomTime(airMaxFor(modifiersFor(kit(...FULL), 0).breathMul), 15);
-    expect(base).toBeCloseTo(AIR_MAX / airBurnRate(15, 0), 0);
+    // `descend` held, which is what "park on the bottom" MEANS now: buoyancy never pulls a diver
+    // under any more (sim/diver.ts's `BUOY_DRIFT_UP_ACCEL`), so an idle diver drifts up, reaches
+    // the surface and refills — with a full kit's budget they never black out at all and this
+    // measured 2000 s, the harness's own cap. That is the safety the change buys and it is
+    // correct; it just means bottom time has to be measured on a diver who is holding themselves
+    // down, not on one who has let go.
+    const HOLD = { descend: true };
+    const base = bottomTime(AIR_MAX, 15, HOLD);
+    const full = bottomTime(airMaxFor(modifiersFor(kit(...FULL), 0).breathMul), 15, HOLD);
+    // SHORTER than the resting figure, not longer: holding yourself down is work, and work burns
+    // air. That is the trade the drift introduces — the bottom is still yours, you just pay for it.
+    const resting = AIR_MAX / airBurnRate(15, 0);
+    expect(base).toBeLessThan(resting);
+    expect(base).toBeGreaterThan(resting * 0.5);
     expect(full / base).toBeCloseTo(2.804, 1);
-    // deeper still burns proportionally faster with the big budget
-    expect(bottomTime(airMaxFor(2.804), 30)).toBeLessThan(full / 1.5);
+    // deeper still burns proportionally faster with the big budget — held down, same as above.
+    // Without HOLD this one measured 70.4 s against a 43.8 s bound: the diver simply drifted up
+    // out of the 30 m it was supposed to be testing.
+    expect(bottomTime(airMaxFor(2.804), 30, HOLD)).toBeLessThan(full / 1.5);
   });
 
   it('prints bottom time per item', () => {

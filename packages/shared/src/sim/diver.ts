@@ -6,7 +6,7 @@
  * There is no legacy code to port here — legacy/index.html has no underwater gameplay at all
  * (see docs/ARCHITECTURE.md "The underwater world"). This models real freediving physiology per
  * that doc's "Freedive physics — this is the gameplay" section, which is deliberately *also* the
- * game design: buoyancy assists descent and fights ascent, and depth burns air disproportionately
+ * game design: buoyancy fights descent everywhere and never pulls you down (see `BUOY_DRIFT_UP_ACCEL`), and depth burns air disproportionately
  * fast, so depth is self-limiting with no artificial gate.
  *
  * Pure like sim/boat.ts: plain `{x,y,z}` numbers, never `THREE.Vector3`, no DOM, no
@@ -69,8 +69,33 @@ export const NEUTRAL_DEPTH = 11;
 /** Upward accel (m/s^2) at the surface — you must actively kick down against this to descend. */
 export const BUOY_SURFACE_ACCEL = 1.4;
 
-/** Downward accel (m/s^2) cap once deep below neutral — the "freefall" doc describes. */
+/**
+ * Downward accel (m/s^2) cap once deep below neutral — the "freefall" the doc describes.
+ *
+ * NO LONGER REACHED: see `BUOY_DRIFT_UP_ACCEL`. Kept because the curve above neutral is still
+ * defined in terms of this shape, and because deleting it would hide that this was a deliberate
+ * reversal of the original design rather than an oversight.
+ */
 export const BUOY_MAX_NEGATIVE_ACCEL = 2.0;
+
+/**
+ * The slowest the water will ever push you, m/s^2 — and it is UP, at every depth.
+ *
+ * The original curve went negative below `NEUTRAL_DEPTH` and capped at
+ * `-BUOY_MAX_NEGATIVE_ACCEL`, which is honest freediving physics: past neutral you fall. In play
+ * it reads as the game taking the diver away from you. Let go of the controls to look at
+ * something and you are quietly on your way to the bottom, and the deeper you are — exactly when
+ * you have least air and most reason to be careful — the harder it pulls.
+ *
+ * So below neutral the diver now drifts gently UP instead. This is also the correct behaviour for
+ * someone wearing the dive shop's gear: a diver who has trimmed out comes up slowly when they stop
+ * working, they do not sink. Descending still has to be kicked for, which was already true above
+ * neutral, so the control stays consistent all the way down instead of inverting at 11 m.
+ *
+ * Small on purpose: ~0.1 m/s of settled rise against the vertical drag term, so a diver hanging
+ * still over a reef stays there for a good while rather than being shoved at the surface.
+ */
+export const BUOY_DRIFT_UP_ACCEL = 0.12;
 
 /** Doc: "Narcosis below 25 m" — exposed as a flag; the renderer owns the visual. */
 export const NARCOSIS_DEPTH = 25;
@@ -194,13 +219,14 @@ export function ataAt(depth: number): number {
 }
 
 /**
- * Buoyancy acceleration (m/s^2, +up) at a given depth. Linear in depth, zero exactly at
- * NEUTRAL_DEPTH, clamped to [BUOY_SURFACE_ACCEL, -BUOY_MAX_NEGATIVE_ACCEL] — positive 0-10 m,
- * neutral ~10-12 m, negative (freefall) below, per doc.
+ * Buoyancy acceleration (m/s^2, +up) at a given depth. Linear in depth and strongest at the
+ * surface, flooring at `BUOY_DRIFT_UP_ACCEL` rather than going negative: strong lift in the first
+ * few metres, a gentle rise everywhere below. It never returns a downward value — see
+ * `BUOY_DRIFT_UP_ACCEL` for why that is no longer "freefall below neutral".
  */
 export function buoyancyAccel(depth: number): number {
   const raw = BUOY_SURFACE_ACCEL * (1 - depth / NEUTRAL_DEPTH);
-  return clamp(raw, -BUOY_MAX_NEGATIVE_ACCEL, BUOY_SURFACE_ACCEL);
+  return clamp(raw, BUOY_DRIFT_UP_ACCEL, BUOY_SURFACE_ACCEL);
 }
 
 /** Air burn rate (budget-units/s) at a given depth and exertion (0..1). At depth=0, exertion=0

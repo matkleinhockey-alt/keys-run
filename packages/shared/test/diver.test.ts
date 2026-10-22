@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-  AIR_MAX, NEUTRAL_DEPTH, BUOY_SURFACE_ACCEL, BUOY_MAX_NEGATIVE_ACCEL, NARCOSIS_DEPTH,
+  AIR_MAX, NEUTRAL_DEPTH, BUOY_SURFACE_ACCEL, BUOY_DRIFT_UP_ACCEL, NARCOSIS_DEPTH,
   SHALLOW_BLACKOUT_DEPTH, SURFACE_EPS, DIVER_RADIUS,
   ataAt, buoyancyAccel, airBurnRate, waterVelocity,
   createDiverState, stepDiver,
@@ -63,27 +63,37 @@ describe('ataAt / airBurnRate: the ATA air-drain model', () => {
   });
 });
 
-describe('buoyancyAccel: the depth-dependent sign flip', () => {
+/**
+ * These used to pin the opposite behaviour — "negative below neutral (freefall)", capped at
+ * `-BUOY_MAX_NEGATIVE_ACCEL`. That was deliberately reversed: a diver who lets go of the controls
+ * now drifts up from any depth. See sim/diver.ts's `BUOY_DRIFT_UP_ACCEL` for why, and
+ * test/diver-drift.test.ts for what the new behaviour is actually held to — this block now only
+ * pins the SHAPE of the curve, which is unchanged above neutral.
+ */
+describe('buoyancyAccel: strongest at the surface, never downward', () => {
   it('is positive 0-10 m (you must kick down)', () => {
     expect(buoyancyAccel(0)).toBeGreaterThan(0);
     expect(buoyancyAccel(5)).toBeGreaterThan(0);
     expect(buoyancyAccel(10)).toBeGreaterThan(0);
   });
 
-  it('is exactly zero at NEUTRAL_DEPTH (within the doc\'s ~10-12 m neutral band)', () => {
+  it('keeps NEUTRAL_DEPTH in the doc\'s ~10-12 m band, and falls off to it', () => {
     expect(NEUTRAL_DEPTH).toBeGreaterThanOrEqual(10);
     expect(NEUTRAL_DEPTH).toBeLessThanOrEqual(12);
-    expect(buoyancyAccel(NEUTRAL_DEPTH)).toBe(0);
+    // No longer exactly zero there: the floor is `BUOY_DRIFT_UP_ACCEL`, which this is already at
+    // by neutral depth. What still holds is that the lift has gone from "a shove" to "a drift".
+    expect(buoyancyAccel(NEUTRAL_DEPTH)).toBe(BUOY_DRIFT_UP_ACCEL);
+    expect(buoyancyAccel(NEUTRAL_DEPTH)).toBeLessThan(buoyancyAccel(0) * 0.15);
   });
 
-  it('is negative below neutral depth (freefall)', () => {
-    expect(buoyancyAccel(NEUTRAL_DEPTH + 1)).toBeLessThan(0);
-    expect(buoyancyAccel(20)).toBeLessThan(0);
+  it('floors at the drift rate below neutral instead of going negative', () => {
+    expect(buoyancyAccel(NEUTRAL_DEPTH + 1)).toBe(BUOY_DRIFT_UP_ACCEL);
+    expect(buoyancyAccel(20)).toBe(BUOY_DRIFT_UP_ACCEL);
+    expect(buoyancyAccel(100)).toBe(BUOY_DRIFT_UP_ACCEL);
   });
 
-  it('caps at BUOY_SURFACE_ACCEL / -BUOY_MAX_NEGATIVE_ACCEL rather than growing without bound', () => {
+  it('caps at BUOY_SURFACE_ACCEL rather than growing without bound', () => {
     expect(buoyancyAccel(0)).toBe(BUOY_SURFACE_ACCEL);
-    expect(buoyancyAccel(100)).toBe(-BUOY_MAX_NEGATIVE_ACCEL);
   });
 });
 
