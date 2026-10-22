@@ -1171,15 +1171,14 @@ export function initWorld(wrap: HTMLElement): World {
         // settled that, and `raceMode.update` just above for the other place in this file where
         // the physics clamp is deliberately not what the caller wants.
         //
-        // The cheer callback is `crewSystem.cheer(seconds)` (entities/crew-model/index.ts),
-        // reached through a structural optional so this compiles and runs whether or not the crew
-        // rig has the hands-up pose yet: it is landing on another branch, and a load screen must
-        // never be the thing that stops the game building. Without it the deck simply dances with
-        // its hands down. Once that branch merges, delete the cast and call `crewSystem.cheer`
-        // directly — nothing else here changes.
+        // The cheer callback is `crewSystem.cheer(seconds)` (entities/crew-model/index.ts) — the
+        // same hands-up pose shooting Caelen triggers. It used to be reached through a structural
+        // optional, because the load screen and the pose landed on separate branches and a load
+        // screen must never be the thing that stops the game building; both are in now, so this
+        // is just the method.
         splash.frame(
           { camera, sky: sceneCtx.sky, sunDisc: sceneCtx.sunDisc, sunDir }, dt, renderState,
-          (seconds) => (crewSystem as unknown as { cheer?: (s?: number) => void }).cheer?.(seconds),
+          (seconds) => crewSystem.cheer(seconds),
         );
       }
       electronics.update(clamped, simTime, fpState.driveOn);
