@@ -47,6 +47,8 @@ import { createCamState, createFpState, updateCamera, cycleView, bindCameraPoint
 import { waterVelocity, type DiverEvent } from '@keysrun/shared/sim/diver';
 import { createDiverController, NEUTRAL_BOAT_INPUT } from '../entities/diver/controller.js';
 import { createDiverModel } from '../entities/diver/model.js';
+import { createWreckTreasure } from '../entities/life/wreck-treasure.js';
+import { AMMO_KEY } from '@keysrun/shared/sim/handgun';
 import { applyDiverVisuals } from '../entities/diver/visuals.js';
 import { updateDiverCamera } from '../entities/diver/camera.js';
 import { updateDiverHud, showDiverHud, clearBlackoutOverlay } from '../entities/diver/hud.js';
@@ -453,6 +455,22 @@ export function initWorld(wrap: HTMLElement): World {
   diverModel.group.visible = false;
   scene.add(diverModel.group);
 
+  // Treasure in the wrecks (entities/life/wreck-treasure.ts; rules and economy in
+  // @keysrun/shared/sim/treasure). A peer of the wrecks themselves rather than a member of
+  // entities/life's barrel, because unlike the hulls it moves money: it needs the wallet
+  // (`credit`) and the inventory (`econ.gear`, for the pistol ammo in an ammo can), and
+  // `createLifeSystems` has — correctly — never been handed either.
+  const treasure = createWreckTreasure({ scene, gear: econ.gear, credit: (n) => econ.credit(n), toast });
+  // DEV/VERIFICATION HOOK ONLY — same spirit as __wreckDebug/__diverDebug. Nothing in normal play
+  // reads it; test/capture-treasure.mjs uses it to assert what is where and what it paid.
+  (window as unknown as { __treasureDebug?: unknown }).__treasureDebug = {
+    state: () => treasure.debug(),
+    open: () => treasure.tryOpen(),
+    /** Rounds the player is carrying — the half of a container's payout that is not money, and
+     * the only way to see it without opening the gear screen. */
+    rounds: () => countOf(econ.gear.inventory(), AMMO_KEY),
+  };
+
   // 13c. rod fishing + catch flow (docs/ARCHITECTURE.md "Rod fishing, server-authoritative").
   // `fishing` owns cast/wait/bite/fight and the first-person rod view; `catchFlow` is the one
   // shared landing path both it and entities/speargun (once the diver lands) feed into for the
@@ -536,6 +554,8 @@ export function initWorld(wrap: HTMLElement): World {
     // cast meter sits half-full behind the town HUD, and the first Space back aboard releases it.
     prepare: () => { if (FishF.charging || (FishF.state !== 'idle' && FishF.state !== 'caught')) fishing.reelIn(); },
     toast, shop: econ.shop, gameRunning: () => game.running, casino,
+    // F underwater opens treasure, not the dock (entities/land/index.ts's `diving` dep).
+    diving: () => diver.mode === 'diver',
   });
 
   // 13d. speargun (entities/speargun/**) — first-person harpoon. Fires at whatever
@@ -659,6 +679,13 @@ export function initWorld(wrap: HTMLElement): World {
   }
   document.getElementById('btnDive')?.addEventListener('click', toggleDive);
   window.addEventListener('keydown', (e) => { if (e.code === 'KeyJ') toggleDive(); });
+  // F: prise open whatever treasure is in reach. The same interact verb land mode uses — see
+  // entities/life/wreck-treasure.ts's header — and `land.diving` above keeps the tie-up hook off it
+  // while you are in the water.
+  window.addEventListener('keydown', (e) => {
+    if (e.code !== 'KeyF' || e.repeat || !game.running || diver.mode !== 'diver') return;
+    treasure.tryOpen();
+  });
 
   bindBoatInput(input, stateBox, {
     toggleTrim() {
@@ -1099,6 +1126,10 @@ export function initWorld(wrap: HTMLElement): World {
     // transforms for this frame (deck-mount points, tags, rooster-tail placement, HRTF panning
     // all read them), same ordering legacy's updateParty/updateLuigi/updateCaelen/updateBuddy/
     // updateTraffic/updateRacers/updateHotspots/AUD.update ran at.
+    // Treasure containers: the camera decides what is built and drawn (same lazy, distance-tiered
+    // model entities/life/wrecks.ts uses for the hulls), the diver decides the reach prompt. After
+    // the camera is final, for the same reason life.update is.
+    treasure.update(camera.position, diver.mode === 'diver' && diverState ? diverState : null);
     life.update({
       dt: clamped, t: simTime, model, boatLen: boatSpec.len, playerBoatId: boatSpec.id,
       boat: { x: renderState.x, y: renderState.y, z: renderState.z, h: renderState.h, speed: renderState.speed, air: renderState.air },

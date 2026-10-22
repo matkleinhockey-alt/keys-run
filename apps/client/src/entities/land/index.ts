@@ -67,6 +67,12 @@ export interface LandDeps {
   getModel(): BoatModel;
   /** Why the boat cannot be left right now (a fish on the line, a catch card up, diving), or null. */
   refuse(): string | null;
+  /** True while the driver is over the side. F is the game's one interact verb, so underwater it
+   * belongs to the diver (entities/life/wreck-treasure.ts opens treasure with it) and the tie-up
+   * hook below has to stand down — otherwise prising open a strongbox also answers "Climb back
+   * aboard first". Optional: without it this module behaves exactly as it did before diving had a
+   * use for F. */
+  diving?(): boolean;
   /** Called on the way ashore: reel in an idle line, so fishing never holds a reference into a boat nobody is driving. */
   prepare(): void;
   toast(msg: string): void;
@@ -193,6 +199,9 @@ export function createLandSystem(deps: LandDeps): LandSystem {
   }
   window.addEventListener('keydown', (e) => {
     if (e.code !== 'KeyF' || e.repeat || ctl.mode !== 'boat') return;
+    // Over the side, F is the diver's (see `LandDeps.diving`): stand down rather than answer a
+    // dive-mode keypress with a refusal about tying up.
+    if (deps.diving?.()) return;
     const start = $('start');
     if (start && !start.classList.contains('hidden')) return;
     tieUp();

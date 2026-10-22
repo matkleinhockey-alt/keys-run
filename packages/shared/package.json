@@ -158,6 +158,10 @@
       "types": "./dist/world/casino.d.ts",
       "default": "./dist/world/casino.js"
     },
+    "./sim/treasure": {
+      "types": "./dist/sim/treasure.d.ts",
+      "default": "./dist/sim/treasure.js"
+    },
     "./sim/handgun": {
       "types": "./dist/sim/handgun.d.ts",
       "default": "./dist/sim/handgun.js"
