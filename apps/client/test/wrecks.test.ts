@@ -4,7 +4,7 @@
  * that wrecks never land on the other placed things in the world. Placement itself is asserted
  * against the real bathymetry in packages/shared/test/wrecks.test.ts.
  */
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { wrecksFor, holdPoints, WRECK_RESIDENTS, WRECK_CHART_M, wreckPoint, type Wreck } from '@keysrun/shared/world/wrecks';
 import { chainZ } from '@keysrun/shared/world/chain';
 import { VIS } from '@keysrun/shared/content/creatures';
@@ -13,7 +13,7 @@ import { wreckSchoolsFor, instantiateWreckSchool } from '../src/entities/fish/sp
 import { resolveCastSpot, NO_SPOTS } from '../src/game/fishing/spot.js';
 import { findAnchorage, PARTY_ANCHORAGES } from '../src/entities/life/party-boats.js';
 import { RIG_SITES } from '../src/entities/life/hotspots.js';
-import { chartNear, chartedWrecks, isCharted, resetChart, WRECKS_PRECHARTED } from '../src/entities/life/wreck-chart.js';
+import { chartNear, chartedWrecks, isCharted, resetChart, setWrecksPrecharted, WRECKS_PRECHARTED } from '../src/entities/life/wreck-chart.js';
 import { WORLD_SEED } from '../src/state/constants.js';
 
 const wrecks = wrecksFor(WORLD_SEED);
@@ -130,10 +130,15 @@ describe('fish holding on the wrecks', () => {
 });
 
 describe('found, not gifted', () => {
-  beforeEach(() => resetChart());
+  // Wrecks ship PRE-charted (see wreck-chart.ts's header: an empty chart read as the feature
+  // being broken). Discovery is still the implemented mechanic and still has to work, so this
+  // block drives it directly rather than being deleted along with the default.
+  beforeEach(() => { resetChart(); setWrecksPrecharted(false); });
+  afterEach(() => setWrecksPrecharted(WRECKS_PRECHARTED));
 
   it('starts empty and charts a wreck only once you are near its hull', () => {
-    expect(WRECKS_PRECHARTED).toBe(false);
+    // Pinning the shipped default: wrecks are on the chart from the first frame.
+    expect(WRECKS_PRECHARTED).toBe(true);
     expect(chartedWrecks()).toHaveLength(0);
     const w = byId('tug');
     expect(chartNear(w.x + WRECK_CHART_M + 80, w.z)).toHaveLength(0);

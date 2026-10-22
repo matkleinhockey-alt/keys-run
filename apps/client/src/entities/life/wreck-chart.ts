@@ -34,6 +34,16 @@ import { WORLD_SEED } from '../../state/constants.js';
  * something the player opts into, not as the default that silently hides the content.
  */
 export const WRECKS_PRECHARTED = true;
+
+/**
+ * Live value of the above. A `let` rather than reading the const directly so the discovery
+ * feature is genuinely switchable instead of dead code behind a frozen flag — the tests drive it
+ * off to exercise charting-by-sounder, and a settings toggle would use the same door.
+ */
+let precharted: boolean = WRECKS_PRECHARTED;
+
+/** Turn discovery back on (`false`) or chart everything (`true`). */
+export function setWrecksPrecharted(v: boolean): void { precharted = v; }
 const STORE_KEY = 'keysrun.wrecks.charted.v1';
 
 const charted = new Set<string>();
@@ -54,7 +64,7 @@ function save(): void {
 
 export function isCharted(id: string): boolean {
   load();
-  return WRECKS_PRECHARTED || charted.has(id);
+  return precharted || charted.has(id);
 }
 
 /** Wrecks currently on the chart, for the minimap. */
@@ -69,7 +79,7 @@ export function chartNear(x: number, z: number, seed: number = WORLD_SEED): Wrec
   load();
   const found: Wreck[] = [];
   for (const w of wrecksFor(seed)) {
-    if (charted.has(w.id) || WRECKS_PRECHARTED) continue;
+    if (charted.has(w.id) || precharted) continue;
     if (wreckEdgeDist(w, x, z) <= WRECK_CHART_M) { charted.add(w.id); found.push(w); }
   }
   if (found.length) save();

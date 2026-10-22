@@ -22,6 +22,8 @@ async function tierLabel(page) {
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+// Boot under software rendering is slow enough to block clicks for well over the default 30 s.
+page.setDefaultTimeout(300000);
 const errs = [];
 page.on('pageerror', (e) => errs.push(String(e)));
 page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
@@ -34,8 +36,8 @@ for (let i = 0; i < 4 && !(await tierLabel(page))?.includes('High'); i++) {
 }
 await page.waitForTimeout(6000);
 // Offline play skips the login gate (no API server needed).
-await page.getByText('Play offline').click();
-await page.waitForTimeout(600);
+const offline = page.locator('.krAuthOffline');
+if (await offline.count()) { await offline.click(); await page.waitForTimeout(600); }
 await page.click('#btnGo');
 await page.waitForTimeout(1500);
 for (let i = 0; i < 20; i++) { await page.mouse.wheel(0, -120); await page.waitForTimeout(30); }
