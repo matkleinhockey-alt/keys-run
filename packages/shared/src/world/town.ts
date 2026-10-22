@@ -484,6 +484,11 @@ export interface Npc {
    * is on that box and nothing else.
    */
   onBox?: string;
+  /**
+   * Drawn as a rigged, animated glTF figure instead of the procedural box-person. Data only (a name
+   * the client maps to a model in entities/crew-model/asset.ts); shared never touches rendering.
+   */
+  rig?: 'stripper' | 'annie';
 }
 
 export const NPCS: readonly Npc[] = [
@@ -508,8 +513,11 @@ export const NPCS: readonly Npc[] = [
   // spans u 42..60, v 64..70, poles at u 47 and 55), an MC at the stage edge, a bartender behind
   // the west bar, a DJ in the back corner and a few punters at the tables. Facing yaw PI/2 is
   // inland, so the stage acts face the room at -PI/2.
-  { onBox: 'club-stage', id: 'i-dancer-1', look: 'dancer', inside: 'club', at: { u: 47, v: 66.6, yaw: -Math.PI / 2 } },
-  { onBox: 'club-stage', id: 'i-dancer-2', look: 'dancer', inside: 'club', at: { u: 55, v: 66.6, yaw: -Math.PI / 2 } },
+  // The two performers are the rigged models (Npc.rig); `look: 'dancer'` is what they fall back to if the
+  // model cannot load. They stand 1.1 m in front of the poles (v 67), not at them: the clip swings both
+  // arms wide and would pass through a pole 0.4 m behind.
+  { onBox: 'club-stage', id: 'i-dancer-1', look: 'dancer', rig: 'stripper', inside: 'club', at: { u: 47, v: 65.9, yaw: -Math.PI / 2 } },
+  { onBox: 'club-stage', id: 'i-dancer-2', look: 'dancer', rig: 'annie', inside: 'club', at: { u: 55, v: 65.9, yaw: -Math.PI / 2 } },
   { id: 'i-mc', look: 'mc', inside: 'club', at: { u: 51, v: 62.6, yaw: -Math.PI / 2 } },
   { onBox: 'club-dj', id: 'i-dj', look: 'dj', inside: 'club', at: { u: 63.5, v: 67.6, yaw: Math.PI } },
   { id: 'i-club-1', look: 'patron', inside: 'club', at: { u: 46, v: 57, yaw: -Math.PI / 2 } },

@@ -105,3 +105,50 @@ export function loadCrewAsset(): Promise<CrewAsset> {
   });
   return pending;
 }
+
+// ---------------------------------------------------------------------------------------------
+// The Pink Flamingo's stage dancers: two more runs of the same pipeline (see
+// packages/assets-pipeline/scripts/build-dance.sh `stripper` / `annie`). Same loader, same
+// meshopt/WebP assets, same Mixamo "Hip Hop Dancing" clip as `gltf.animations[0]`, same
+// SkeletonUtils-clone-per-figure contract. Unlike the boat crew they are in real metres already and
+// are placed at scale 1: the pipeline sized them (stripper ~1.62 m as she crouches, annie ~1.61 m).
+// ---------------------------------------------------------------------------------------------
+
+export type DancerKind = 'stripper' | 'annie';
+
+const DANCER_URLS: Record<DancerKind, string> = {
+  stripper: '/models/crew/dance-02.glb',
+  annie: '/models/crew/dance-03.glb',
+};
+
+const dancerPending = new Map<DancerKind, Promise<CrewAsset>>();
+
+/**
+ * KHR_materials_unlit would make a figure ignore every light in a room whose whole look is its
+ * lighting. The pipeline ships these lit (retarget-dancer.blender.py rebuilds the stripper's
+ * material as a lit one); this just warns if a future re-export quietly brings the flat look back.
+ */
+function warnIfUnlit(root: THREE.Object3D, url: string): void {
+  root.traverse((o) => {
+    if (o instanceof THREE.Mesh && o.material instanceof THREE.MeshBasicMaterial) {
+      console.warn(`[crew-model] ${url}: ${o.name} is an unlit material and will ignore the room's lights`);
+    }
+  });
+}
+
+/** Loads (once per dancer) a stage dancer's template + clip. Clone with SkeletonUtils, never `.clone()`. */
+export function loadDancerAsset(kind: DancerKind): Promise<CrewAsset> {
+  const hit = dancerPending.get(kind);
+  if (hit) return hit;
+  const url = DANCER_URLS[kind];
+  const loader = new GLTFLoader(new THREE.LoadingManager()).setMeshoptDecoder(MeshoptDecoder);
+  const p = loader.loadAsync(url).then((gltf) => {
+    disableShadows(gltf.scene);
+    warnIfUnlit(gltf.scene, url);
+    const clip = gltf.animations[0];
+    if (!clip) throw new Error(`[crew-model] ${url} has no animations`);
+    return { template: gltf.scene, clip };
+  });
+  dancerPending.set(kind, p);
+  return p;
+}

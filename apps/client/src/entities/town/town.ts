@@ -187,6 +187,8 @@ export function createTown(deps: TownDeps): Town {
             it.group.visible = inside === l.id || d < INTERIOR_RANGE;
             if (it.group.visible) {
               for (const p of it.people) p.human.update(t, 0);
+              // real dt, not 0: these are mixer-driven clips, not the box-person's pose solver
+              for (const d of it.dancers) d.update(t, dt);
             }
           }
         }
