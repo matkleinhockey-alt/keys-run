@@ -420,7 +420,9 @@ export function buildCasinoInterior(lot: Lot, kit: TownKit): Interior {
   };
 
   return {
-    lot, group, people: [], lights,
+    // `people`/`dancers` both empty: the casino's own figures are its own system (casino-people.ts,
+    // driven from `animate` below), not the shared box-person list the shops use.
+    lot, group, people: [], dancers: [], lights,
     animate(t, cam) {
       // slot attract screens: four textures scrolling at different rates, with a stop-and-go so they read as spins
       screenTex.forEach((tx, i) => {

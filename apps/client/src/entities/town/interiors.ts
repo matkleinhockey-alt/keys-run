@@ -19,7 +19,9 @@ import { GeoBatch } from './batch.js';
 import type { TownKit } from './kit.js';
 import { floorTexture, type FloorKind } from './paint.js';
 import { furnishShop } from './shops.js';
-import { makePerson, type Person } from './people.js';
+import { makePerson, humanOptionsFor, type Person } from './people.js';
+import { createStageDancer, type StageDancer } from './dancers.js';
+import { makeHuman } from '../life/human.js';
 import { Zf } from './props.js';
 import type { LightSource } from './build.js';
 import { buildCasinoInterior } from './casino-interior.js';
@@ -89,11 +91,25 @@ export interface Interior {
   lot: Lot;
   group: THREE.Group;
   people: Person[];
+  /** The occupants drawn as rigged glTF figures instead of box-people (`Npc.rig`) — only the
+   * Pink Flamingo's two performers, so far. Kept apart from `people` because they are animated by
+   * a mixer on real `dt`, not by the box-person's own `update(t, 0)`. */
+  dancers: StageDancer[];
   lights: LightSource[];
   /** Optional per-frame hook while the room is drawn: `cam` is the camera in the town's local frame (x = u, z = -v). */
   animate?(t: number, cam: THREE.Vector3): void;
   dispose(): void;
 }
+
+/**
+ * How high above the floor someone who declares `Npc.onBox` actually stands. The box itself is a
+ * 2 m footprint with no height (world/town.ts keeps heights out of the collision data), so the
+ * number has to live next to the geometry that draws the riser — the stage's top face is
+ * `y0 + 0.96` below. Without this a figure on the stage stands at floor level, sunk a metre into
+ * its own stage. A box with no entry here lifts nobody, which is right for the DJ: his booth is a
+ * 1.2 m console he stands BEHIND, not a platform he stands on.
+ */
+const STAND_Y: Readonly<Record<string, number>> = { 'club-stage': 0.96 };
 
 export function buildInterior(lot: Lot, kit: TownKit): Interior {
   if (lot.id === 'casino') return buildCasinoInterior(lot, kit); // its own file: a neon room that must not touch this one's lights
@@ -284,11 +300,31 @@ export function buildInterior(lot: Lot, kit: TownKit): Interior {
   geos.push(solidMesh.geometry, glowMesh.geometry);
 
   // staff and regulars live in the room, so they hide with it
-  const people: Person[] = NPCS.filter((n) => n.inside === lot.id).map((n, i) => makePerson(n, 20 + i, PAD_Y));
+  const occupants = NPCS.filter((n) => n.inside === lot.id);
+  const standY = (n: typeof occupants[number]): number => PAD_Y + (n.onBox ? STAND_Y[n.onBox] ?? 0 : 0);
+  const people: Person[] = occupants.filter((n) => !n.rig).map((n, i) => makePerson(n, 20 + i, standY(n)));
   for (const p of people) group.add(p.human.group);
 
+  // The rigged performers. Each is placed exactly as `placeStander` places a box-person — same yaw
+  // convention — because from the room's point of view it is just another standing figure.
+  const dancers: StageDancer[] = occupants.filter((n) => n.rig).map((n, i) => {
+    const d = createStageDancer(n.rig!, () => makeHuman(humanOptionsFor(n.look, 20 + i)), i + 1);
+    const a = n.at!;
+    d.group.position.set(a.u, standY(n), Zf(a.v));
+    d.group.rotation.y = Math.atan2(Math.cos(a.yaw), -Math.sin(a.yaw));
+    group.add(d.group);
+    return d;
+  });
+
   return {
-    lot, group, people, lights,
-    dispose() { geos.forEach((g) => g.dispose()); mats.forEach((m) => m.dispose()); releaseFloor(look.floor); people.forEach((p) => p.human.group.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) m.geometry.dispose(); })); group.clear(); },
+    lot, group, people, dancers, lights,
+    dispose() {
+      geos.forEach((g) => g.dispose()); mats.forEach((m) => m.dispose()); releaseFloor(look.floor);
+      people.forEach((p) => p.human.group.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) m.geometry.dispose(); }));
+      // Not the dancers' geometry or materials: those belong to the cached template every clone
+      // shares (dancers.ts), and a rebuilt room would find them disposed.
+      dancers.forEach((d) => d.dispose());
+      group.clear();
+    },
   };
 }

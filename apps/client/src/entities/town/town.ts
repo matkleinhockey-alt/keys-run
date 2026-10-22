@@ -71,6 +71,8 @@ export interface Town {
   debugJump(T: number): void;
   debugPeople(): ReturnType<PeopleSystem['debug']>;
   debugWildlife(): unknown;
+  /** VERIFICATION-ONLY: the club's rigged performers — loaded or fallback, feet height, clip running. */
+  debugDancers(): unknown[];
   /** VERIFICATION-ONLY: force one walk-in interior out of the render (a per-room delta for the perf harness). */
   debugHideInterior(id: string, hidden: boolean): void;
   dispose(): void;
@@ -207,6 +209,8 @@ export function createTown(deps: TownDeps): Town {
             it.group.visible = d < INTERIOR_RANGE && !hiddenInteriors.has(l.id);
             if (it.group.visible) {
               for (const p of it.people) p.human.update(t, 0);
+              // real dt, not 0: these are mixer-driven clips, not the box-person's pose solver
+              for (const d of it.dancers) d.update(t, dt);
               it.animate?.(t, camLocal);
             }
           }
@@ -252,6 +256,7 @@ export function createTown(deps: TownDeps): Town {
     debugJump(T): void { clockOffset = T - lastT; },
     debugPeople: () => people?.debug() ?? [],
     debugWildlife: () => ({ ...(wildlife?.debug() ?? {}), animals: wildlife?.where() ?? [], crowd: people?.stats() }),
+    debugDancers: () => [...interiors.values()].flatMap((i) => i.dancers.map((d) => d.debug())),
     debugHideInterior(id, hidden): void { if (hidden) hiddenInteriors.add(id); else hiddenInteriors.delete(id); },
 
     dispose(): void {
@@ -265,6 +270,7 @@ export function createTown(deps: TownDeps): Town {
   if (typeof window !== 'undefined') {
     (window as unknown as { __townDebug?: unknown }).__townDebug = {
       jump: (T: number) => town.debugJump(T), people: () => town.debugPeople(), wildlife: () => town.debugWildlife(),
+      dancers: () => town.debugDancers(),
     };
   }
   return town;

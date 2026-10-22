@@ -111,3 +111,42 @@ export function updateFigure(f: AnimatedFigure, simTime: number, dt: number, mot
   // arms' share of that eases off as the dance comes in.
   applySeaLegs(f.seaLegs, f.seaLegsState, f.restRotY, dt, 1 - 0.6 * f.drive);
 }
+
+// ---------------------------------------------------------------------------------------------
+// A figure on solid ground (the Pink Flamingo's stage dancers).
+//
+// DECISION: sea-legs is OFF here, not fed a still parent. `applySeaLegs` is the body's answer to a
+// deck accelerating under its feet; a club floor never does, so with a still parent it would
+// finite-difference a zero acceleration every frame and write no-op rotations onto bones for
+// nothing. It also looks bones up by Mixamo's `mixamorig:` names, which one of the two dancers
+// (annie, a VRM-style `J_Bip_*` skeleton) does not have. Likewise the boat's lean/brace overlay
+// and its hanging-on state are about boat speed and steering and are dropped: a stage dancer is
+// either dancing or, with the music off, held. So this is just the clip, tempo-scaled, on the
+// figure's own root, which the caller owns (position, yaw, scale).
+// ---------------------------------------------------------------------------------------------
+
+export interface StageFigure {
+  object: THREE.Object3D;
+  mixer: THREE.AnimationMixer;
+  action: THREE.AnimationAction;
+  /** Smoothed 0..1, same meaning as `AnimatedFigure.drive`. */
+  drive: number;
+}
+
+/** `object` must be a `SkeletonUtils.clone` of the template (never `.clone()`), already placed. `startFraction`
+ * (0..1) offsets the clip so two dancers are never in lockstep. */
+export function createStageFigure(object: THREE.Object3D, clip: THREE.AnimationClip, startFraction: number): StageFigure {
+  const mixer = new THREE.AnimationMixer(object);
+  const action = mixer.clipAction(clip);
+  action.play();
+  action.time = clip.duration * (startFraction - Math.floor(startFraction));
+  mixer.update(0); // pose it now, do not pop in as a T-pose for a frame
+  return { object, mixer, action, drive: 1 };
+}
+
+export function updateStageFigure(f: StageFigure, dt: number, beat: BeatSource): void {
+  const target = beat.isPlaying() ? 1 : 0;
+  f.drive += (target - f.drive) * Math.min(1, dt * DRIVE_SMOOTH_RATE);
+  f.mixer.timeScale = f.drive * (beat.bpm() / REFERENCE_BPM);
+  f.mixer.update(dt);
+}
