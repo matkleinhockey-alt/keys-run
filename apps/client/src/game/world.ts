@@ -11,7 +11,7 @@
  */
 import * as THREE from 'three';
 import { chainZ } from '@keysrun/shared/world/chain';
-import { WB } from '@keysrun/shared/world/depth';
+import { depthAt, WB } from '@keysrun/shared/world/depth';
 import { BOATS, SPEED_SCALE, type Boat } from '@keysrun/shared/content/boats';
 import { SEA_STATES } from '@keysrun/shared/waves';
 import { ampAt } from '@keysrun/shared/sim/depth-grid';
@@ -42,7 +42,7 @@ import { createCrewSystem } from '../entities/crew-model/index.js';
 import { createElectronics, type BoatReadout } from '../entities/boat/electronics.js';
 import { applyBoatVisuals, sampleWaterHeight } from '../entities/boat/visuals.js';
 import { createBoatInput, bindBoatInput, type BoatStateBox } from '../entities/boat/input.js';
-import { createCamState, createFpState, updateCamera, cycleView, bindCameraPointerControls } from '../entities/camera.js';
+import { createCamState, createFpState, updateCamera, cycleView, bindCameraPointerControls, snapChaseRig } from '../entities/camera.js';
 
 import { waterVelocity, type DiverEvent } from '@keysrun/shared/sim/diver';
 import { createDiverController, NEUTRAL_BOAT_INPUT } from '../entities/diver/controller.js';
@@ -78,6 +78,7 @@ import { setDiverGearSource, setDiverFillSpender } from '../entities/diver/gear.
 import { handWobble, tooDrunkToDive } from '@keysrun/shared/sim/steady';
 import { spotClear, findClearSpot } from '../state/game.js';
 import { SPAWN_X, SPAWN_DZ, SPAWN_H } from '../state/constants.js';
+import { createSplashScene, SPLASH_X, SPLASH_DZ, SPLASH_H, SPLASH_SEA_IDX } from './splash.js';
 
 import { createAudioSystem, type SurfaceTransitionSource, type ReelAudioState, type SpeakerSink } from '../audio/index.js';
 import { createLifeSystems } from '../entities/life/index.js';
@@ -256,9 +257,26 @@ export function initWorld(wrap: HTMLElement): World {
   scene.add(model.group);
 
   const spawnZ = chainZ(SPAWN_X) + SPAWN_DZ;
-  const spot = findClearSpot(SPAWN_X, spawnZ, { draft: boatSpec.draft, len: boatSpec.len, dockRects, pilings }, { x: SPAWN_X, z: spawnZ });
-  let curState: BoatState = createBoatState(spot.x, spot.z, SPAWN_H);
+  // The start screen is a beauty shot, not the dock (game/splash.ts — read its header before
+  // changing any of this). The boat lies to off the Seven Mile Bridge for as long as `#start`
+  // is up, and `onGo` below puts it back at the real Boot Key Harbor spawn before the player ever
+  // has control of it. Costs nothing: this is the same single boat, the same water and the same
+  // fish population the game was already stepping behind the overlay — only the coordinates
+  // differ. `findClearSpot` still arbitrates, so the shot can't put the hull on a flat or inside
+  // a bridge pier however badly the constants in splash.ts are chosen.
+  const splash = createSplashScene();
+  const spawnEnv = { draft: boatSpec.draft, len: boatSpec.len, dockRects, pilings };
+  // The real Boot Key Harbor spawn, still resolved here and not just in `onGo`: world life
+  // (entities/life/**) is placed around where the *player* starts, which is the harbour, not the
+  // bridge the load screen happens to be looking at.
+  const spot = findClearSpot(SPAWN_X, spawnZ, spawnEnv, { x: SPAWN_X, z: spawnZ });
+  const splashSpot = findClearSpot(SPLASH_X, chainZ(SPLASH_X) + SPLASH_DZ, spawnEnv, spot);
+  let curState: BoatState = createBoatState(splashSpot.x, splashSpot.z, SPLASH_H);
   model.group.position.set(curState.x, curState.y, curState.z);
+  // Sunset, snapped, before the first frame renders — the user asked for the load screen in
+  // sunset mode, and a glide would spend its first three seconds in daylight. Handed back to day
+  // (gliding, so it reads as a transition rather than a cut) in `onGo`.
+  tod.setBlend(1, true);
 
   // 12b. cascaded shadows + post-processing (docs/ARCHITECTURE.md Part 2 items 2 and 5). Built
   // after every other scene.add() above so applyToSubtree's one traversal catches everything —
@@ -440,7 +458,11 @@ export function initWorld(wrap: HTMLElement): World {
   window.addEventListener('keyup', (e) => { if (e.key === 'Shift') shiftHeld = false; });
 
   let seaIdx = 1; // legacy's initial `seaIdx=1` ("Choppy")
-  let sw = 0.9, ch = 1; // legacy's initial SW/CH (index.html:435)
+  // legacy's initial SW/CH (index.html:435) — except on the very first frames, which belong to the
+  // start screen's beauty shot and want its sea state already settled rather than easing into it
+  // over the ~2 s `fixedStep`'s lerp takes.
+  let sw = splash.active ? SEA_STATES[SPLASH_SEA_IDX].sw : 0.9;
+  let ch = splash.active ? SEA_STATES[SPLASH_SEA_IDX].ch : 1;
   let game = { running: false };
 
   // 13b. diver (entities/diver/**): jump off the boat, free-dive, swim, climb back aboard. See
@@ -734,6 +756,18 @@ export function initWorld(wrap: HTMLElement): World {
       // the boat model placeBoat() is about to replace.
       if (FishF.state !== 'idle' && FishF.state !== 'caught') fishing.reelIn();
       placeBoat(boatSpec);
+      // The beauty shot parked the boat out at the bridge (see the splash comment at the spawn
+      // above). Hand it back to the real spawn *before* `unstick()`, which would otherwise happily
+      // keep it there — the bridge spot is legitimately clear water, so nothing in `spotClear`
+      // would object, and the player would start the game 1.4 km from the harbour they were just
+      // told they are leaving. Only on the first go: `btnMarina`'s "back on the water"
+      // re-opens this same screen mid-game, and must leave the player's own position alone.
+      if (splash.active) {
+        splash.end();
+        tod.setBlend(0, false);
+        stateBox.state = createBoatState(SPAWN_X, chainZ(SPAWN_X) + SPAWN_DZ, SPAWN_H);
+        snapChaseRig(); // the hull just jumped 1.4 km; the chase rig has to jump with it
+      }
       unstick();
       showHud();
       if (isTouch()) document.getElementById('touch')?.classList.remove('hidden');
@@ -784,7 +818,14 @@ export function initWorld(wrap: HTMLElement): World {
   let savedBoatCam: { yaw: number; pitchOff: number; dYaw: number; dPitch: number } | null = null;
 
   function fixedStep(dt: number): SimEvent[] {
-    const st = SEA_STATES[seaIdx], k = Math.min(1, dt * 0.5);
+    // The start screen runs its own sea state (see SPLASH_SEA_IDX). Overriding `sw`/`ch` here
+    // rather than assigning `seaIdx` is deliberate: `seaIdx` is the *player's* setting, it labels
+    // the `#btnSea` button, and the player can still cycle it with H while the start screen is up
+    // — writing to it would mean either lying on the button or stamping over a choice they just
+    // made the moment they leave the dock. Overriding the derived values instead leaves the
+    // setting alone and lets the existing lerp ease the sea back to it over a couple of seconds
+    // as the boat pulls away, which is a nicer transition than a cut anyway.
+    const st = SEA_STATES[splash.active ? SPLASH_SEA_IDX : seaIdx], k = Math.min(1, dt * 0.5);
     sw += (st.sw - sw) * k; ch += (st.ch - ch) * k;
 
     simTime += dt;
@@ -1067,6 +1108,24 @@ export function initWorld(wrap: HTMLElement): World {
         camera.lookAt(camOverride.lookX, camOverride.lookY, camOverride.lookZ);
         camera.updateMatrixWorld(true);
       }
+      // The start-screen beauty shot wins over whatever the chase rig just computed, same
+      // after-the-fact override `__fishDebugCamera` above uses and for the same reason.
+      if (splash.active) {
+        // Real `dt`, not `clamped` — see SplashScene.frame's doc comment for the measurement that
+        // settled that, and `raceMode.update` just above for the other place in this file where
+        // the physics clamp is deliberately not what the caller wants.
+        //
+        // The cheer callback is `crewSystem.cheer(seconds)` (entities/crew-model/index.ts),
+        // reached through a structural optional so this compiles and runs whether or not the crew
+        // rig has the hands-up pose yet: it is landing on another branch, and a load screen must
+        // never be the thing that stops the game building. Without it the deck simply dances with
+        // its hands down. Once that branch merges, delete the cast and call `crewSystem.cheer`
+        // directly — nothing else here changes.
+        splash.frame(
+          { camera, sky: sceneCtx.sky, sunDisc: sceneCtx.sunDisc, sunDir }, dt, renderState,
+          (seconds) => (crewSystem as unknown as { cheer?: (s?: number) => void }).cheer?.(seconds),
+        );
+      }
       electronics.update(clamped, simTime, fpState.driveOn);
       if (game.running) {
         updateHUD(clamped, curState, { boatLabel: hudBoatLabel(boatSpec), draft: boatSpec.draft, running: game.running });
@@ -1145,6 +1204,16 @@ export function initWorld(wrap: HTMLElement): World {
     // state machine never leaves 'idle' for a dive catch (see entities/speargun's header).
     if (catchFlow.current) catchFlow.renderPortrait(simTime, renderer, { canvas: renderer.domElement });
   }
+
+  // DEV/VERIFICATION HOOK ONLY — moves the start screen's beauty shot to a different piece of
+  // water without a reload, so a Playwright session can sweep candidate spots (game/splash.ts's
+  // `__splashDebug` does the same for the camera). `findClearSpot` still arbitrates, exactly as it
+  // does for the real pose, so the hook cannot put the hull somewhere the game would not.
+  (window as unknown as { __splashPose?: (x: number, dz: number, h: number) => unknown }).__splashPose = (x, dz, h) => {
+    const s = findClearSpot(x, chainZ(x) + dz, spawnEnv, spot);
+    stateBox.state = createBoatState(s.x, s.z, h);
+    return { x: s.x, z: s.z, depth: depthAt(s.x, s.z) };
+  };
 
   function resize(): void {
     const w = wrap.clientWidth, h = wrap.clientHeight;
