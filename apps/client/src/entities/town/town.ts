@@ -253,9 +253,11 @@ export function createTown(deps: TownDeps): Town {
     },
   };
   // verification hooks (the sibling of `__landDebug`): jump the clock, list the crowd and the animals
-  (window as unknown as { __townDebug?: unknown }).__townDebug = {
-    jump: (T: number) => town.debugJump(T), people: () => town.debugPeople(), wildlife: () => town.debugWildlife(),
-  };
+  if (typeof window !== 'undefined') {
+    (window as unknown as { __townDebug?: unknown }).__townDebug = {
+      jump: (T: number) => town.debugJump(T), people: () => town.debugPeople(), wildlife: () => town.debugWildlife(),
+    };
+  }
   return town;
 
   function ensurePeople(): void {
