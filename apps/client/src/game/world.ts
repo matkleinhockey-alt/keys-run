@@ -55,6 +55,7 @@ import { createLandSystem } from '../entities/land/index.js';
 import { SPEAR_RANGE_MAX, closestDistSqSegmentSegment } from '@keysrun/shared/sim/spear';
 import { createSpeargun, type DiverAimInput, type SpearTarget } from '../entities/speargun/index.js';
 import { bindSpeargunInput } from '../entities/speargun/input.js';
+import { createHandgunSystem } from '../entities/handgun/index.js'; // handgun mode
 
 import { createFishing } from './fishing/index.js';
 import { createRaceMode } from './race/index.js';
@@ -506,7 +507,7 @@ export function initWorld(wrap: HTMLElement): World {
     scene, camera, canvas: renderer.domElement, sky: sceneCtx.sky, sunDisc: sceneCtx.sunDisc, sunDir,
     camState, fpState, lightMats: tod.lightMats, getTodK: tod.getK, onBuilt: (g) => shadows.applyToSubtree(g),
     isTouch: isTouch(), getBoat: () => stateBox.state, getHullLen: () => boatSpec.len, getModel: () => model,
-    refuse: () => (diver.mode === 'diver' ? 'Climb back aboard first.' : FishF.state === 'fight' ? 'Land your fish first.' : catchFlow.current ? 'Finish with your catch first.' : null),
+    refuse: () => (handgun.mode === 'gun' ? 'Holster the pistol first (9).' : diver.mode === 'diver' ? 'Climb back aboard first.' : FishF.state === 'fight' ? 'Land your fish first.' : catchFlow.current ? 'Finish with your catch first.' : null),
     prepare: () => { if (FishF.state !== 'idle' && FishF.state !== 'caught') fishing.reelIn(); },
     toast, shop: econ.shop, gameRunning: () => game.running,
   });
@@ -559,6 +560,21 @@ export function initWorld(wrap: HTMLElement): World {
   });
   bindSpeargunInput(renderer.domElement, speargun, () => diverAim, () => diver.mode === 'diver' && !diver.state?.blackedOut);
 
+  // 13d-2. handgun mode (entities/handgun/**): a fourth peer beside boat / diver / land. Everything
+  // mode-shaped lives in the facade; this file touches it only where marked `handgun.` below.
+  const handgun = createHandgunSystem({
+    scene, camera, canvas: renderer.domElement, sky: sceneCtx.sky, sunDisc: sceneCtx.sunDisc, sunDir,
+    camState, fpState, isTouch: isTouch(), getBoat: () => stateBox.state, getModel: () => model,
+    gameRunning: () => game.running,
+    refuse: () => (diver.mode === 'diver' ? 'Climb back aboard first.' : land.mode === 'land' ? 'Back to the boat first (B).'
+      : FishF.state === 'fight' ? 'Land your fish first.' : catchFlow.current ? 'Finish with your catch first.'
+      : raceMode.isActive() ? 'Finish the race first.' : null),
+    // Also abort a cast that is still CHARGING (state is 'idle' while the key is held): leaving it would
+    // release a real cast on the Space keyup that arrives after the pistol is out. reelIn clears it.
+    prepare: () => { if (FishF.charging || (FishF.state !== 'idle' && FishF.state !== 'caught')) fishing.reelIn(); },
+    toast, gear: econ.gear, fishWorld, life, audio: audio.engine, particles,
+  });
+
   // Problem 2 (fish react to being shot at): speargun.isActive()/getFightState() are the only
   // signals entities/speargun/** exposes (it is another agent's concurrent, out-of-scope file —
   // see this task's brief), so a clean miss is detected from the *outside* as an edge: `isActive()`
@@ -594,6 +610,7 @@ export function initWorld(wrap: HTMLElement): World {
   function toggleDive(): void {
     if (!game.running) return;
     if (land.mode === 'land') { toast('Back to the boat first (B).'); return; }
+    if (handgun.mode === 'gun') { toast('Holster the pistol first (9).'); return; }
     if (diver.mode === 'boat') {
       // legacy-mirroring guard (see the onGo/placeBoat reelIn call above): going overboard with a
       // line out would otherwise leave fishing's state machine holding a rod-tip/bobber reference
@@ -713,6 +730,7 @@ export function initWorld(wrap: HTMLElement): World {
     input.fwd = input.back = input.left = input.right = false;
     if (diver.mode === 'diver') { diver.exitToBoat(); setDiveUI(false); }
     land.exitToBoat();
+    handgun.exitToBoat();
     const lede = document.getElementById('lede');
     if (lede) lede.textContent = 'Switch boats any time.';
     const go = document.getElementById('btnGo');
@@ -777,7 +795,7 @@ export function initWorld(wrap: HTMLElement): World {
     // without the boat acting on it, and leaves forward/steering alone so you can still drive
     // after a running fish.
     const rodHasLine = fishingLineOut() || FishF.state === 'caught';
-    const boatInput = diver.mode === 'diver' || land.mode === 'land' ? NEUTRAL_BOAT_INPUT
+    const boatInput = diver.mode === 'diver' || land.mode === 'land' || handgun.mode === 'gun' ? NEUTRAL_BOAT_INPUT
       : rodHasLine && input.back ? { ...input, back: false }
       : input;
     // `land.holdBoat` pins the hull where it was tied up — it must wrap the stepped state rather
@@ -805,6 +823,7 @@ export function initWorld(wrap: HTMLElement): World {
       events.push(...fixedStep(DT));
       diverEvents.push(...diver.step(simTime, DT, stateBox.state.x, stateBox.state.z));
       land.step(DT);
+      handgun.step(DT, simTime);
       // entities/speargun/** ticks at this same fixed rate, right alongside the diver physics it
       // reads from — sim/spear.ts's 25 m/s / SPEAR_RANGE maths assumes a steady small dt, the same
       // reason fishing.update() above is driven from fixedStep rather than frame()'s variable dt.
@@ -890,6 +909,7 @@ export function initWorld(wrap: HTMLElement): World {
       prevDiverMode = diver.mode;
     }
     land.syncMode();
+    handgun.syncMode();
 
     // Render interpolates the leftover fraction of a step (docs/ARCHITECTURE.md requirement 2):
     // only the smoothly-varying transform fields are blended between the last two completed
@@ -956,6 +976,8 @@ export function initWorld(wrap: HTMLElement): World {
     // threat regardless of who it's "for", so this alone is enough to spook that fish's own school
     // (and any other school close enough to the same point) — no school-id plumbing needed.
     for (const p of pendingSpearSpooks) fishThreats.push({ x: p.x, z: p.z, kind: 'spear', speed: 0 });
+    // A gunshot is a louder spear: the same threat, held for a few seconds (entities/handgun).
+    for (const p of handgun.activeSpooks()) fishThreats.push({ x: p.x, z: p.z, kind: 'spear', speed: 0 });
     // LOD/culling is evaluated against the real render camera, which is not the population
     // focus — see FishWorld.setCamera. Set before update() so this frame's submissions use this
     // frame's camera rather than last frame's.
@@ -1006,6 +1028,8 @@ export function initWorld(wrap: HTMLElement): World {
       sceneCtx.sunDisc.lookAt(camera.position);
     } else if (land.mode === 'land') {
       land.updateCamera(clamped, simTime);
+    } else if (handgun.mode === 'gun') {
+      handgun.updateCamera(clamped, simTime, hand);
     } else {
       updateCamera(clamped, { camera, sky: sceneCtx.sky, sunDisc: sceneCtx.sunDisc, sunDir, hand }, camState, fpState, model, renderState, game.running, boatSpec.len);
       // DEV/VERIFICATION HOOK ONLY — lets a Playwright screenshot script place the camera directly
@@ -1031,6 +1055,7 @@ export function initWorld(wrap: HTMLElement): World {
     // override above) is set, so terrain chunks stream around wherever the viewer actually ended
     // up — otherwise a debug-placed or just-submerged camera would sit over unbuilt seabed.
     land.update(clamped, simTime);
+    handgun.update(clamped, simTime);
     seafloor.update(camera.position);
     // Reef chunk residency follows the (now up-to-date) camera position — a no-op unless the
     // viewer crossed into a new 50 m chunk this frame; never a per-frame rebuild.

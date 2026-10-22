@@ -17,6 +17,7 @@
 import { VENUES, type ShelfItem, type VenueId } from '@keysrun/shared/content/venues';
 import { AIR_MAX } from '@keysrun/shared/sim/diver';
 import { SPEAR_RANGE } from '@keysrun/shared/sim/spear';
+import { MAG_SIZE } from '@keysrun/shared/sim/handgun';
 import { emptyInventory, modifiersFor, type Inventory, type Modifiers } from '@keysrun/shared/sim/shop';
 import './gear.css';
 
@@ -62,6 +63,8 @@ export function describeModifiers(m: Modifiers): EffectRow[] {
   mul('Rare fish odds', m.rareMul);
   if (m.coolerBonusLb) rows.push({ label: 'Cooler space', text: `+${Math.round(m.coolerBonusLb)} lb`, good: m.coolerBonusLb > 0 });
   mul('Steady hands', m.steadyMul);
+  if (m.handgunMagBonus) rows.push({ label: 'Pistol magazine', text: `${MAG_SIZE} → ${MAG_SIZE + Math.round(m.handgunMagBonus)} rounds`, good: m.handgunMagBonus > 0 });
+  mul('Pistol spread', m.handgunSpreadMul, 'down');
   if (m.sway > 0) rows.push({ label: 'Tipsy', text: `${Math.round(m.sway * 100)}%`, good: false });
   return rows;
 }

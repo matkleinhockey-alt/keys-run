@@ -1,0 +1,26 @@
+/* Boat pistol HUD (entities/handgun/hud.ts). Beside the module that builds the DOM, like land.css. */
+#gunHud{position:absolute;inset:0;pointer-events:none}
+/* crosshair: a ring and a dot. A pure CSS ring so it needs no asset and recolours for lock/hit. */
+#gunHud .gh-cross{position:absolute;left:50%;top:50%;width:30px;height:30px;margin:-15px 0 0 -15px;border-radius:50%;border:2px solid var(--ink);box-shadow:0 0 0 1px rgba(0,0,0,.4),inset 0 0 0 1px rgba(0,0,0,.25);transition:transform .12s,border-color .12s}
+#gunHud .gh-cross::after{content:"";position:absolute;left:50%;top:50%;width:4px;height:4px;margin:-2px 0 0 -2px;border-radius:50%;background:var(--ink);box-shadow:0 0 0 1px rgba(0,0,0,.5)}
+#gunHud .gh-cross.lock{transform:scale(.78);border-color:var(--sun)}
+#gunHud .gh-cross.hit{transform:scale(1.4);border-color:var(--marker)}
+#gunHud .gh-ammo{position:absolute;right:18px;bottom:20px;padding:10px 16px;min-width:150px;text-align:right}
+#gunHud .gh-mag{font:800 40px/1 var(--display);letter-spacing:.02em}
+#gunHud .gh-mag span{font-size:18px;color:var(--muted);margin-left:6px}
+#gunHud .gh-mag.low b{color:var(--marker)}
+#gunHud .gh-pips{display:flex;gap:3px;justify-content:flex-end;margin-top:6px;flex-wrap:wrap;max-width:190px;margin-left:auto}
+#gunHud .gh-pips i{width:7px;height:14px;border-radius:2px;background:var(--sun)}
+#gunHud .gh-pips i.off{background:rgba(255,255,255,.16)}
+#gunHud .gh-note{margin-top:6px;font-size:12px;font-weight:600;color:var(--flats);min-height:15px}
+#gunHud .gh-note.bad{color:var(--marker)}
+#gunHud .gh-bar{height:4px;border-radius:2px;background:rgba(255,255,255,.18);margin-top:6px;overflow:hidden}
+#gunHud .gh-bar i{display:block;height:100%;width:0;background:var(--sun)}
+#gunHud .gh-help{position:absolute;left:18px;bottom:20px;font-size:11px;color:var(--muted);max-width:270px;line-height:1.5;text-shadow:0 1px 3px rgba(0,0,0,.6)}
+#gunHud .gh-score{position:absolute;left:18px;top:18px;padding:7px 12px;font-size:12px;font-weight:700}
+#gunHud .gh-score b{color:var(--sun)}
+#touchGun{position:absolute;inset:auto 0 0 0;height:0}
+#tgFire{right:16px;bottom:96px;width:78px;height:78px;background:var(--marker);border:none;font-size:30px}
+#tgReload{right:104px;bottom:20px}
+#tgHolster{right:16px;bottom:20px}
+@media (max-width:760px){#gunHud .gh-help{display:none}#gunHud .gh-ammo{bottom:190px}}

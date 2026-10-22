@@ -121,6 +121,10 @@
     "./sim/gear": {
       "types": "./dist/sim/gear.d.ts",
       "default": "./dist/sim/gear.js"
+    },
+    "./sim/handgun": {
+      "types": "./dist/sim/handgun.d.ts",
+      "default": "./dist/sim/handgun.js"
     }
   },
   "scripts": {

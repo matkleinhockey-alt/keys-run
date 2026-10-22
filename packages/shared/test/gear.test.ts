@@ -454,7 +454,9 @@ describe('the GearPort seam', () => {
 
   it('every item these two shops sell is covered above (guards against a new shelf item with no effect)', () => {
     const covered = new Set(['spear.long', 'spear.reel', 'spear.shafts', 'rod.heavy', 'rod.used', 'reel.lever',
-      'bait.shrimp', 'bait.ballyhoo', 'leader.fluoro', 'cooler.ice']);
+      'bait.shrimp', 'bait.ballyhoo', 'leader.fluoro', 'cooler.ice',
+      // the boat pistol's shelf items are covered in handgun.test.ts ("ammunition and the shop")
+      'handgun.ammo', 'handgun.extmag', 'handgun.dot']);
     const mine = [...VENUES.guns.sells, ...VENUES.tackle.sells, ...VENUES.pawn.sells]
       .map((s) => s.effect.key).filter((k) => k !== 'safety.flare');
     for (const k of mine) expect(covered.has(k), k).toBe(true);

@@ -95,6 +95,25 @@ function birdGeos(kind: BirdKind): BirdGeos {
   return BIRD_GEO[kind] = { body: mergeColored(parts), inner: iG, outer: oG, ei };
 }
 
+/**
+ * A bird that has been startled off (by a gunshot) or struck. It is kept as a plain offset applied
+ * inside `moveBird`, the one function every bird system (pelicans, hotspots, weedlines, Caelen's
+ * neighbours, the boat gulls) already calls to place a bird each frame - so scattering needs no
+ * cooperation from those systems and cannot fight them: they keep computing the bird's "home"
+ * position and `moveBird` shifts it. See `scareBird`.
+ */
+export interface BirdFlee {
+  /** Seconds since the scare. */
+  t: number;
+  /** Seconds the bird stays away in total (it flies off, is gone, and flies back). */
+  away: number;
+  /** Unit horizontal direction it runs, away from whatever scared it. */
+  dx: number; dz: number;
+}
+
+/** Seconds of visible flight each way (out, and back in) before the bird is out of sight. */
+export const FLEE_FLIGHT_S = 4;
+
 export interface Bird {
   g: THREE.Group;
   wings: ReadonlyArray<{ sx: number; sh: THREE.Group; el: THREE.Group }>;
@@ -105,6 +124,8 @@ export interface Bird {
   /** Ad hoc dive-state bag — shape differs per caller (pelicans/hotspots), kept loosely typed
    * like legacy's dynamically-added `B.dive`. */
   dive: Record<string, number> | null;
+  /** Non-null while scattered; see `BirdFlee`. */
+  flee: BirdFlee | null;
 }
 
 /** legacy `makeSeabird` (index.html:2016-2022). */
@@ -124,12 +145,15 @@ export function makeSeabird(kind: BirdKind, scale = 1): Bird {
     return { sx, sh, el };
   });
   g.scale.setScalar(scale);
-  return { g, wings, kind, ph: Math.random() * 6.28, px: null, py: null, pz: null, yaw: 0, roll: 0, dive: null };
+  return { g, wings, kind, ph: Math.random() * 6.28, px: null, py: null, pz: null, yaw: 0, roll: 0, dive: null, flee: null };
 }
 
 /** legacy `poseBird` (index.html:2024-2029): flap (0..1 blend) with a phase, glide with a slight
  * dihedral, or fold back for a dive. */
 export function poseBird(B: Bird, dt: number, flap: number, tuck: number, rate = 9): void {
+  // A bird that has been scared is flapping hard whatever its home behaviour says (a gliding gull
+  // does not coast away from a gunshot), and is not tucked for a dive.
+  if (B.flee && B.g.visible) { flap = 1; tuck = 0; rate = Math.max(rate, 14); }
   B.ph += dt * rate * Math.max(0.15, flap);
   const f = Math.sin(B.ph), f2 = Math.sin(B.ph - 0.7);
   B.wings.forEach((w) => {
@@ -142,6 +166,24 @@ export function poseBird(B: Bird, dt: number, flap: number, tuck: number, rate =
 
 /** legacy `moveBird` (index.html:2031-2034): face along its motion and bank into turns. */
 export function moveBird(B: Bird, x: number, y: number, z: number, dt: number): void {
+  if (B.flee) {
+    const f = B.flee;
+    f.t += dt;
+    if (f.t >= f.away) {
+      // Home again. Forget the previous position so the heading/bank logic below does not read the
+      // jump back from "far away" as a violent turn.
+      B.flee = null; B.g.visible = true; B.px = null; B.py = null; B.pz = null;
+    } else {
+      // k is how far into the departure (or, mirrored, the return) the bird is. An accelerating run
+      // (a startled gull is gone in a couple of seconds) that climbs as it goes; the return is the
+      // same curve played backwards, so a bird that comes back flies back IN rather than popping.
+      const k = Math.min(f.t, f.away - f.t);
+      if (k >= FLEE_FLIGHT_S) { B.g.visible = false; B.px = null; return; }
+      const run = 7 * k + 5 * k * k, climb = 2.5 * k + 1.2 * k * k;
+      x += f.dx * run; z += f.dz * run; y += climb;
+      B.g.visible = true;
+    }
+  }
   if (B.px !== null && B.py !== null && B.pz !== null) {
     const vx = x - B.px, vz = z - B.pz, sp = Math.hypot(vx, vz);
     if (sp > 1e-4) {
@@ -154,4 +196,34 @@ export function moveBird(B: Bird, x: number, y: number, z: number, dt: number): 
   }
   B.g.position.set(x, y, z);
   B.px = x; B.py = y; B.pz = z;
+}
+
+const _wp = new THREE.Vector3();
+
+/** True when the bird, and everything it is parented to, is actually drawn right now. */
+export function birdShown(B: Bird): boolean {
+  for (let o: THREE.Object3D | null = B.g; o; o = o.parent) if (!o.visible) return false;
+  return true;
+}
+
+/** The bird's position in world space (updates matrices up its parent chain first, because most
+ * birds are children of a hotspot group and the last rendered matrixWorld is a frame old). */
+export function birdWorldPos(B: Bird, out: THREE.Vector3 = _wp): THREE.Vector3 {
+  B.g.updateWorldMatrix(true, false);
+  return B.g.getWorldPosition(out);
+}
+
+/**
+ * Sends a bird off, away from `(fromX, fromZ)`, for `awayS` seconds. Does nothing to a bird that is
+ * already away (a second shot must not extend or reset the first bird's flight, or one flock
+ * under fire would never come home). The run direction is taken in world space; every parent group
+ * of a bird in this game is translated but not rotated, so world and local directions agree.
+ */
+export function scareBird(B: Bird, fromX: number, fromZ: number, awayS: number): void {
+  if (B.flee) return;
+  const p = birdWorldPos(B);
+  let dx = p.x - fromX, dz = p.z - fromZ;
+  const l = Math.hypot(dx, dz);
+  if (l < 1e-3) { dx = Math.sin(B.yaw); dz = Math.cos(B.yaw); } else { dx /= l; dz /= l; }
+  B.flee = { t: 0, away: Math.max(awayS, 2 * FLEE_FLIGHT_S + 1), dx, dz };
 }

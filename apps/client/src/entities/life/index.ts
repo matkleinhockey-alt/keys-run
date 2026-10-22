@@ -37,6 +37,8 @@ import { createFishingBuddy, type FishingBuddy } from './buddy.js';
 import { createLuigiMode, type LuigiMode } from './luigi.js';
 import { createCaelen, type Caelen, type CaelenDiverInput, type CaelenShotResult } from './caelen.js';
 import { createPartyBoats, type PartyBoats } from './party-boats.js';
+import { createBoatGulls, type BoatGulls } from './boat-gulls.js';
+import type { Bird } from './seabirds.js';
 import { createDog, type Dog } from './dog.js';
 import { updateParty } from './deck-party.js';
 import type { BoatModel, BoatBuildDeps } from '../boat/model.js';
@@ -100,6 +102,10 @@ export interface LifeSystems {
    * entities/life/caelen.ts's `resolveSpearShot`. `game/world.ts` calls this with the same ray it
    * already captures for the fish near-miss spook. */
   caelenShot(p1: { x: number; y: number; z: number }, p2: { x: number; y: number; z: number }): CaelenShotResult;
+  /** Every bird the boat pistol may shoot at (gulls following the boat, pelicans, the bait-ball
+   * and weedline birds). NOT Caelen: he owns his own capsule and reaction, reached through
+   * `caelenShot`. Rebuilt per call - call it per shot, not per frame. */
+  shootableBirds(): Bird[];
   /** Seconds until Caelen comes back, 0 when he's here. */
   caelenAwayFor(): number;
   /** VERIFICATION-ONLY: where the boat dog is standing and what it's doing. */
@@ -120,6 +126,7 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
   const luigi: LuigiMode = createLuigiMode({ hypeCallout: deps.hypeCallout, particles: deps.particles });
   const caelen: Caelen = createCaelen(scene, { sayCaelenLine: deps.sayCaelenLine });
   const partyBoats: PartyBoats = createPartyBoats(scene);
+  const boatGulls: BoatGulls = createBoatGulls(scene, boatSpawn);
   // The dog belongs to the player, not to the hull, so it is built here once and re-parents
   // itself to whatever boat model it is handed — switching boats rebuilds the model entirely.
   const dog: Dog = createDog({ bark: deps.dogBark });
@@ -134,6 +141,7 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
       hotspotWorld.update(dt, t, boat, cameraXZ, deps.particles);
       buddy.update(dt, t, boat, playerBoatId, camera, viewport, deps.particles);
       caelen.update(dt, t, boat, camera, viewport, inputs.diver ?? null);
+      boatGulls.update(dt, t, boat);
       // A fish coming over the gunwale is the dog's whole day.
       dog.update(dt, t, model, boatLen, boat, fishCaught);
       partyBoats.update(dt, t, camera.position, deps.particles, deps.currentTodK);
@@ -163,6 +171,7 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
     toggleBuddy(): void { buddy.toggle(); },
     isBuddyOn(): boolean { return buddy.isOn(); },
     caelenShot(p1, p2): CaelenShotResult { return caelen.resolveSpearShot(p1, p2); },
+    shootableBirds(): Bird[] { return [...boatGulls.birds(), ...pelicans.birds(), ...hotspotWorld.birds()]; },
     caelenAwayFor(): number { return caelen.awayFor(); },
     dogState() { return dog.debugState(); },
     caelenDebugHitbox() { return caelen.debugHitbox(); },
@@ -175,6 +184,7 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
     dispose(): void {
       luigi.dispose();
       caelen.dispose();
+      boatGulls.dispose();
       partyBoats.dispose();
       dog.dispose();
       buddy.dispose();

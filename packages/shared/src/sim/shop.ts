@@ -50,9 +50,13 @@ export const emptyInventory = (): Inventory =>
  * The speargun spends a shaft per shot, so a genuinely empty inventory means a new player's very
  * first shot is already the bent-spare fallback at 60% range. One pack is enough that the gun
  * works out of the box and few enough that the gun counter still has something to sell.
+ *
+ * The boat pistol (sim/handgun.ts) gets the same treatment for the same reason: 24 rounds is two
+ * magazines, enough to find out what the mode is and to be a little disappointed when the second one
+ * runs dry, which is the moment the gun counter's $75 box starts to make sense.
  */
 export const startingInventory = (): Inventory =>
-  ({ ...emptyInventory(), consumables: { 'spear.shafts': 3 } });
+  ({ ...emptyInventory(), consumables: { 'spear.shafts': 3, 'handgun.ammo': 24 } });
 
 /**
  * How long a bought buff lasts, in simulated seconds, by `effect.key`.
@@ -148,6 +152,7 @@ function unitsPer(key: string): number {
   if (key === 'bait.shrimp') return 12;
   if (key === 'bait.ballyhoo') return 6;
   if (key === 'spear.shafts') return 3;
+  if (key === 'handgun.ammo') return 50; // a box
   return 1;
 }
 
@@ -211,11 +216,16 @@ export interface Modifiers {
   steadyMul: number;
   /** Drunkenness, 0..1 — the opposite, and deliberately a liability (bar round, six-pack). */
   sway: number;
+  /** Extra rounds in the boat pistol's magazine (extended magazine). sim/handgun.ts `magSizeFor`. */
+  handgunMagBonus: number;
+  /** Boat pistol spread multiplier — lower is tighter (red-dot sight). sim/handgun.ts `spreadFor`. */
+  handgunSpreadMul: number;
 }
 
 export const NO_MODIFIERS: Modifiers = {
   breathMul: 1, swimMul: 1, viewBonusM: 0, spearRangeM: 0, spearTetherMul: 1,
   lineMul: 1, reelMul: 1, biteMul: 1, rareMul: 1, coolerBonusLb: 0, steadyMul: 1, sway: 0,
+  handgunMagBonus: 0, handgunSpreadMul: 1,
 };
 
 /**
@@ -238,6 +248,10 @@ export function modifiersFor(inv: Inventory, nowS: number): Modifiers {
   // --- gun counter ---------------------------------------------------------------------------
   if (g('spear.long')) m.spearRangeM += 6;
   if (g('spear.reel')) m.spearTetherMul *= 0.6;
+  // The boat pistol's two upgrades (sim/handgun.ts owns the numbers' meaning; the values live here
+  // with every other gear effect so the gear screen and the inert-item test see them).
+  if (g('handgun.extmag')) m.handgunMagBonus += 6;
+  if (g('handgun.dot')) m.handgunSpreadMul *= 0.55;
 
   // --- tackle and pawn -----------------------------------------------------------------------
   if (g('rod.heavy')) { m.lineMul *= 1.35; m.reelMul *= 0.95; }
