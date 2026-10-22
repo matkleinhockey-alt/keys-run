@@ -18,7 +18,7 @@
  *
  *   v=166  ┌──────────────── back bank (6) ───────────────┐
  *          │ W bank(4)   ISLAND W(8)  [FOUNTAIN]  ISLAND E(8)   E bank(4) │
- *          │                                                    cage     │
+ *          │ AQUARIUM                                           cage     │
  *          │ Go Fish table            hall (u -1..1)            booth    │
  *   v=140  └────────────────────── door (u=0) ────────────────┘
  *
@@ -104,6 +104,13 @@ export const CASINO_BOXES: readonly InteriorBox[] = [
   box('casino-table', -21.5, -16.5, 144, 148),
   // the marlin fountain in the middle of the floor
   box('casino-fountain', -2.6, 2.6, 155.6, 160.4),
+  // The aquarium wall: a built-in tank on the WEST wall, in the only gap left there — the Go Fish
+  // table's collider stops at v 148 and the west cabinet bank starts at v 155, so the tank fills
+  // 148.6..155 and lands flush against the bank. Not the front of either side wall (the GO FISH
+  // sign is at v 146) and not the entrance hall, which must stay clear for 8 m inland of the door.
+  // 1.4 m deep, 0.1 m shallower than the bank it abuts, which keeps the aisle to the west island
+  // over 6 m wide and leaves every cabinet's stand spot more than a metre clear.
+  box('casino-aquarium', -24 + WALL, -24 + WALL + 1.4, 148.6, 155),
   box('casino-pillar-w', -6.45, -5.55, 146, 147),
   box('casino-pillar-e', 5.55, 6.45, 146, 147),
 ];

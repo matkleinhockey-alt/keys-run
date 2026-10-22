@@ -15,7 +15,8 @@
  *   - cashier   teal fish-print shirt, yellow visor, name tag. Counts the same stack of ones all day.
  *   - pitboss   a waistcoat of overlapping silver TARPON SCALES, dark glasses, a gold chain. Sweeps
  *               the floor with his head and never, ever smiles.
- *   - mascot    Captain Marlin: a blue marlin suit with a bill, a sail and a very small tail. Waves.
+ *   - mascot    Gilly: a person in a head-to-knee fish suit, who walks the front of the room and waves.
+ *               The only figure in here with a gait; see `mascot()` for what the suit replaces.
  *   - punter    fish-print shirts in five patterns, caps, one in sunglasses at night.
  *
  * ## Animation (cheap on purpose)
@@ -27,6 +28,7 @@
 import * as THREE from 'three';
 import type { CasinoNpc } from '@keysrun/shared/world/casino';
 import { makeHuman, type Human } from '../life/human.js';
+import { animateGait } from './people.js';
 import { GeoBatch } from './batch.js';
 import { Zf } from './props.js';
 
@@ -225,39 +227,158 @@ function pitboss(): Built {
   };
 }
 
-function mascot(): Built {
-  const h = makeHuman({ walker: true, skin: 0xf0c2a0, hair: 0x1c1410, shirt: 0x1f6fb0, shortSleeve: true, shorts: 0x134a7a, shoes: 0xffd23f });
-  h.group.scale.setScalar(1.14);
-  const ink = new TorsoInk(h);
-  ink.patch(Math.PI / 2 - 0.85, Math.PI / 2 + 0.85, 0.06, 0.48, 0xdcecf8); // pale belly
-  for (let k = 0; k < 4; k++) ink.patch(-Math.PI / 2 - 0.9 + k * 0.45, -Math.PI / 2 - 0.9 + k * 0.45 + 0.22, 0.1, 0.5, 0x7fd0ff); // back stripes
-  ink.commit();
-  // the head: a marlin's, over a human's, with a bill you could open a letter with
-  const hb = new GeoBatch(false, 1.3);
-  hb.ball(0, 0.06, 0.03, 0.2, 0x1f6fb0, 1.05, 14);
-  hb.ball(0, 0.0, 0.1, 0.16, 0xdcecf8, 0.8, 12); // pale chin
-  hb.cyl(0, 0.07, 0.46, 0.005, 0.04, 0.52, 0x14335a, 8, { rx: Math.PI / 2 });
-  for (const sx of [-1, 1]) {
-    hb.ball(sx * 0.115, 0.1, 0.12, 0.052, 0xffffff, 1, 10);
-    hb.ball(sx * 0.12, 0.1, 0.16, 0.026, 0x10202c, 1, 8);
-    hb.box(sx * 0.19, 0.0, 0.0, 0.01, 0.08, 0.1, 0x134a7a, { rz: sx * 0.25 }); // gill
+/**
+ * Gilly: a person in a full-body fish costume, which is a different animal from the fish-print shirts
+ * everyone else in here is wearing. It is still a `makeHuman` — walker legs, IK arms, the human's own
+ * head swivel — but the suit covers everything above the knee, so the three merged body meshes the
+ * constructor made (torso, head, hair) are HIDDEN and replaced by four of their own:
+ *
+ *   head shell   an oversized fish head worn over the shoulders: a googly eye bulging out of each
+ *                side, a lipped open mouth with a dark throat behind it, three gill plates a side.
+ *   pupils       the only reason the eyes are a second mesh — both pupils roll together, which is
+ *                what makes a googly eye googly and costs one draw call for the pair.
+ *   body shell   a tapering row of balls around the torso (the lobby fountain's marlin is built the
+ *                same way), a dorsal ridge up the back, a forked tail behind, and a skirt over the
+ *                hips so the thighs are not bare.
+ *   two fins     stubby pectoral paddles, a fan of five rays each, parked on the hands every frame.
+ *
+ * Net cost against the figure it replaces: three meshes hidden, five added, so +2 draw calls for the
+ * one mascot in the building. Everything a mascot suit does NOT cover — shins, ankles, white
+ * sneakers — is the human's own, because the joke only lands if you can see there is a person in there.
+ *
+ * ## Why he walks
+ * He is the one person in the casino who is not standing at a station, so he gets a real gait rather
+ * than a pose: `animateGait` from people.ts, the same stride the street's crowd uses, over a 2.8 m
+ * beat across the front of the room. The lane is `MASCOT_PACE` either side of where world/casino.ts
+ * parks him (u 2.0..4.8, well clear of the 2 m entrance hall) and the gait phase is advanced by the
+ * distance he actually covers, so the feet do not skate: the alternative, a constant phase rate, slid
+ * visibly at the ends of the beat where he is barely moving.
+ */
+/** Albedo lift on the suit's batches. The casino has no sun and four PointLights for the whole town,
+ * so its own geometry is built at `lift` 2.0 (casino-interior.ts); at 1.3 the suit came out navy
+ * next to a room that is not. */
+const SUIT_LIFT = 1.9;
+const MASCOT_PACE = 1.4;
+const MASCOT_BEAT = 14;
+
+function mascot(npc: CasinoNpc, baseY: number): Built {
+  const SUIT = 0x2a90cc, DEEP = 0x12527f, PALE = 0xe4f1fb, LIP = 0xff7f8f, THROAT = 0x4a0f18;
+  const h = makeHuman({ walker: true, skin: 0xf0c2a0, hair: 0x1c1410, shirt: SUIT, shortSleeve: false, shorts: DEEP, shoes: 0xf4f4ea });
+  h.group.scale.setScalar(1.12);
+  // The suit, not the person: the merged torso (hips, chest, shoulders) and the head sit entirely
+  // inside the shells below, so drawing them is two draw calls of geometry nobody can see.
+  // `_dressParts.headMesh` is the only named handle on that merged head; `h.head.children[0]` would
+  // work today but stops being the human's head the moment anything else is parented there first.
+  (h.group.children[0] as THREE.Mesh).visible = false;
+  h._dressParts.headMesh.visible = false;
+  if (h.hair) h.hair.visible = false;
+
+  // ---- the head shell, in the head's own frame (its origin is the base of the skull, hipY + 0.77).
+  // Pushed 10 cm forward of that origin so the back of the skull clears the dorsal fin on the body.
+  const hb = new GeoBatch(false, SUIT_LIFT);
+  hb.ball(0, 0.04, 0.1, 0.33, SUIT, 0.94, 14);           // skull
+  hb.ball(0, 0.12, -0.02, 0.3, DEEP, 0.86, 12);          // darker crown, so the head is not one flat colour
+  hb.ball(0, -0.13, 0.18, 0.26, PALE, 0.6, 12);          // pale throat under the jaw
+  hb.ball(0, -0.06, 0.28, 0.21, SUIT, 0.8, 12);          // the snout, carrying the mouth out past the skull
+  // the mouth: a lip ring standing PROUD of the snout, with a dark disc recessed inside it. An
+  // actual hole is not available — these are opaque overlapping balls — so the mouth has to be a
+  // muzzle that sticks out far enough for the dark inside to clear every surface behind it.
+  // 0.52, not 0.46: at 0.46 the dark disc sat INSIDE the snout ball (whose nose reaches 0.49) and
+  // the mouth came out as a ring of lips round a patch of blue face
+  hb.cyl(0, -0.11, 0.52, 0.15, 0.15, 0.08, THROAT, 12, { rx: Math.PI / 2 });
+  // ten fat overlapping balls, not fourteen small ones: at r 0.06 the ring read as a string of beads
+  for (let k = 0; k < 10; k++) {
+    const a = (k / 10) * Math.PI * 2;
+    hb.ball(Math.cos(a) * 0.19, -0.07 + Math.sin(a) * 0.18, 0.52, 0.095, LIP, 1, 8);
   }
-  hb.box(0, 0.3, -0.04, 0.02, 0.2, 0.26, 0x1a3f86, { rx: -0.35 }); // the sail
-  hb.box(0, 0.23, 0.07, 0.02, 0.08, 0.08, 0x1a3f86);
-  const hm = new THREE.Mesh(hb.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55 }));
-  h.head.add(hm);
-  // a tail fin on the back, because a suit with no tail is a costume and one with a tail is a mascot
-  const tb = new GeoBatch(false, 1.3);
-  tb.box(0, h.hipY + 0.05, -0.24, 0.03, 0.26, 0.12, 0x14335a, { rx: 0.3 });
-  tb.box(0, h.hipY + 0.2, -0.28, 0.03, 0.22, 0.1, 0x1f6fb0, { rx: -0.35 });
-  tb.box(0, h.hipY - 0.1, -0.24, 0.03, 0.22, 0.1, 0x1f6fb0, { rx: 0.7 });
-  h.group.add(new THREE.Mesh(tb.build(), hm.material));
+  for (const sx of [-1, 1]) hb.box(sx * 0.06, 0.05, 0.56, 0.06, 0.055, 0.03, 0xfbf6e8); // two daft front teeth
+  hb.box(0, 0.34, -0.02, 0.05, 0.24, 0.3, DEEP, { rx: -0.3 });  // the crest, where a real fish's first dorsal starts
+  // googly eyes: a white ball bulging out past the side of the head, on a dark rim that reads as a lid
+  for (const sx of [-1, 1]) {
+    hb.ball(sx * 0.21, 0.13, 0.17, 0.165, DEEP, 1, 10);
+    hb.ball(sx * 0.235, 0.13, 0.18, 0.15, 0xfbfbf4, 1, 12);
+    // gill plates: three to a side, raked back, in the pale colour so they read at 5 m instead of
+    // disappearing into the blue of the head the way a darker set did
+    for (let k = 0; k < 3; k++) hb.box(sx * (0.305 - k * 0.014), -0.02, 0.0 - k * 0.1, 0.03, 0.3, 0.075, k === 1 ? PALE : DEEP, { ry: sx * 0.22, rz: sx * 0.1 });
+  }
+  const suitMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.62 });
+  const headMesh = new THREE.Mesh(hb.build(), suitMat);
+  h.head.add(headMesh);
+  // the pupils, both on one mesh so the pair can roll together for one draw call
+  const pb = new GeoBatch(false, SUIT_LIFT);
+  for (const sx of [-1, 1]) {
+    pb.ball(sx * 0.35, 0.13, 0.195, 0.065, 0x0d1118, 1, 9);
+    pb.ball(sx * 0.36, 0.165, 0.23, 0.019, 0xffffff, 1, 6);
+  }
+  const pupils = new THREE.Mesh(pb.build(), suitMat);
+  h.head.add(pupils);
+
+  // ---- the body shell, in the figure's own frame (y measured from the floor). A tapering row of
+  // balls, fine enough that the surface reads as one body: the first pass used six and came out a
+  // lumpy pumpkin, and the three "stripe" discs laid over the back made it worse.
+  const hipY = h.hipY, SH = hipY + 0.28;
+  const sb = new GeoBatch(false, SUIT_LIFT);
+  const shell: ReadonlyArray<readonly [number, number]> = [[0.36, 0.2], [0.27, 0.27], [0.17, 0.32], [0.06, 0.36], [-0.06, 0.38], [-0.18, 0.37], [-0.3, 0.32], [-0.41, 0.25], [-0.51, 0.17], [-0.59, 0.11]];
+  for (const [z, r] of shell) sb.ball(0, SH, z, r, SUIT, 1.14, 12);
+  for (const [z, r] of shell) if (r > 0.14) sb.ball(0, SH - r * 0.26, z, r * 0.9, PALE, 0.96, 10); // the belly
+  // a skirt over the hips: without it the thighs come out of the shell bare and the figure reads as
+  // a fish balloon on two naked legs rather than as a suit
+  for (const [y, r] of [[hipY - 0.02, 0.31], [hipY - 0.16, 0.27], [hipY - 0.28, 0.22]] as const) sb.ball(0, y, 0.02, r, DEEP, 0.82, 10);
+  // The dorsal: it has to start behind the head (the skull's back face is at z = -0.23) but ALSO
+  // reach that far forward, because the shell is already curving away by z = -0.4 and the first
+  // pass, two pieces from -0.38 back, read as a flag planted a hand's width off his back.
+  sb.box(0, SH + 0.36, -0.28, 0.06, 0.24, 0.2, DEEP, { rx: 0.2 });
+  sb.box(0, SH + 0.5, -0.43, 0.06, 0.3, 0.22, DEEP, { rx: 0.42 });
+  sb.box(0, SH + 0.62, -0.57, 0.06, 0.22, 0.18, SUIT, { rx: 0.68 });
+  // The tail: a peduncle long enough to actually touch the body, then four tapering pieces fanned
+  // off the end of it. Two big lobes instead read as a pair of boards nailed to his back.
+  sb.box(0, SH, -0.68, 0.13, 0.2, 0.26, DEEP);
+  for (const s of [1, -1]) {
+    sb.box(0, SH + s * 0.14, -0.86, 0.08, 0.26, 0.22, SUIT, { rx: -s * 0.35 });
+    sb.box(0, SH + s * 0.3, -0.96, 0.07, 0.26, 0.18, DEEP, { rx: -s * 0.6 });
+  }
+  h.group.add(new THREE.Mesh(sb.build(), suitMat));
+
+  // ---- the pectoral fins: a fan of five rays, parked on the hands in `update` rather than parented
+  // to them, because `pose()` rewrites each hand's scale (0.95, 1.9, 0.6) every frame and a child
+  // would inherit that squash
+  const fb = new GeoBatch(false, SUIT_LIFT);
+  // The fan is centred ON the hand rather than hung off the end of it, so it sheathes the forearm:
+  // a bare arm cylinder sticking out of a fish suit was the loudest wrong note in the first capture.
+  for (let k = -2; k <= 2; k++) fb.box(0, 0.0, 0, 0.05, 0.46 - Math.abs(k) * 0.07, 0.04, k % 2 ? PALE : SUIT, { rz: k * 0.17 });
+  const finGeo = fb.build();
+  const fins = [0, 1].map(() => { const m = new THREE.Mesh(finGeo, suitMat); h.group.add(m); return m; });
+
+  // pacing state: `t` is a clock, not a delta, so the gait phase is integrated from the one frame gap
+  // we can see. See the header for why the phase is driven by distance rather than by time.
+  const W = (Math.PI * 2) / MASCOT_BEAT;
+  let lastT = -1, gait = Math.PI;
   return {
     human: h,
     update(t) {
-      // waving: the right hand up and swinging, the left on his hip. Slow: he has been doing it since nine.
-      const w = Math.sin(t * 3.2);
-      h.pose(_a.set(-0.25, h.hipY + 0.2, 0.0), _b.set(0.3 + w * 0.08, h.hipY + 0.95 + Math.abs(w) * 0.04, 0.12));
+      const dt = lastT < 0 ? 0 : Math.min(0.1, Math.max(0, t - lastT));
+      lastT = t;
+      const u = npc.at.u + MASCOT_PACE * Math.sin(W * t);
+      const speed = Math.abs(MASCOT_PACE * W * Math.cos(W * t));
+      const amt = Math.max(0.4, Math.min(1.1, speed / 0.45));
+      gait += (dt * speed * Math.PI * 2) / (1.2 * amt); // 1.2 m of ground per stride cycle at amount 1
+      const bob = animateGait(h, gait, amt);
+      // waving: the right fin up and swinging, the left out to the side. Slow: he has been at it since nine.
+      const wv = Math.sin(t * 2.6);
+      // both targets are OUTSIDE the shell (radius 0.38 at the waist, and the head is 0.33 across):
+      // the first pass rested the left hand at x -0.34 and buried that whole arm inside his own belly
+      // Both targets are OUTSIDE the shell (0.38 at the waist) and clear of the head (0.33 across,
+      // centred 0.10 forward): the first pass rested the left hand inside his own belly and swung
+      // the right one straight through his face, which from three metres read as a baton.
+      h.pose(_a.set(-0.46, hipY + 0.18, 0.26), _b.set(0.54 + wv * 0.06, hipY + 0.72 + Math.abs(wv) * 0.1, 0.3));
+      fins.forEach((f, i) => { f.position.copy(h.hands[i].position); f.quaternion.copy(h.hands[i].quaternion); });
+      // ry 0 faces the door (the interior frame has z = -v), so saturating the facing on the
+      // direction of travel means he turns to greet the room at each end of the beat and goes
+      // side-on in the middle of it
+      h.group.rotation.y = (Math.PI / 2) * Math.max(-1, Math.min(1, Math.cos(W * t) * 2.4));
+      h.group.position.set(u, baseY + bob, Zf(npc.at.v));
+      // the eyes roll, a beat behind the head swivel they are mounted on
+      pupils.position.set(Math.sin(t * 1.9) * 0.022, Math.sin(t * 1.3 + 1) * 0.016 - 0.004, 0);
     },
   };
 }
@@ -287,7 +408,7 @@ function punter(i: number): Built {
 export function makeCasinoPerson(npc: CasinoNpc, baseY: number): CasinoPerson {
   const n = Number(/(\d+)$/.exec(npc.id)?.[1] ?? 0);
   const b = npc.look === 'dealer' ? dealer(npc.variant) : npc.look === 'cashier' ? cashier(npc.variant)
-    : npc.look === 'pitboss' ? pitboss() : npc.look === 'mascot' ? mascot() : punter(npc.variant + n);
+    : npc.look === 'pitboss' ? pitboss() : npc.look === 'mascot' ? mascot(npc, baseY) : punter(npc.variant + n);
   const g = b.human.group;
   g.position.set(npc.at.u, baseY, Zf(npc.at.v));
   const ry = Math.atan2(Math.cos(npc.at.yaw), -Math.sin(npc.at.yaw));
