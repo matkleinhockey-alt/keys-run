@@ -11,8 +11,10 @@
  * that travels further is a look and never fires, and the look rig applies no rotation while the
  * press is still undecided so a tap does not disturb the aim it is about to shoot along.
  *
- * DRAW is hold-R (or the touch draw button): reloading is the player hauling the bands back by
- * hand (sim/spear.ts `stepReload`), not a timer, so it needs an input that stays held.
+ * DRAW is a PRESS of R (or a tap of the touch draw button), not a hold. Reloading is still the
+ * player hauling the bands back by hand (sim/spear.ts `stepReload`) rather than a timer, but the
+ * haul latches: one press runs it to seated, a second press lets go. Only the key-down edge is
+ * forwarded; `index.ts` owns the latch, because it is the side that knows when the gun is loaded.
  *
  * HAUL reuses the diver's own swim-backward key (S/ArrowDown), exactly the way game/fishing's rod
  * reuses `boatInput.back` as "reel" — holding the same key both nudges the diver backward
@@ -56,7 +58,7 @@ export function bindSpeargunInput(
   };
   const onKeyUp = (e: KeyboardEvent): void => {
     if (e.code === 'KeyS' || e.code === 'ArrowDown') gun.setHauling(false);
-    else if (e.code === 'KeyR') gun.setDrawing(false);
+    // No `setDrawing(false)` on the R release: the haul is latched, not held.
   };
   const onBlur = (): void => { gun.setHauling(false); gun.setDrawing(false); g = null; };
   window.addEventListener('keydown', onKeyDown);
@@ -87,7 +89,11 @@ export function bindSpeargunInput(
     tdDraw?.classList.add('on');
     gun.setDrawing(true);
   };
-  const onDrawUp = (): void => { tdDraw?.classList.remove('on'); gun.setDrawing(false); };
+  // Releasing the button does not let go of the bands — the haul is latched (see this file's
+  // header). The button's `on` class tracks the finger, so `index.ts` owning the latch means the
+  // two can disagree for a frame; that is cosmetic and better than a touch player having to hold
+  // a button down through a four-second haul while also swimming.
+  const onDrawUp = (): void => { tdDraw?.classList.remove('on'); };
   tdFire?.addEventListener('pointerdown', onFireTap);
   tdHaul?.addEventListener('pointerdown', onHaulDown);
   tdHaul?.addEventListener('pointerup', onHaulUp);

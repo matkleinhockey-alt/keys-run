@@ -162,6 +162,15 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
   let speared: Speared | null = null;
   let hauling = false;
   let drawing = false;
+  /**
+   * R is a LATCH, not a hold. Hauling the bands back is still a real act in the sim — it takes
+   * time, kicking costs leverage, and a half-drawn gun slips back a notch — but the player should
+   * not have to keep a key pressed through it. One press starts the haul and it runs to seated
+   * (or until something takes the hands away: a shot, a fish on, a blackout, holstering).
+   * Pressing again mid-haul lets go, which is the only way back to the old behaviour and is also
+   * what you want if you would rather swim.
+   */
+  let drawLatched = false;
 
   /** Target id the most recent shot's assist locked onto — see `assistTargetId`. */
   let lastAssist: string | number | null = null;
@@ -225,7 +234,12 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
   }
 
   function setHauling(v: boolean): void { hauling = v; }
-  function setDrawing(v: boolean): void { drawing = v; }
+  /** `v` is the key/button going DOWN. The release is ignored — see `drawLatched`. */
+  function setDrawing(v: boolean): void {
+    if (!v) return;
+    drawLatched = !drawLatched;
+    drawing = drawLatched;
+  }
   function getReloadState(): { loaded: boolean; draw: number; recoverLeft: number } {
     return { loaded: canFire(gun), draw: gun.draw, recoverLeft: gun.reloadT };
   }
@@ -275,6 +289,10 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
     // near-floor boundary layer can make the true drift smaller, never larger, so this only ever
     // under-subtracts) — otherwise sitting in a 0.9 m/s stream would slow every reload.
     const kickSpeed = Math.max(0, (diver.speed ?? 0) - 0.75 * water.speed);
+    // The latch drops itself: when the gun is seated there is nothing left to haul, and when the
+    // hands are busy (a shot in flight, a fish on, blacked out) the haul was going to be ignored
+    // anyway — leaving the latch set would silently resume it later.
+    if (drawLatched && (canFire(gun) || !handsFree)) { drawLatched = false; drawing = false; }
     const hand = { drawing: drawing && handsFree, speed: kickSpeed };
     // Gear-scaled draw: the band gun and the reel conversion make the hauled phase quicker
     // (sim/shop.ts's `spearReloadMul`). No gear = 1 = exactly the stock reload.
@@ -359,7 +377,7 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
 
   function reset(): void {
     shot = null;
-    drawing = false;
+    drawing = false; drawLatched = false;
     reloadHint.hide();
     shaftVisual.setVisible(false);
     speredVisual.vanish();
@@ -368,7 +386,7 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
 
   function setViewVisible(v: boolean): void {
     gunVM.group.visible = v;
-    if (!v) { drawing = false; reloadHint.hide(); }
+    if (!v) { drawing = false; drawLatched = false; reloadHint.hide(); }
   }
 
   function debugForceReloadReady(): void { gun = createGun(); }

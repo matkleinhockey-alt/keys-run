@@ -1,6 +1,6 @@
 /**
  * The reload prompt: a small bar low-centre that says what the player's hands have to do next
- * ("brace" while the gun recovers, "hold R" to haul the bands, a fill for how far they are
+ * ("brace" while the gun recovers, "press R" to haul the bands, a fill for how far they are
  * drawn). Reloading used to be an invisible 2.5 s timer, so nothing on screen told you it was
  * happening or that you could change how long it took; now it is an act, and acts need a
  * read-out. Inline styles on purpose: a one-element overlay that only exists while diving does
@@ -50,7 +50,7 @@ export function createReloadHint(): ReloadHint {
     let text: string;
     if (recoverLeft > 0) text = 'Bracing the gun…';
     else if (view.drawing) text = view.effort < 0.7 ? 'Hold still — kicking costs you leverage' : 'Hauling the bands…';
-    else text = 'Hold R — haul the bands back';
+    else text = 'Press R — haul the bands back';
     if (text !== lastText) { label.textContent = text; lastText = text; }
     fill.style.width = (view.draw * 100).toFixed(1) + '%';
     root.style.opacity = flash > 0 ? '1' : '0.86';

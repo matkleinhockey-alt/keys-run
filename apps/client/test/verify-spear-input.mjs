@@ -6,7 +6,7 @@
  *     and must NOT turn the view; a jittery 3 px click still fires; a right-button press does
  *     neither.
  *  2. reload is an act: after a shot the gun does not reload by itself (draw stays 0 with the hand
- *     off), holding R advances the draw after the brace phase, and the gun is only loaded once the
+ *     off), one press of R advances the draw after the brace phase, and the gun is only loaded once the
  *     draw completes. Screenshots at brace / mid-draw / loaded.
  *
  * Usage: CLIENT_URL=http://localhost:5192 node test/verify-spear-input.mjs <out-subdir>
@@ -124,8 +124,10 @@ await page.waitForTimeout(25000);
 const idle = await reload();
 check('with hands off the bands the gun does NOT reload by itself', !idle.loaded && idle.draw === 0, JSON.stringify(idle));
 
-// hand ON: R held
-await page.keyboard.down('KeyR');
+// hand ON: ONE PRESS of R, released immediately. The haul is latched (entities/speargun/index.ts),
+// so it must run all the way to seated with nothing held down — that is the whole point of the
+// change, and a harness that kept the key down would pass either way and prove nothing.
+await page.keyboard.press('KeyR');
 let mid = null, snaps = 0;
 const t0 = Date.now();
 const samples = [];
@@ -136,9 +138,8 @@ while (Date.now() - t0 < 150000) {
   if (!mid && s.draw > 0.3 && s.draw < 0.9) { mid = s; await page.screenshot({ path: `${OUT}/03-mid-draw.png` }); }
   if (s.loaded) break;
 }
-await page.keyboard.up('KeyR');
 console.log('draw samples (real s, draw):', JSON.stringify(samples));
-check('holding R draws the bands to loaded', (await reload()).loaded, '');
+check('ONE press of R draws the bands to loaded, with the key released', (await reload()).loaded, '');
 check('a mid-draw state was observed (not an instant load)', !!mid, JSON.stringify(mid));
 await page.waitForTimeout(1200);
 await page.screenshot({ path: `${OUT}/04-loaded.png` });
