@@ -1,0 +1,1560 @@
+{
+  "wallMinutes": 19.6,
+  "aggregate": {
+    "attempts": {
+      "casts": 12,
+      "bites": 4,
+      "strikes_missed": 0,
+      "fightsStarted": 4,
+      "landed": 4,
+      "lost": 0
+    },
+    "biteRate_pctOfCastsThatBit": 33.3,
+    "meanBiteWaitSimSec": 10.39,
+    "meanReactionSimSec_budget1p4": 0.04,
+    "fightWinPct": 100,
+    "lossReasons": {},
+    "meanFightSimSec": 8.89,
+    "meanCycleSimSec": 20.14,
+    "catchesPerSimMinuteOfFishing": 2.98,
+    "speciesLanded": {
+      "Lane Snapper": 1,
+      "Blue Runner": 1,
+      "Great Barracuda": 1,
+      "Blackfin Tuna": 1
+    },
+    "distinctSpeciesLanded": 4,
+    "pointsPerCatch": 80.5,
+    "pointsRange": [
+      16,
+      218
+    ],
+    "byZone": {
+      "Hawk Channel": {
+        "landed": [
+          "Lane Snapper 2.9lb",
+          "Blue Runner 1lb"
+        ],
+        "lost": 0,
+        "meanBiteWait": 10
+      },
+      "Reef": {
+        "landed": [
+          "Great Barracuda 6.5lb"
+        ],
+        "lost": 0,
+        "meanBiteWait": 12.4
+      },
+      "Gulf Stream": {
+        "landed": [
+          "Blackfin Tuna 24.2lb"
+        ],
+        "lost": 0,
+        "meanBiteWait": 9.15
+      }
+    },
+    "dive": {
+      "diveCount": 1,
+      "startAirPct": 94,
+      "mustSurfaceAtSimSec": null,
+      "depthAtWarnM": null,
+      "warnText": null,
+      "airSeries": [
+        {
+          "sim": 0.1,
+          "air": 93,
+          "depth": 1.7
+        },
+        {
+          "sim": 3.3,
+          "air": 100,
+          "depth": 0.1
+        },
+        {
+          "sim": 7.9,
+          "air": 100,
+          "depth": 0
+        },
+        {
+          "sim": 8.8,
+          "air": 100,
+          "depth": 0
+        },
+        {
+          "sim": 9.1,
+          "air": 100,
+          "depth": 0
+        }
+      ]
+    },
+    "spear": {
+      "shots": 9,
+      "hits": 9,
+      "landed": 2,
+      "hitRatePct": 100,
+      "hitsByAimError": {
+        "0": {
+          "shots": 3,
+          "hits": 3
+        },
+        "0.12": {
+          "shots": 3,
+          "hits": 3
+        },
+        "0.25": {
+          "shots": 3,
+          "hits": 3
+        }
+      },
+      "reloadSimSec_analytic": 2.5,
+      "censusSamples": 9,
+      "censusSamplesWithAnyTargetInRange": 9,
+      "meanTargetsInRange": 41.67,
+      "speciesSeenAsTargets": [
+        "schoolmaster",
+        "bluerunner",
+        "yellowtail",
+        "grouper"
+      ]
+    },
+    "novelty": [
+      {
+        "session": "drive",
+        "totalSimSec": 18.9,
+        "newThingCount": 0,
+        "longestStretchWithNothingNewSimSec": 18.9,
+        "newThings": []
+      },
+      {
+        "session": "hawk",
+        "totalSimSec": 41,
+        "newThingCount": 2,
+        "longestStretchWithNothingNewSimSec": 21.1,
+        "newThings": [
+          [
+            19.9,
+            "catch:Lane Snapper"
+          ],
+          [
+            41,
+            "catch:Blue Runner"
+          ]
+        ]
+      },
+      {
+        "session": "reef",
+        "totalSimSec": 23.8,
+        "newThingCount": 1,
+        "longestStretchWithNothingNewSimSec": 23.8,
+        "newThings": [
+          [
+            23.8,
+            "catch:Great Barracuda"
+          ]
+        ]
+      },
+      {
+        "session": "offshore",
+        "totalSimSec": 21.9,
+        "newThingCount": 1,
+        "longestStretchWithNothingNewSimSec": 21.9,
+        "newThings": [
+          [
+            21.9,
+            "catch:Blackfin Tuna"
+          ]
+        ]
+      },
+      {
+        "session": "dive",
+        "totalSimSec": 14.8,
+        "newThingCount": 3,
+        "longestStretchWithNothingNewSimSec": 6.6,
+        "newThings": [
+          [
+            1.5,
+            "overboard"
+          ],
+          [
+            8.1,
+            "spear-catch:Schoolmaster Snapper"
+          ],
+          [
+            12.2,
+            "spear-catch:Blue Runner"
+          ]
+        ]
+      },
+      {
+        "session": "meta",
+        "totalSimSec": 3.1,
+        "newThingCount": 1,
+        "longestStretchWithNothingNewSimSec": 3.1,
+        "newThings": [
+          [
+            3.1,
+            "weigh-in"
+          ]
+        ]
+      }
+    ],
+    "simPerWall": {
+      "drive": 0.14,
+      "hawk": 0.07,
+      "reef": 0.02,
+      "offshore": 0.01,
+      "dive": 0.01,
+      "meta": 0.01
+    },
+    "timeline": [
+      {
+        "type": "boot",
+        "wall": 11.3,
+        "sim": 0.9,
+        "bootWallSec": 11.3,
+        "boatsOffered": 8,
+        "novel": false,
+        "session": "drive"
+      },
+      {
+        "type": "boot",
+        "wall": 20.3,
+        "sim": 1,
+        "bootWallSec": 20.3,
+        "boatsOffered": 8,
+        "novel": false,
+        "session": "hawk"
+      },
+      {
+        "type": "arrive",
+        "wall": 28.5,
+        "sim": 2.1,
+        "zone": "Hawk Channel",
+        "novel": false,
+        "session": "hawk"
+      },
+      {
+        "type": "boot",
+        "wall": 58.7,
+        "sim": 0.8,
+        "bootWallSec": 58.7,
+        "boatsOffered": 8,
+        "novel": false,
+        "session": "reef"
+      },
+      {
+        "type": "arrive",
+        "wall": 67.5,
+        "sim": 1.5,
+        "zone": "Reef",
+        "novel": false,
+        "session": "reef"
+      },
+      {
+        "type": "boot",
+        "wall": 88,
+        "sim": 0.8,
+        "bootWallSec": 87.9,
+        "boatsOffered": 8,
+        "novel": false,
+        "session": "offshore"
+      },
+      {
+        "type": "arrive",
+        "wall": 97.5,
+        "sim": 1.3,
+        "zone": "Offshore",
+        "novel": false,
+        "session": "offshore"
+      },
+      {
+        "type": "boot",
+        "wall": 125.8,
+        "sim": 0.9,
+        "bootWallSec": 125.8,
+        "boatsOffered": 8,
+        "novel": false,
+        "session": "dive"
+      },
+      {
+        "type": "bite",
+        "wall": 136.5,
+        "sim": 11.8,
+        "waitSimSec": 8.8,
+        "novel": false,
+        "session": "hawk"
+      },
+      {
+        "type": "boot",
+        "wall": 149.9,
+        "sim": 0.9,
+        "bootWallSec": 149.9,
+        "boatsOffered": 8,
+        "novel": false,
+        "session": "meta"
+      },
+      {
+        "type": "drive-summary",
+        "wall": 178.4,
+        "sim": 18.9,
+        "metres": 538,
+        "topMs": 39.16,
+        "zoneAtEnd": "Hawk Channel",
+        "novel": false,
+        "session": "drive"
+      },
+      {
+        "type": "overboard",
+        "wall": 198.5,
+        "sim": 1.5,
+        "novel": true,
+        "session": "dive"
+      },
+      {
+        "type": "weigh-in",
+        "wall": 273.8,
+        "sim": 3.1,
+        "marina": "Boot Key Harbor City Marina",
+        "scoreDelta": 534,
+        "toast": "Weighed in 3 fish (89 lb) at Boot Key Harbor City Marina. Top fish: Black Grouper, 55.0 lb. +534 points!",
+        "novel": true,
+        "session": "meta"
+      },
+      {
+        "type": "spear-shot",
+        "wall": 307.3,
+        "sim": 5.7,
+        "n": 0,
+        "err": 0,
+        "hit": true,
+        "outcome": "torn-free",
+        "sp": "schoolmaster",
+        "novel": false,
+        "session": "dive"
+      },
+      {
+        "type": "bite",
+        "wall": 319.4,
+        "sim": 11.2,
+        "waitSimSec": 9.15,
+        "novel": false,
+        "session": "offshore"
+      },
+      {
+        "type": "catch",
+        "wall": 322.7,
+        "sim": 19.9,
+        "species": "Lane Snapper",
+        "lb": 2.9,
+        "pts": 49,
+        "fightSimSec": 7.95,
+        "cycleSimSec": 17.65,
+        "novel": false,
+        "session": "hawk"
+      },
+      {
+        "type": "bite",
+        "wall": 336.3,
+        "sim": 14.8,
+        "waitSimSec": 12.4,
+        "novel": false,
+        "session": "reef"
+      },
+      {
+        "type": "spear-catch",
+        "wall": 389.4,
+        "sim": 8.1,
+        "species": "Schoolmaster Snapper",
+        "lb": 2.8,
+        "pts": 42,
+        "novel": true,
+        "session": "dive"
+      },
+      {
+        "type": "spear-shot",
+        "wall": 403.3,
+        "sim": 8.6,
+        "n": 1,
+        "err": 0.12,
+        "hit": true,
+        "outcome": "landed",
+        "sp": "schoolmaster",
+        "novel": false,
+        "session": "dive"
+      },
+      {
+        "type": "spear-catch",
+        "wall": 502.5,
+        "sim": 12.2,
+        "species": "Blue Runner",
+        "lb": 2.5,
+        "pts": 41,
+        "novel": true,
+        "session": "dive"
+      },
+      {
+        "type": "spear-shot",
+        "wall": 522.1,
+        "sim": 12.9,
+        "n": 2,
+        "err": 0.25,
+        "hit": true,
+        "outcome": "landed",
+        "sp": "bluerunner",
+        "novel": false,
+        "session": "dive"
+      },
+      {
+        "type": "spear-shot",
+        "wall": 531.1,
+        "sim": 13.2,
+        "n": 3,
+        "err": 0,
+        "hit": true,
+        "outcome": "torn-free",
+        "sp": "bluerunner",
+        "novel": false,
+        "session": "dive"
+      },
+      {
+        "type": "spear-shot",
+        "wall": 541.5,
+        "sim": 13.7,
+        "n": 4,
+        "err": 0.12,
+        "hit": true,
+        "outcome": "torn-free",
+        "sp": "bluerunner",
+        "novel": false,
+        "session": "dive"
+      },
+      {
+        "type": "spear-shot",
+        "wall": 549,
+        "sim": 14.1,
+        "n": 5,
+        "err": 0.25,
+        "hit": true,
+        "outcome": "torn-free",
+        "sp": "bluerunner",
+        "novel": false,
+        "session": "dive"
+      },
+      {
+        "type": "spear-shot",
+        "wall": 553,
+        "sim": 14.3,
+        "n": 6,
+        "err": 0,
+        "hit": true,
+        "outcome": "torn-free",
+        "sp": "schoolmaster",
+        "novel": false,
+        "session": "dive"
+      },
+      {
+        "type": "spear-shot",
+        "wall": 555.7,
+        "sim": 14.4,
+        "n": 7,
+        "err": 0.12,
+        "hit": true,
+        "outcome": "torn-free",
+        "sp": "bluerunner",
+        "novel": false,
+        "session": "dive"
+      },
+      {
+        "type": "spear-shot",
+        "wall": 566,
+        "sim": 14.8,
+        "n": 8,
+        "err": 0.25,
+        "hit": true,
+        "outcome": "torn-free",
+        "sp": "bluerunner",
+        "novel": false,
+        "session": "dive"
+      },
+      {
+        "type": "catch",
+        "wall": 579.5,
+        "sim": 23.8,
+        "species": "Great Barracuda",
+        "lb": 6.5,
+        "pts": 39,
+        "fightSimSec": 8.85,
+        "cycleSimSec": 22.15,
+        "novel": false,
+        "session": "reef"
+      },
+      {
+        "type": "catch",
+        "wall": 604,
+        "sim": 21.9,
+        "species": "Blackfin Tuna",
+        "lb": 24.2,
+        "pts": 218,
+        "fightSimSec": 10.35,
+        "cycleSimSec": 20.5,
+        "novel": false,
+        "session": "offshore"
+      },
+      {
+        "type": "bite",
+        "wall": 624,
+        "sim": 32.6,
+        "waitSimSec": 11.2,
+        "novel": false,
+        "session": "hawk"
+      },
+      {
+        "type": "catch",
+        "wall": 879.2,
+        "sim": 41,
+        "species": "Blue Runner",
+        "lb": 1,
+        "pts": 16,
+        "fightSimSec": 8.4,
+        "cycleSimSec": 20.25,
+        "novel": false,
+        "session": "hawk"
+      }
+    ]
+  },
+  "sessions": [
+    {
+      "name": "drive",
+      "metrics": {
+        "bootWallSec": 11.3,
+        "boatsOnStartScreen": 8,
+        "startScreenBoats": [
+          "RobaloR230Single Mercury Racing 450R · about 52 kn · 1' 7\" d",
+          "Grady-WhiteCanyon 306\"Actively Sinking\"Twin Mercury Racing 4",
+          "Freeman42LRQuad Mercury Racing 450R · about 69 kn · 2' 0\" dr",
+          "Midnight Express43 OpenQuad Mercury Racing 450R · about 70 k",
+          "MTIV42Quad Mercury Racing 450R · about 76 kn · 3' 0\" draftSp",
+          "Yellowfin36 CCTriple Mercury Racing 450R · about 66 kn · 1' ",
+          "Contender32STTwin Mercury Racing 450R · about 61 kn · 1' 8\" ",
+          "Nor-Tech390 SportTwin Mercury Racing 500R · about 82 kn · 2'"
+        ],
+        "simPerWall": 0.14,
+        "framesPerWallSec_sandboxOnly": 3.1,
+        "drive": {
+          "boat": "default start-screen boat (first card)",
+          "start": {
+            "x": -1150,
+            "z": 321
+          },
+          "end": {
+            "x": -1688,
+            "z": 326
+          },
+          "metresCovered": 538,
+          "simSecHoldingThrottle": 15.7,
+          "topSpeedSeen_ms": 39.16,
+          "simSecTo90pctOfSeenTop": 3.3,
+          "zoneAtEnd": "Hawk Channel",
+          "turnRate_radPerSimSec": 0.26,
+          "samples": [
+            {
+              "sim": 0.1,
+              "speed": 0.3,
+              "x": -1150,
+              "z": 321,
+              "h": 1.58
+            },
+            {
+              "sim": 1.6,
+              "speed": 19.82,
+              "x": -1165,
+              "z": 321,
+              "h": 1.58
+            },
+            {
+              "sim": 2.7,
+              "speed": 29.06,
+              "x": -1193,
+              "z": 321,
+              "h": 1.58
+            },
+            {
+              "sim": 3.6,
+              "speed": 33.1,
+              "x": -1221,
+              "z": 322,
+              "h": 1.58
+            },
+            {
+              "sim": 4.3,
+              "speed": 34.94,
+              "x": -1245,
+              "z": 322,
+              "h": 1.58
+            },
+            {
+              "sim": 5.2,
+              "speed": 36.48,
+              "x": -1277,
+              "z": 322,
+              "h": 1.58
+            },
+            {
+              "sim": 5.9,
+              "speed": 37.31,
+              "x": -1304,
+              "z": 322,
+              "h": 1.58
+            },
+            {
+              "sim": 6.7,
+              "speed": 37.89,
+              "x": -1333,
+              "z": 323,
+              "h": 1.58
+            },
+            {
+              "sim": 7.5,
+              "speed": 38.28,
+              "x": -1361,
+              "z": 323,
+              "h": 1.58
+            },
+            {
+              "sim": 8.2,
+              "speed": 38.57,
+              "x": -1390,
+              "z": 323,
+              "h": 1.58
+            },
+            {
+              "sim": 9,
+              "speed": 38.76,
+              "x": -1421,
+              "z": 323,
+              "h": 1.58
+            },
+            {
+              "sim": 9.7,
+              "speed": 38.88,
+              "x": -1448,
+              "z": 324,
+              "h": 1.58
+            },
+            {
+              "sim": 10.4,
+              "speed": 38.95,
+              "x": -1476,
+              "z": 324,
+              "h": 1.58
+            },
+            {
+              "sim": 11,
+              "speed": 39.01,
+              "x": -1499,
+              "z": 324,
+              "h": 1.58
+            },
+            {
+              "sim": 11.6,
+              "speed": 39.06,
+              "x": -1520,
+              "z": 324,
+              "h": 1.58
+            },
+            {
+              "sim": 12.2,
+              "speed": 39.09,
+              "x": -1543,
+              "z": 325,
+              "h": 1.58
+            },
+            {
+              "sim": 12.8,
+              "speed": 39.11,
+              "x": -1567,
+              "z": 325,
+              "h": 1.58
+            },
+            {
+              "sim": 13.2,
+              "speed": 39.13,
+              "x": -1586,
+              "z": 325,
+              "h": 1.58
+            },
+            {
+              "sim": 13.8,
+              "speed": 39.14,
+              "x": -1608,
+              "z": 325,
+              "h": 1.58
+            },
+            {
+              "sim": 14.4,
+              "speed": 39.14,
+              "x": -1632,
+              "z": 325,
+              "h": 1.58
+            },
+            {
+              "sim": 14.8,
+              "speed": 39.15,
+              "x": -1648,
+              "z": 325,
+              "h": 1.58
+            },
+            {
+              "sim": 15.3,
+              "speed": 39.16,
+              "x": -1667,
+              "z": 326,
+              "h": 1.58
+            },
+            {
+              "sim": 15.7,
+              "speed": 39.15,
+              "x": -1683,
+              "z": 326,
+              "h": 1.58
+            }
+          ]
+        }
+      },
+      "events": [
+        {
+          "type": "boot",
+          "wall": 11.3,
+          "sim": 0.9,
+          "bootWallSec": 11.3,
+          "boatsOffered": 8,
+          "novel": false
+        },
+        {
+          "type": "drive-summary",
+          "wall": 178.4,
+          "sim": 18.9,
+          "metres": 538,
+          "topMs": 39.16,
+          "zoneAtEnd": "Hawk Channel",
+          "novel": false
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "hawk",
+      "metrics": {
+        "bootWallSec": 20.3,
+        "boatsOnStartScreen": 8,
+        "startScreenBoats": [
+          "RobaloR230Single Mercury Racing 450R · about 52 kn · 1' 7\" d",
+          "Grady-WhiteCanyon 306\"Actively Sinking\"Twin Mercury Racing 4",
+          "Freeman42LRQuad Mercury Racing 450R · about 69 kn · 2' 0\" dr",
+          "Midnight Express43 OpenQuad Mercury Racing 450R · about 70 k",
+          "MTIV42Quad Mercury Racing 450R · about 76 kn · 3' 0\" draftSp",
+          "Yellowfin36 CCTriple Mercury Racing 450R · about 66 kn · 1' ",
+          "Contender32STTwin Mercury Racing 450R · about 61 kn · 1' 8\" ",
+          "Nor-Tech390 SportTwin Mercury Racing 500R · about 82 kn · 2'"
+        ],
+        "simPerWall": 0.07,
+        "framesPerWallSec_sandboxOnly": 1.4,
+        "rod": {
+          "casts": 4,
+          "records": [
+            {
+              "zone": "Hawk Channel",
+              "n": 0,
+              "outcome": "landed",
+              "castChargeSimSec": 0.75,
+              "castDistM": 48,
+              "biteWaitSimSec": 8.8,
+              "reactionSimSec": 0.05,
+              "fishOnLabel": "Solid fish on",
+              "fightSimSec": 7.95,
+              "peakTensionPct": 84,
+              "species": "Lane Snapper",
+              "weightLb": 2.9,
+              "points": 49,
+              "bonus": "",
+              "meatLine": "",
+              "cardNote": "Release for a 25% conservation bonus, or keep it and weigh in at a marina dock (⚓ on your chart).",
+              "cycleSimSec": 17.65,
+              "keepable": true
+            },
+            {
+              "zone": "Hawk Channel",
+              "n": 1,
+              "outcome": "cast-refused",
+              "toasts": [
+                "Slow under 3 knots to cast."
+              ]
+            },
+            {
+              "zone": "Hawk Channel",
+              "n": 2,
+              "outcome": "landed",
+              "castChargeSimSec": 0.65,
+              "castDistM": 46,
+              "biteWaitSimSec": 11.2,
+              "reactionSimSec": 0,
+              "fishOnLabel": "Fish on",
+              "fightSimSec": 8.4,
+              "peakTensionPct": 86.6,
+              "species": "Blue Runner",
+              "weightLb": 1,
+              "points": 16,
+              "bonus": "",
+              "meatLine": "",
+              "cardNote": "Release for a 25% conservation bonus, or keep it and weigh in at a marina dock (⚓ on your chart).",
+              "cycleSimSec": 20.25,
+              "keepable": true
+            },
+            {
+              "zone": "Hawk Channel",
+              "n": 3,
+              "outcome": "cast-refused",
+              "toasts": [
+                "Slow under 3 knots to cast."
+              ]
+            }
+          ],
+          "firstCatchSimSec": 39.3
+        }
+      },
+      "events": [
+        {
+          "type": "boot",
+          "wall": 20.3,
+          "sim": 1,
+          "bootWallSec": 20.3,
+          "boatsOffered": 8,
+          "novel": false
+        },
+        {
+          "type": "arrive",
+          "wall": 28.5,
+          "sim": 2.1,
+          "zone": "Hawk Channel",
+          "novel": false
+        },
+        {
+          "type": "bite",
+          "wall": 136.5,
+          "sim": 11.8,
+          "waitSimSec": 8.8,
+          "novel": false
+        },
+        {
+          "type": "catch",
+          "wall": 322.7,
+          "sim": 19.9,
+          "species": "Lane Snapper",
+          "lb": 2.9,
+          "pts": 49,
+          "fightSimSec": 7.95,
+          "cycleSimSec": 17.65,
+          "novel": false
+        },
+        {
+          "type": "bite",
+          "wall": 624,
+          "sim": 32.6,
+          "waitSimSec": 11.2,
+          "novel": false
+        },
+        {
+          "type": "catch",
+          "wall": 879.2,
+          "sim": 41,
+          "species": "Blue Runner",
+          "lb": 1,
+          "pts": 16,
+          "fightSimSec": 8.4,
+          "cycleSimSec": 20.25,
+          "novel": false
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "reef",
+      "metrics": {
+        "bootWallSec": 58.7,
+        "boatsOnStartScreen": 8,
+        "startScreenBoats": [
+          "RobaloR230Single Mercury Racing 450R · about 52 kn · 1' 7\" d",
+          "Grady-WhiteCanyon 306\"Actively Sinking\"Twin Mercury Racing 4",
+          "Freeman42LRQuad Mercury Racing 450R · about 69 kn · 2' 0\" dr",
+          "Midnight Express43 OpenQuad Mercury Racing 450R · about 70 k",
+          "MTIV42Quad Mercury Racing 450R · about 76 kn · 3' 0\" draftSp",
+          "Yellowfin36 CCTriple Mercury Racing 450R · about 66 kn · 1' ",
+          "Contender32STTwin Mercury Racing 450R · about 61 kn · 1' 8\" ",
+          "Nor-Tech390 SportTwin Mercury Racing 500R · about 82 kn · 2'"
+        ],
+        "simPerWall": 0.02,
+        "framesPerWallSec_sandboxOnly": 0.4,
+        "rod": {
+          "casts": 4,
+          "records": [
+            {
+              "zone": "Reef",
+              "n": 0,
+              "outcome": "landed",
+              "castChargeSimSec": 0.75,
+              "castDistM": 49,
+              "biteWaitSimSec": 12.4,
+              "reactionSimSec": 0.1,
+              "fishOnLabel": "Fish on",
+              "fightSimSec": 8.85,
+              "peakTensionPct": 85.4,
+              "species": "Great Barracuda",
+              "weightLb": 6.5,
+              "points": 39,
+              "bonus": "",
+              "meatLine": "💲 Not sold — ciguatera risk",
+              "cardNote": "Release for a 25% conservation bonus, or keep it and weigh in at a marina dock (⚓ on your chart).",
+              "cycleSimSec": 22.15,
+              "keepable": true
+            },
+            {
+              "zone": "Reef",
+              "n": 1,
+              "outcome": "cast-refused",
+              "toasts": [
+                "Slow under 3 knots to cast."
+              ]
+            },
+            {
+              "zone": "Reef",
+              "n": 2,
+              "outcome": "no-bite-timeout",
+              "castChargeSimSec": 0.75,
+              "castDistM": 49
+            },
+            {
+              "zone": "Reef",
+              "n": 3,
+              "outcome": "cast-refused",
+              "toasts": [
+                "Too early! You pulled the bait away from the fish."
+              ]
+            }
+          ],
+          "firstCatchSimSec": 34.4
+        }
+      },
+      "events": [
+        {
+          "type": "boot",
+          "wall": 58.7,
+          "sim": 0.8,
+          "bootWallSec": 58.7,
+          "boatsOffered": 8,
+          "novel": false
+        },
+        {
+          "type": "arrive",
+          "wall": 67.5,
+          "sim": 1.5,
+          "zone": "Reef",
+          "novel": false
+        },
+        {
+          "type": "bite",
+          "wall": 336.3,
+          "sim": 14.8,
+          "waitSimSec": 12.4,
+          "novel": false
+        },
+        {
+          "type": "catch",
+          "wall": 579.5,
+          "sim": 23.8,
+          "species": "Great Barracuda",
+          "lb": 6.5,
+          "pts": 39,
+          "fightSimSec": 8.85,
+          "cycleSimSec": 22.15,
+          "novel": false
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "offshore",
+      "metrics": {
+        "bootWallSec": 87.9,
+        "boatsOnStartScreen": 8,
+        "startScreenBoats": [
+          "RobaloR230Single Mercury Racing 450R · about 52 kn · 1' 7\" d",
+          "Grady-WhiteCanyon 306\"Actively Sinking\"Twin Mercury Racing 4",
+          "Freeman42LRQuad Mercury Racing 450R · about 69 kn · 2' 0\" dr",
+          "Midnight Express43 OpenQuad Mercury Racing 450R · about 70 k",
+          "MTIV42Quad Mercury Racing 450R · about 76 kn · 3' 0\" draftSp",
+          "Yellowfin36 CCTriple Mercury Racing 450R · about 66 kn · 1' ",
+          "Contender32STTwin Mercury Racing 450R · about 61 kn · 1' 8\" ",
+          "Nor-Tech390 SportTwin Mercury Racing 500R · about 82 kn · 2'"
+        ],
+        "simPerWall": 0.01,
+        "framesPerWallSec_sandboxOnly": 0.2,
+        "rod": {
+          "casts": 4,
+          "records": [
+            {
+              "zone": "Gulf Stream",
+              "n": 0,
+              "outcome": "landed",
+              "castChargeSimSec": 0.7,
+              "castDistM": 49,
+              "biteWaitSimSec": 9.15,
+              "reactionSimSec": 0,
+              "fishOnLabel": "Solid fish on",
+              "fightSimSec": 10.35,
+              "peakTensionPct": 89.6,
+              "species": "Blackfin Tuna",
+              "weightLb": 24.2,
+              "points": 218,
+              "bonus": "",
+              "meatLine": "💲 $10/lb fillets · ~10.2 lb of meat ≈ $102",
+              "cardNote": "Release for a 25% conservation bonus, or keep it and weigh in at a marina dock (⚓ on your chart).",
+              "cycleSimSec": 20.5,
+              "keepable": true
+            },
+            {
+              "zone": "Gulf Stream",
+              "n": 1,
+              "outcome": "cast-refused",
+              "toasts": [
+                "Slow under 3 knots to cast."
+              ]
+            },
+            {
+              "zone": "Gulf Stream",
+              "n": 2,
+              "outcome": "no-bite-timeout",
+              "castChargeSimSec": 0.7,
+              "castDistM": 49
+            },
+            {
+              "zone": "Gulf Stream",
+              "n": 3,
+              "outcome": "cast-refused",
+              "toasts": [
+                "Too early! You pulled the bait away from the fish."
+              ]
+            }
+          ],
+          "firstCatchSimSec": 31.7
+        }
+      },
+      "events": [
+        {
+          "type": "boot",
+          "wall": 88,
+          "sim": 0.8,
+          "bootWallSec": 87.9,
+          "boatsOffered": 8,
+          "novel": false
+        },
+        {
+          "type": "arrive",
+          "wall": 97.5,
+          "sim": 1.3,
+          "zone": "Offshore",
+          "novel": false
+        },
+        {
+          "type": "bite",
+          "wall": 319.4,
+          "sim": 11.2,
+          "waitSimSec": 9.15,
+          "novel": false
+        },
+        {
+          "type": "catch",
+          "wall": 604,
+          "sim": 21.9,
+          "species": "Blackfin Tuna",
+          "lb": 24.2,
+          "pts": 218,
+          "fightSimSec": 10.35,
+          "cycleSimSec": 20.5,
+          "novel": false
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "dive",
+      "metrics": {
+        "bootWallSec": 125.8,
+        "boatsOnStartScreen": 8,
+        "startScreenBoats": [
+          "RobaloR230Single Mercury Racing 450R · about 52 kn · 1' 7\" d",
+          "Grady-WhiteCanyon 306\"Actively Sinking\"Twin Mercury Racing 4",
+          "Freeman42LRQuad Mercury Racing 450R · about 69 kn · 2' 0\" dr",
+          "Midnight Express43 OpenQuad Mercury Racing 450R · about 70 k",
+          "MTIV42Quad Mercury Racing 450R · about 76 kn · 3' 0\" draftSp",
+          "Yellowfin36 CCTriple Mercury Racing 450R · about 66 kn · 1' ",
+          "Contender32STTwin Mercury Racing 450R · about 61 kn · 1' 8\" ",
+          "Nor-Tech390 SportTwin Mercury Racing 500R · about 82 kn · 2'"
+        ],
+        "simPerWall": 0.01,
+        "framesPerWallSec_sandboxOnly": 0.2,
+        "dive": {
+          "diveCount": 1,
+          "startAirPct": 94,
+          "mustSurfaceAtSimSec": null,
+          "depthAtWarnM": null,
+          "warnText": null,
+          "airSeries": [
+            {
+              "sim": 0.1,
+              "air": 93,
+              "depth": 1.7
+            },
+            {
+              "sim": 3.3,
+              "air": 100,
+              "depth": 0.1
+            },
+            {
+              "sim": 7.9,
+              "air": 100,
+              "depth": 0
+            },
+            {
+              "sim": 8.8,
+              "air": 100,
+              "depth": 0
+            },
+            {
+              "sim": 9.1,
+              "air": 100,
+              "depth": 0
+            }
+          ]
+        },
+        "spear": {
+          "shots": 9,
+          "hits": 9,
+          "landed": 2,
+          "hitRatePct": 100,
+          "hitsByAimError": {
+            "0": {
+              "shots": 3,
+              "hits": 3
+            },
+            "0.12": {
+              "shots": 3,
+              "hits": 3
+            },
+            "0.25": {
+              "shots": 3,
+              "hits": 3
+            }
+          },
+          "reloadSimSec_analytic": 2.5,
+          "censusSamples": 9,
+          "censusSamplesWithAnyTargetInRange": 9,
+          "meanTargetsInRange": 41.67,
+          "speciesSeenAsTargets": [
+            "schoolmaster",
+            "bluerunner",
+            "yellowtail",
+            "grouper"
+          ],
+          "shotRecords": [
+            {
+              "n": 0,
+              "aimErrorRad": 0,
+              "species": "schoolmaster",
+              "targetDistM": 1.45,
+              "hit": true,
+              "assistLockedBeforeShot": false,
+              "fightSimSec": 0.1,
+              "peakTension": 0,
+              "outcome": "torn-free",
+              "toasts": []
+            },
+            {
+              "n": 1,
+              "aimErrorRad": 0.12,
+              "species": "schoolmaster",
+              "targetDistM": 1.45,
+              "hit": true,
+              "assistLockedBeforeShot": true,
+              "fightSimSec": 2.35,
+              "peakTension": 0.83,
+              "outcome": "landed",
+              "landedSpecies": "Schoolmaster Snapper",
+              "weightLb": 2.8,
+              "points": 42
+            },
+            {
+              "n": 2,
+              "aimErrorRad": 0.25,
+              "species": "bluerunner",
+              "targetDistM": 2.41,
+              "hit": true,
+              "assistLockedBeforeShot": true,
+              "fightSimSec": 2.75,
+              "peakTension": 0.84,
+              "outcome": "landed",
+              "landedSpecies": "Blue Runner",
+              "weightLb": 2.5,
+              "points": 41
+            },
+            {
+              "n": 3,
+              "aimErrorRad": 0,
+              "species": "bluerunner",
+              "targetDistM": 3.01,
+              "hit": true,
+              "assistLockedBeforeShot": true,
+              "fightSimSec": 0.05,
+              "peakTension": 0,
+              "outcome": "torn-free",
+              "toasts": []
+            },
+            {
+              "n": 4,
+              "aimErrorRad": 0.12,
+              "species": "bluerunner",
+              "targetDistM": 3.01,
+              "hit": true,
+              "assistLockedBeforeShot": true,
+              "fightSimSec": 0.15,
+              "peakTension": 0,
+              "outcome": "torn-free",
+              "toasts": []
+            },
+            {
+              "n": 5,
+              "aimErrorRad": 0.25,
+              "species": "bluerunner",
+              "targetDistM": 3.08,
+              "hit": true,
+              "assistLockedBeforeShot": true,
+              "fightSimSec": 0.1,
+              "peakTension": 0,
+              "outcome": "torn-free",
+              "toasts": []
+            },
+            {
+              "n": 6,
+              "aimErrorRad": 0,
+              "species": "schoolmaster",
+              "targetDistM": 3.1,
+              "hit": true,
+              "assistLockedBeforeShot": false,
+              "fightSimSec": 0.1,
+              "peakTension": 0,
+              "outcome": "torn-free",
+              "toasts": []
+            },
+            {
+              "n": 7,
+              "aimErrorRad": 0.12,
+              "species": "bluerunner",
+              "targetDistM": 3.04,
+              "hit": true,
+              "assistLockedBeforeShot": true,
+              "fightSimSec": 0.1,
+              "peakTension": 0,
+              "outcome": "torn-free",
+              "toasts": []
+            },
+            {
+              "n": 8,
+              "aimErrorRad": 0.25,
+              "species": "bluerunner",
+              "targetDistM": 3.03,
+              "hit": true,
+              "assistLockedBeforeShot": true,
+              "fightSimSec": 0.15,
+              "peakTension": 0,
+              "outcome": "torn-free",
+              "toasts": []
+            }
+          ]
+        }
+      },
+      "events": [
+        {
+          "type": "boot",
+          "wall": 125.8,
+          "sim": 0.9,
+          "bootWallSec": 125.8,
+          "boatsOffered": 8,
+          "novel": false
+        },
+        {
+          "type": "overboard",
+          "wall": 198.5,
+          "sim": 1.5,
+          "novel": true
+        },
+        {
+          "type": "spear-shot",
+          "wall": 307.3,
+          "sim": 5.7,
+          "n": 0,
+          "err": 0,
+          "hit": true,
+          "outcome": "torn-free",
+          "sp": "schoolmaster",
+          "novel": false
+        },
+        {
+          "type": "spear-catch",
+          "wall": 389.4,
+          "sim": 8.1,
+          "species": "Schoolmaster Snapper",
+          "lb": 2.8,
+          "pts": 42,
+          "novel": true
+        },
+        {
+          "type": "spear-shot",
+          "wall": 403.3,
+          "sim": 8.6,
+          "n": 1,
+          "err": 0.12,
+          "hit": true,
+          "outcome": "landed",
+          "sp": "schoolmaster",
+          "novel": false
+        },
+        {
+          "type": "spear-catch",
+          "wall": 502.5,
+          "sim": 12.2,
+          "species": "Blue Runner",
+          "lb": 2.5,
+          "pts": 41,
+          "novel": true
+        },
+        {
+          "type": "spear-shot",
+          "wall": 522.1,
+          "sim": 12.9,
+          "n": 2,
+          "err": 0.25,
+          "hit": true,
+          "outcome": "landed",
+          "sp": "bluerunner",
+          "novel": false
+        },
+        {
+          "type": "spear-shot",
+          "wall": 531.1,
+          "sim": 13.2,
+          "n": 3,
+          "err": 0,
+          "hit": true,
+          "outcome": "torn-free",
+          "sp": "bluerunner",
+          "novel": false
+        },
+        {
+          "type": "spear-shot",
+          "wall": 541.5,
+          "sim": 13.7,
+          "n": 4,
+          "err": 0.12,
+          "hit": true,
+          "outcome": "torn-free",
+          "sp": "bluerunner",
+          "novel": false
+        },
+        {
+          "type": "spear-shot",
+          "wall": 549,
+          "sim": 14.1,
+          "n": 5,
+          "err": 0.25,
+          "hit": true,
+          "outcome": "torn-free",
+          "sp": "bluerunner",
+          "novel": false
+        },
+        {
+          "type": "spear-shot",
+          "wall": 553,
+          "sim": 14.3,
+          "n": 6,
+          "err": 0,
+          "hit": true,
+          "outcome": "torn-free",
+          "sp": "schoolmaster",
+          "novel": false
+        },
+        {
+          "type": "spear-shot",
+          "wall": 555.7,
+          "sim": 14.4,
+          "n": 7,
+          "err": 0.12,
+          "hit": true,
+          "outcome": "torn-free",
+          "sp": "bluerunner",
+          "novel": false
+        },
+        {
+          "type": "spear-shot",
+          "wall": 566,
+          "sim": 14.8,
+          "n": 8,
+          "err": 0.25,
+          "hit": true,
+          "outcome": "torn-free",
+          "sp": "bluerunner",
+          "novel": false
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "meta",
+      "metrics": {
+        "bootWallSec": 149.9,
+        "boatsOnStartScreen": 8,
+        "startScreenBoats": [
+          "RobaloR230Single Mercury Racing 450R · about 52 kn · 1' 7\" d",
+          "Grady-WhiteCanyon 306\"Actively Sinking\"Twin Mercury Racing 4",
+          "Freeman42LRQuad Mercury Racing 450R · about 69 kn · 2' 0\" dr",
+          "Midnight Express43 OpenQuad Mercury Racing 450R · about 70 k",
+          "MTIV42Quad Mercury Racing 450R · about 76 kn · 3' 0\" draftSp",
+          "Yellowfin36 CCTriple Mercury Racing 450R · about 66 kn · 1' ",
+          "Contender32STTwin Mercury Racing 450R · about 61 kn · 1' 8\" ",
+          "Nor-Tech390 SportTwin Mercury Racing 500R · about 82 kn · 2'"
+        ],
+        "simPerWall": 0.01,
+        "framesPerWallSec_sandboxOnly": 0.2,
+        "meta": {
+          "score0": 0,
+          "cooler": [
+            {
+              "key": "yellowtail",
+              "lb": 4,
+              "pts": 64,
+              "price": "💲 $14/lb fillets · ~1.7 lb of meat ≈ $24",
+              "note": "Release for a 25% conservation bonus, or keep it and weigh in at a marina dock (⚓ on your chart).",
+              "keepDisabled": false,
+              "scoreDelta": 64
+            },
+            {
+              "key": "mahi",
+              "lb": 30,
+              "pts": 270,
+              "price": "💲 $12/lb fillets · ~12.6 lb of meat ≈ $151",
+              "note": "Release for a 25% conservation bonus, or keep it and weigh in at a marina dock (⚓ on your chart).",
+              "keepDisabled": false,
+              "scoreDelta": 270
+            },
+            {
+              "key": "grouper",
+              "lb": 55,
+              "pts": 440,
+              "price": "💲 $18/lb fillets · ~23.1 lb of meat ≈ $416",
+              "note": "Release for a 25% conservation bonus, or keep it and weigh in at a marina dock (⚓ on your chart).",
+              "keepDisabled": false,
+              "scoreDelta": 440
+            },
+            {
+              "key": "bonefish",
+              "lb": 8,
+              "pts": 240,
+              "price": "💲 Game fish — no commercial sale",
+              "note": "Bonefish are catch-and-release only in Florida.",
+              "keepDisabled": true,
+              "scoreDelta": 300
+            }
+          ],
+          "coolerLabel": "3 fish · 89 lb",
+          "weighIn": {
+            "marina": "Boot Key Harbor City Marina",
+            "scoreDelta": 534,
+            "toast": "Weighed in 3 fish (89 lb) at Boot Key Harbor City Marina. Top fish: Black Grouper, 55.0 lb. +534 points!"
+          },
+          "inWorldBoatChange": {
+            "btnIds": [
+              "btnMarina",
+              "btnSea",
+              "btnSound",
+              "btnMusic",
+              "btnBuddy",
+              "btnSun",
+              "btnRace",
+              "btnCam",
+              "btnQuality",
+              "btnCooler",
+              "btnDive",
+              "reboardHint",
+              "tL",
+              "tR",
+              "tUp",
+              "tDn",
+              "tAct",
+              "tView",
+              "tDock",
+              "tdL",
+              "tdR",
+              "tdUp",
+              "tdDn",
+              "tdAsc",
+              "tdDesc",
+              "tdSprint",
+              "tdFire",
+              "tdHaul",
+              "btnKeep",
+              "btnRelease",
+              "btnCoolerClose",
+              "btnGo",
+              "btnQualityStart"
+            ]
+          },
+          "leaderboard": {
+            "open": true,
+            "rows": [
+              {
+                "empty": true,
+                "text": "Could not reach the leaderboard. Try again later."
+              }
+            ],
+            "sub": ""
+          },
+          "race": {
+            "hud": "29 marks · 2 laps · 12.6 km"
+          }
+        }
+      },
+      "events": [
+        {
+          "type": "boot",
+          "wall": 149.9,
+          "sim": 0.9,
+          "bootWallSec": 149.9,
+          "boatsOffered": 8,
+          "novel": false
+        },
+        {
+          "type": "weigh-in",
+          "wall": 273.8,
+          "sim": 3.1,
+          "marina": "Boot Key Harbor City Marina",
+          "scoreDelta": 534,
+          "toast": "Weighed in 3 fish (89 lb) at Boot Key Harbor City Marina. Top fish: Black Grouper, 55.0 lb. +534 points!",
+          "novel": true
+        }
+      ],
+      "errors": [
+        "Access to fetch at 'http://localhost:8080/leaderboard/overall' from origin 'http://localhost:5191' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested ",
+        "Failed to load resource: net::ERR_FAILED"
+      ]
+    }
+  ],
+  "failed": []
+}

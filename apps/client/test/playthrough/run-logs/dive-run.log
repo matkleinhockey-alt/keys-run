@@ -1,0 +1,39 @@
+[dive] sim 1.6s  boot {"bootWallSec":53.8,"boatsOffered":8}
+[dive] sim 2.1s  overboard {}
+[dive] sim 12.9s  spear-catch {"species":"Schoolmaster Snapper","lb":3,"pts":44}
+[dive] sim 13.6s  spear-shot {"n":0,"err":0,"hit":true,"outcome":"landed","sp":"schoolmaster"}
+[dive] sim 18.3s  spear-shot {"n":1,"err":0.12,"hit":false,"outcome":"miss","sp":"bluerunner"}
+[dive] sim 26s  spear-catch {"species":"Blue Runner","lb":7.1,"pts":114}
+[dive] sim 26.7s  spear-shot {"n":2,"err":0.25,"hit":true,"outcome":"landed","sp":"bluerunner"}
+[dive] sim 32.1s  spear-shot {"n":3,"err":0,"hit":false,"outcome":"miss","sp":"bluerunner"}
+[dive] sim 37.5s  spear-shot {"n":4,"err":0.12,"hit":false,"outcome":"miss","sp":"bluerunner"}
+[dive] sim 42.9s  spear-shot {"n":5,"err":0.25,"hit":false,"outcome":"miss","sp":"bluerunner"}
+[dive] sim 50.5s  spear-catch {"species":"Schoolmaster Snapper","lb":3,"pts":45}
+[dive] sim 51.3s  spear-shot {"n":6,"err":0,"hit":true,"outcome":"landed","sp":"schoolmaster"}
+[dive] sim 51.8s  surface-for-air {"air":19,"diveSimSec":45.8}
+[dive] sim 66.7s  spear-shot {"n":7,"err":0.12,"hit":false,"outcome":"miss","sp":"schoolmaster"}
+[dive] sim 71.5s  spear-shot {"n":8,"err":0.25,"hit":false,"outcome":"miss","sp":"schoolmaster"}
+[dive] sim 79.9s  spear-catch {"species":"Blue Runner","lb":6,"pts":97}
+[dive] sim 80.6s  spear-shot {"n":9,"err":0,"hit":true,"outcome":"landed","sp":"schoolmaster"}
+
+KEYS RUN PLAYTHROUGH  (2026-10-21T23:08:44.490Z)  total wall 24 min; every duration below is SIMULATED seconds
+sim-seconds per wall-second by session: {"dive":0.03}
+
+-- Rod fishing (real keyboard, bang-bang reel) --
+casts 0 -> bites 0 (0%), mean bite wait nulls, mean reaction nulls of 1.4s budget
+fights 0: landed 0, lost 0 (win 0%)  reasons {}  missed strikes 0
+mean fight nulls, mean full cast->card cycle nulls => null catches per simulated minute of fishing
+species landed (0): {}; points/catch mean null range Infinity,-Infinity
+  Hawk Channel: landed [] lost 0  mean bite wait nulls
+  Reef: landed [] lost 0  mean bite wait nulls
+  Gulf Stream: landed [] lost 0  mean bite wait nulls
+
+-- Diving (real J/C/Shift/Space) --
+"Air low" (30%) after 45.8s at 3.5 m; surface-warning text after 45.8s ("Air low — start heading up"); full dive durations [45.8]s; surface+refill 5s; dives made 2
+-- Spear --
+shots 10, hits 4 (40%), landed 4; by aim error {"0":{"shots":4,"hits":3},"0.12":{"shots":3,"hits":0},"0.25":{"shots":3,"hits":1}}; mean targets in range 41.6; census 10/10 samples had a target; reload 2.5s
+
+-- Time between anything new (per session, simulated) --
+dive: 5 new things in 80.6s; longest stretch with nothing new 29.4s
+
+page errors: 0

@@ -1,0 +1,730 @@
+{
+  "wallMinutes": 24,
+  "aggregate": {
+    "attempts": {
+      "casts": 0,
+      "bites": 0,
+      "strikes_missed": 0,
+      "fightsStarted": 0,
+      "landed": 0,
+      "lost": 0
+    },
+    "biteRate_pctOfCastsThatBit": 0,
+    "meanBiteWaitSimSec": null,
+    "meanReactionSimSec_budget1p4": null,
+    "fightWinPct": 0,
+    "lossReasons": {},
+    "meanFightSimSec": null,
+    "meanCycleSimSec": null,
+    "catchesPerSimMinuteOfFishing": null,
+    "speciesLanded": {},
+    "distinctSpeciesLanded": 0,
+    "pointsPerCatch": null,
+    "pointsRange": [
+      null,
+      null
+    ],
+    "byZone": {
+      "Hawk Channel": {
+        "landed": [],
+        "lost": 0,
+        "meanBiteWait": null
+      },
+      "Reef": {
+        "landed": [],
+        "lost": 0,
+        "meanBiteWait": null
+      },
+      "Gulf Stream": {
+        "landed": [],
+        "lost": 0,
+        "meanBiteWait": null
+      }
+    },
+    "dive": {
+      "diveCount": 2,
+      "startAirPct": 94,
+      "airLowAtSimSec": 45.8,
+      "airLowDepthM": 3.5,
+      "diveDurationsSimSec": [
+        45.8
+      ],
+      "surfaceAndRefillSimSec": 5,
+      "mustSurfaceAtSimSec": 45.8,
+      "depthAtWarnM": 3.5,
+      "warnText": "Air low — start heading up",
+      "airSeries": [
+        {
+          "sim": 0.5,
+          "air": 93,
+          "depth": 1.5
+        },
+        {
+          "sim": 12.8,
+          "air": 69,
+          "depth": 3.2
+        },
+        {
+          "sim": 26.6,
+          "air": 58,
+          "depth": 3.4
+        },
+        {
+          "sim": 37.4,
+          "air": 37,
+          "depth": 3.2
+        },
+        {
+          "sim": 0.1,
+          "air": 49,
+          "depth": 2.5
+        },
+        {
+          "sim": 10.1,
+          "air": 29,
+          "depth": 3.3
+        }
+      ]
+    },
+    "spear": {
+      "shots": 10,
+      "hits": 4,
+      "landed": 4,
+      "hitRatePct": 40,
+      "hitsByAimError": {
+        "0": {
+          "shots": 4,
+          "hits": 3
+        },
+        "0.12": {
+          "shots": 3,
+          "hits": 0
+        },
+        "0.25": {
+          "shots": 3,
+          "hits": 1
+        }
+      },
+      "reloadSimSec_analytic": 2.5,
+      "censusSamples": 10,
+      "censusSamplesWithAnyTargetInRange": 10,
+      "meanTargetsInRange": 41.6,
+      "speciesSeenAsTargets": [
+        "schoolmaster",
+        "bluerunner",
+        "yellowtail",
+        "grouper"
+      ]
+    },
+    "novelty": [
+      {
+        "session": "dive",
+        "totalSimSec": 80.6,
+        "newThingCount": 5,
+        "longestStretchWithNothingNewSimSec": 29.4,
+        "newThings": [
+          [
+            2.1,
+            "overboard"
+          ],
+          [
+            12.9,
+            "spear-catch:Schoolmaster Snapper"
+          ],
+          [
+            26,
+            "spear-catch:Blue Runner"
+          ],
+          [
+            50.5,
+            "spear-catch:Schoolmaster Snapper"
+          ],
+          [
+            79.9,
+            "spear-catch:Blue Runner"
+          ]
+        ]
+      }
+    ],
+    "simPerWall": {
+      "dive": 0.03
+    },
+    "timeline": [
+      {
+        "type": "boot",
+        "wall": 53.9,
+        "sim": 1.6,
+        "bootWallSec": 53.8,
+        "boatsOffered": 8,
+        "novel": false,
+        "session": "dive"
+      },
+      {
+        "type": "overboard",
+        "wall": 89,
+        "sim": 2.1,
+        "novel": true,
+        "session": "dive"
+      },
+      {
+        "type": "spear-catch",
+        "wall": 400.4,
+        "sim": 12.9,
+        "species": "Schoolmaster Snapper",
+        "lb": 3,
+        "pts": 44,
+        "novel": true,
+        "session": "dive"
+      },
+      {
+        "type": "spear-shot",
+        "wall": 422.5,
+        "sim": 13.6,
+        "n": 0,
+        "err": 0,
+        "hit": true,
+        "outcome": "landed",
+        "sp": "schoolmaster",
+        "novel": false,
+        "session": "dive"
+      },
+      {
+        "type": "spear-shot",
+        "wall": 512.5,
+        "sim": 18.3,
+        "n": 1,
+        "err": 0.12,
+        "hit": false,
+        "outcome": "miss",
+        "sp": "bluerunner",
+        "novel": false,
+        "session": "dive"
+      },
+      {
+        "type": "spear-catch",
+        "wall": 678.2,
+        "sim": 26,
+        "species": "Blue Runner",
+        "lb": 7.1,
+        "pts": 114,
+        "novel": true,
+        "session": "dive"
+      },
+      {
+        "type": "spear-shot",
+        "wall": 689.9,
+        "sim": 26.7,
+        "n": 2,
+        "err": 0.25,
+        "hit": true,
+        "outcome": "landed",
+        "sp": "bluerunner",
+        "novel": false,
+        "session": "dive"
+      },
+      {
+        "type": "spear-shot",
+        "wall": 734.7,
+        "sim": 32.1,
+        "n": 3,
+        "err": 0,
+        "hit": false,
+        "outcome": "miss",
+        "sp": "bluerunner",
+        "novel": false,
+        "session": "dive"
+      },
+      {
+        "type": "spear-shot",
+        "wall": 785.8,
+        "sim": 37.5,
+        "n": 4,
+        "err": 0.12,
+        "hit": false,
+        "outcome": "miss",
+        "sp": "bluerunner",
+        "novel": false,
+        "session": "dive"
+      },
+      {
+        "type": "spear-shot",
+        "wall": 833.7,
+        "sim": 42.9,
+        "n": 5,
+        "err": 0.25,
+        "hit": false,
+        "outcome": "miss",
+        "sp": "bluerunner",
+        "novel": false,
+        "session": "dive"
+      },
+      {
+        "type": "spear-catch",
+        "wall": 902.6,
+        "sim": 50.5,
+        "species": "Schoolmaster Snapper",
+        "lb": 3,
+        "pts": 45,
+        "novel": true,
+        "session": "dive"
+      },
+      {
+        "type": "spear-shot",
+        "wall": 911,
+        "sim": 51.3,
+        "n": 6,
+        "err": 0,
+        "hit": true,
+        "outcome": "landed",
+        "sp": "schoolmaster",
+        "novel": false,
+        "session": "dive"
+      },
+      {
+        "type": "surface-for-air",
+        "wall": 915,
+        "sim": 51.8,
+        "air": 19,
+        "diveSimSec": 45.8,
+        "novel": false,
+        "session": "dive"
+      },
+      {
+        "type": "spear-shot",
+        "wall": 1099,
+        "sim": 66.7,
+        "n": 7,
+        "err": 0.12,
+        "hit": false,
+        "outcome": "miss",
+        "sp": "schoolmaster",
+        "novel": false,
+        "session": "dive"
+      },
+      {
+        "type": "spear-shot",
+        "wall": 1177,
+        "sim": 71.5,
+        "n": 8,
+        "err": 0.25,
+        "hit": false,
+        "outcome": "miss",
+        "sp": "schoolmaster",
+        "novel": false,
+        "session": "dive"
+      },
+      {
+        "type": "spear-catch",
+        "wall": 1318.9,
+        "sim": 79.9,
+        "species": "Blue Runner",
+        "lb": 6,
+        "pts": 97,
+        "novel": true,
+        "session": "dive"
+      },
+      {
+        "type": "spear-shot",
+        "wall": 1333.1,
+        "sim": 80.6,
+        "n": 9,
+        "err": 0,
+        "hit": true,
+        "outcome": "landed",
+        "sp": "schoolmaster",
+        "novel": false,
+        "session": "dive"
+      }
+    ]
+  },
+  "sessions": [
+    {
+      "name": "dive",
+      "metrics": {
+        "bootWallSec": 53.8,
+        "boatsOnStartScreen": 8,
+        "startScreenBoats": [
+          "RobaloR230Single Mercury Racing 450R · about 52 kn · 1' 7\" d",
+          "Grady-WhiteCanyon 306\"Actively Sinking\"Twin Mercury Racing 4",
+          "Freeman42LRQuad Mercury Racing 450R · about 69 kn · 2' 0\" dr",
+          "Midnight Express43 OpenQuad Mercury Racing 450R · about 70 k",
+          "MTIV42Quad Mercury Racing 450R · about 76 kn · 3' 0\" draftSp",
+          "Yellowfin36 CCTriple Mercury Racing 450R · about 66 kn · 1' ",
+          "Contender32STTwin Mercury Racing 450R · about 61 kn · 1' 8\" ",
+          "Nor-Tech390 SportTwin Mercury Racing 500R · about 82 kn · 2'"
+        ],
+        "simPerWall": 0.03,
+        "framesPerWallSec_sandboxOnly": 1,
+        "dive": {
+          "diveCount": 2,
+          "startAirPct": 94,
+          "airLowAtSimSec": 45.8,
+          "airLowDepthM": 3.5,
+          "diveDurationsSimSec": [
+            45.8
+          ],
+          "surfaceAndRefillSimSec": 5,
+          "mustSurfaceAtSimSec": 45.8,
+          "depthAtWarnM": 3.5,
+          "warnText": "Air low — start heading up",
+          "airSeries": [
+            {
+              "sim": 0.5,
+              "air": 93,
+              "depth": 1.5
+            },
+            {
+              "sim": 12.8,
+              "air": 69,
+              "depth": 3.2
+            },
+            {
+              "sim": 26.6,
+              "air": 58,
+              "depth": 3.4
+            },
+            {
+              "sim": 37.4,
+              "air": 37,
+              "depth": 3.2
+            },
+            {
+              "sim": 0.1,
+              "air": 49,
+              "depth": 2.5
+            },
+            {
+              "sim": 10.1,
+              "air": 29,
+              "depth": 3.3
+            }
+          ]
+        },
+        "spear": {
+          "shots": 10,
+          "hits": 4,
+          "landed": 4,
+          "hitRatePct": 40,
+          "hitsByAimError": {
+            "0": {
+              "shots": 4,
+              "hits": 3
+            },
+            "0.12": {
+              "shots": 3,
+              "hits": 0
+            },
+            "0.25": {
+              "shots": 3,
+              "hits": 1
+            }
+          },
+          "reloadSimSec_analytic": 2.5,
+          "censusSamples": 10,
+          "censusSamplesWithAnyTargetInRange": 10,
+          "meanTargetsInRange": 41.6,
+          "speciesSeenAsTargets": [
+            "schoolmaster",
+            "bluerunner",
+            "yellowtail",
+            "grouper"
+          ],
+          "shotRecords": [
+            {
+              "n": 0,
+              "aimErrorRad": 0,
+              "species": "schoolmaster",
+              "targetDistM": 1.62,
+              "hit": true,
+              "aimGapAtFireRad": 0.7,
+              "assistLockedBeforeShot": true,
+              "fightSimSec": 2.55,
+              "peakTension": 0.82,
+              "outcome": "landed",
+              "landedSpecies": "Schoolmaster Snapper",
+              "weightLb": 3,
+              "points": 44
+            },
+            {
+              "n": 1,
+              "aimErrorRad": 0.12,
+              "species": "bluerunner",
+              "targetDistM": 1.75,
+              "hit": false,
+              "aimGapAtFireRad": 0.56,
+              "assistLockedBeforeShot": false,
+              "outcome": "miss"
+            },
+            {
+              "n": 2,
+              "aimErrorRad": 0.25,
+              "species": "bluerunner",
+              "targetDistM": 0.65,
+              "hit": true,
+              "aimGapAtFireRad": 0.93,
+              "assistLockedBeforeShot": true,
+              "fightSimSec": 3.25,
+              "peakTension": 0.84,
+              "outcome": "landed",
+              "landedSpecies": "Blue Runner",
+              "weightLb": 7.1,
+              "points": 114
+            },
+            {
+              "n": 3,
+              "aimErrorRad": 0,
+              "species": "bluerunner",
+              "targetDistM": 3.13,
+              "hit": false,
+              "aimGapAtFireRad": 0.83,
+              "assistLockedBeforeShot": false,
+              "outcome": "miss"
+            },
+            {
+              "n": 4,
+              "aimErrorRad": 0.12,
+              "species": "bluerunner",
+              "targetDistM": 0.51,
+              "hit": false,
+              "aimGapAtFireRad": 1.19,
+              "assistLockedBeforeShot": true,
+              "outcome": "miss"
+            },
+            {
+              "n": 5,
+              "aimErrorRad": 0.25,
+              "species": "bluerunner",
+              "targetDistM": 0.52,
+              "hit": false,
+              "aimGapAtFireRad": 1.11,
+              "assistLockedBeforeShot": false,
+              "outcome": "miss"
+            },
+            {
+              "n": 6,
+              "aimErrorRad": 0,
+              "species": "schoolmaster",
+              "targetDistM": 1.18,
+              "hit": true,
+              "aimGapAtFireRad": 0.91,
+              "assistLockedBeforeShot": true,
+              "fightSimSec": 2.5,
+              "peakTension": 0.83,
+              "outcome": "landed",
+              "landedSpecies": "Schoolmaster Snapper",
+              "weightLb": 3,
+              "points": 45
+            },
+            {
+              "n": 7,
+              "aimErrorRad": 0.12,
+              "species": "schoolmaster",
+              "targetDistM": 0.88,
+              "hit": false,
+              "aimGapAtFireRad": 0.58,
+              "assistLockedBeforeShot": false,
+              "outcome": "miss"
+            },
+            {
+              "n": 8,
+              "aimErrorRad": 0.25,
+              "species": "schoolmaster",
+              "targetDistM": 1.14,
+              "hit": false,
+              "aimGapAtFireRad": 0.77,
+              "assistLockedBeforeShot": false,
+              "outcome": "miss"
+            },
+            {
+              "n": 9,
+              "aimErrorRad": 0,
+              "species": "schoolmaster",
+              "targetDistM": 0.92,
+              "hit": true,
+              "aimGapAtFireRad": 0.7,
+              "assistLockedBeforeShot": true,
+              "fightSimSec": 4.2,
+              "peakTension": 0.84,
+              "outcome": "landed",
+              "landedSpecies": "Blue Runner",
+              "weightLb": 6,
+              "points": 97
+            }
+          ]
+        }
+      },
+      "events": [
+        {
+          "type": "boot",
+          "wall": 53.9,
+          "sim": 1.6,
+          "bootWallSec": 53.8,
+          "boatsOffered": 8,
+          "novel": false
+        },
+        {
+          "type": "overboard",
+          "wall": 89,
+          "sim": 2.1,
+          "novel": true
+        },
+        {
+          "type": "spear-catch",
+          "wall": 400.4,
+          "sim": 12.9,
+          "species": "Schoolmaster Snapper",
+          "lb": 3,
+          "pts": 44,
+          "novel": true
+        },
+        {
+          "type": "spear-shot",
+          "wall": 422.5,
+          "sim": 13.6,
+          "n": 0,
+          "err": 0,
+          "hit": true,
+          "outcome": "landed",
+          "sp": "schoolmaster",
+          "novel": false
+        },
+        {
+          "type": "spear-shot",
+          "wall": 512.5,
+          "sim": 18.3,
+          "n": 1,
+          "err": 0.12,
+          "hit": false,
+          "outcome": "miss",
+          "sp": "bluerunner",
+          "novel": false
+        },
+        {
+          "type": "spear-catch",
+          "wall": 678.2,
+          "sim": 26,
+          "species": "Blue Runner",
+          "lb": 7.1,
+          "pts": 114,
+          "novel": true
+        },
+        {
+          "type": "spear-shot",
+          "wall": 689.9,
+          "sim": 26.7,
+          "n": 2,
+          "err": 0.25,
+          "hit": true,
+          "outcome": "landed",
+          "sp": "bluerunner",
+          "novel": false
+        },
+        {
+          "type": "spear-shot",
+          "wall": 734.7,
+          "sim": 32.1,
+          "n": 3,
+          "err": 0,
+          "hit": false,
+          "outcome": "miss",
+          "sp": "bluerunner",
+          "novel": false
+        },
+        {
+          "type": "spear-shot",
+          "wall": 785.8,
+          "sim": 37.5,
+          "n": 4,
+          "err": 0.12,
+          "hit": false,
+          "outcome": "miss",
+          "sp": "bluerunner",
+          "novel": false
+        },
+        {
+          "type": "spear-shot",
+          "wall": 833.7,
+          "sim": 42.9,
+          "n": 5,
+          "err": 0.25,
+          "hit": false,
+          "outcome": "miss",
+          "sp": "bluerunner",
+          "novel": false
+        },
+        {
+          "type": "spear-catch",
+          "wall": 902.6,
+          "sim": 50.5,
+          "species": "Schoolmaster Snapper",
+          "lb": 3,
+          "pts": 45,
+          "novel": true
+        },
+        {
+          "type": "spear-shot",
+          "wall": 911,
+          "sim": 51.3,
+          "n": 6,
+          "err": 0,
+          "hit": true,
+          "outcome": "landed",
+          "sp": "schoolmaster",
+          "novel": false
+        },
+        {
+          "type": "surface-for-air",
+          "wall": 915,
+          "sim": 51.8,
+          "air": 19,
+          "diveSimSec": 45.8,
+          "novel": false
+        },
+        {
+          "type": "spear-shot",
+          "wall": 1099,
+          "sim": 66.7,
+          "n": 7,
+          "err": 0.12,
+          "hit": false,
+          "outcome": "miss",
+          "sp": "schoolmaster",
+          "novel": false
+        },
+        {
+          "type": "spear-shot",
+          "wall": 1177,
+          "sim": 71.5,
+          "n": 8,
+          "err": 0.25,
+          "hit": false,
+          "outcome": "miss",
+          "sp": "schoolmaster",
+          "novel": false
+        },
+        {
+          "type": "spear-catch",
+          "wall": 1318.9,
+          "sim": 79.9,
+          "species": "Blue Runner",
+          "lb": 6,
+          "pts": 97,
+          "novel": true
+        },
+        {
+          "type": "spear-shot",
+          "wall": 1333.1,
+          "sim": 80.6,
+          "n": 9,
+          "err": 0,
+          "hit": true,
+          "outcome": "landed",
+          "sp": "schoolmaster",
+          "novel": false
+        }
+      ],
+      "errors": []
+    }
+  ],
+  "failed": []
+}

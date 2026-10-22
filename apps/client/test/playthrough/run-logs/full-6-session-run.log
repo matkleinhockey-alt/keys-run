@@ -1,0 +1,70 @@
+[drive] sim 0.9s  boot {"bootWallSec":11.3,"boatsOffered":8}
+[hawk] sim 1s  boot {"bootWallSec":20.3,"boatsOffered":8}
+[hawk] sim 2.1s  arrive {"zone":"Hawk Channel"}
+[reef] sim 0.8s  boot {"bootWallSec":58.7,"boatsOffered":8}
+[reef] sim 1.5s  arrive {"zone":"Reef"}
+[hawk] sim 11.8s  bite {"waitSimSec":8.8}
+[offshore] sim 0.8s  boot {"bootWallSec":87.9,"boatsOffered":8}
+[offshore] sim 1.3s  arrive {"zone":"Offshore"}
+[drive] sim 18.9s  drive-summary {"metres":538,"topMs":39.16,"zoneAtEnd":"Hawk Channel"}
+[dive] sim 0.9s  boot {"bootWallSec":125.8,"boatsOffered":8}
+[meta] sim 0.9s  boot {"bootWallSec":149.9,"boatsOffered":8}
+[dive] sim 1.5s  overboard {}
+[hawk] sim 19.9s  catch {"species":"Lane Snapper","lb":2.9,"pts":49,"fightSimSec":7.95,"cycleSimSec":17.65}
+[reef] sim 14.8s  bite {"waitSimSec":12.4}
+[offshore] sim 11.2s  bite {"waitSimSec":9.15}
+[meta] sim 3.1s  weigh-in {"marina":"Boot Key Harbor City Marina","scoreDelta":534,"toast":"Weighed in 3 fish (89 lb) at Boot Key Harbor City Marina. Top fish: Black Grouper, 55.0 lb. +534 points!"}
+[dive] sim 5.7s  spear-shot {"n":0,"err":0,"hit":true,"outcome":"torn-free","sp":"schoolmaster"}
+[dive] sim 8.1s  spear-catch {"species":"Schoolmaster Snapper","lb":2.8,"pts":42}
+[dive] sim 8.6s  spear-shot {"n":1,"err":0.12,"hit":true,"outcome":"landed","sp":"schoolmaster"}
+[dive] sim 12.2s  spear-catch {"species":"Blue Runner","lb":2.5,"pts":41}
+[dive] sim 12.9s  spear-shot {"n":2,"err":0.25,"hit":true,"outcome":"landed","sp":"bluerunner"}
+[reef] sim 23.8s  catch {"species":"Great Barracuda","lb":6.5,"pts":39,"fightSimSec":8.85,"cycleSimSec":22.15}
+[dive] sim 13.2s  spear-shot {"n":3,"err":0,"hit":true,"outcome":"torn-free","sp":"bluerunner"}
+[dive] sim 13.7s  spear-shot {"n":4,"err":0.12,"hit":true,"outcome":"torn-free","sp":"bluerunner"}
+[dive] sim 14.1s  spear-shot {"n":5,"err":0.25,"hit":true,"outcome":"torn-free","sp":"bluerunner"}
+[hawk] sim 32.6s  bite {"waitSimSec":11.2}
+[dive] sim 14.3s  spear-shot {"n":6,"err":0,"hit":true,"outcome":"torn-free","sp":"schoolmaster"}
+[dive] sim 14.4s  spear-shot {"n":7,"err":0.12,"hit":true,"outcome":"torn-free","sp":"bluerunner"}
+[dive] sim 14.8s  spear-shot {"n":8,"err":0.25,"hit":true,"outcome":"torn-free","sp":"bluerunner"}
+[offshore] sim 21.9s  catch {"species":"Blackfin Tuna","lb":24.2,"pts":218,"fightSimSec":10.35,"cycleSimSec":20.5}
+[hawk] sim 41s  catch {"species":"Blue Runner","lb":1,"pts":16,"fightSimSec":8.4,"cycleSimSec":20.25}
+
+KEYS RUN PLAYTHROUGH  (2026-10-21T22:42:23.417Z)  total wall 19.6 min; every duration below is SIMULATED seconds
+sim-seconds per wall-second by session: {"drive":0.14,"hawk":0.07,"reef":0.02,"offshore":0.01,"dive":0.01,"meta":0.01}
+
+-- Rod fishing (real keyboard, bang-bang reel) --
+casts 12 -> bites 4 (33.3%), mean bite wait 10.39s, mean reaction 0.04s of 1.4s budget
+fights 4: landed 4, lost 0 (win 100%)  reasons {}  missed strikes 0
+mean fight 8.89s, mean full cast->card cycle 20.14s => 2.98 catches per simulated minute of fishing
+species landed (4): {"Lane Snapper":1,"Blue Runner":1,"Great Barracuda":1,"Blackfin Tuna":1}; points/catch mean 80.5 range 16,218
+  Hawk Channel: landed [Lane Snapper 2.9lb, Blue Runner 1lb] lost 0  mean bite wait 10s
+  Reef: landed [Great Barracuda 6.5lb] lost 0  mean bite wait 12.4s
+  Gulf Stream: landed [Blackfin Tuna 24.2lb] lost 0  mean bite wait 9.15s
+
+-- Driving (real W/A) --
+538 m in 15.7 simulated s, top 39.16 m/s, 90% of top after 3.3s, ended in Hawk Channel; turn rate 0.26 rad/s
+
+-- Diving (real J/C/Shift/Space) --
+surface-warning after nulls at null m ("null"); dives made 1
+-- Spear --
+shots 9, hits 9 (100%), landed 2; by aim error {"0":{"shots":3,"hits":3},"0.12":{"shots":3,"hits":3},"0.25":{"shots":3,"hits":3}}; mean targets in range 41.67; census 9/9 samples had a target; reload 2.5s
+
+-- Economy / meta --
+cooler: ["yellowtail 4lb -> 64pts keepDisabled=false","mahi 30lb -> 270pts keepDisabled=false","grouper 55lb -> 440pts keepDisabled=false","bonefish 8lb -> 240pts keepDisabled=true"]
+weigh-in: {"marina":"Boot Key Harbor City Marina","scoreDelta":534,"toast":"Weighed in 3 fish (89 lb) at Boot Key Harbor City Marina. Top fish: Black Grouper, 55.0 lb. +534 points!"}
+leaderboard open=true rows=1 first=Could not reach the leaderboard. Try again later.
+race hud: 29 marks · 2 laps · 12.6 km
+start-screen boats: 8
+
+-- Time between anything new (per session, simulated) --
+drive: 0 new things in 18.9s; longest stretch with nothing new 18.9s
+hawk: 2 new things in 41s; longest stretch with nothing new 21.1s
+reef: 1 new things in 23.8s; longest stretch with nothing new 23.8s
+offshore: 1 new things in 21.9s; longest stretch with nothing new 21.9s
+dive: 3 new things in 14.8s; longest stretch with nothing new 6.6s
+meta: 1 new things in 3.1s; longest stretch with nothing new 3.1s
+
+page errors: 2
+[meta] Access to fetch at 'http://localhost:8080/leaderboard/overall' from origin 'http://localhost:5191' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested 
+[meta] Failed to load resource: net::ERR_FAILED
