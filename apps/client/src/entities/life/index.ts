@@ -31,6 +31,7 @@ import * as THREE from 'three';
 import { createRacerFleet, type RacerFleet } from './racers.js';
 import { createTrafficFleet, type TrafficFleet } from './traffic.js';
 import { createPelicanFlocks, type PelicanFlocks } from './pelicans.js';
+import { createWrecks, type Wrecks } from './wrecks.js';
 import type { SpotQuery } from '../../game/fishing/spot.js';
 import { createHotspotWorld, type HotspotWorld, type GullSite } from './hotspots.js';
 import { createFishingBuddy, type FishingBuddy } from './buddy.js';
@@ -114,6 +115,10 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
   const luigi: LuigiMode = createLuigiMode({ hypeCallout: deps.hypeCallout, particles: deps.particles });
   const caelen: Caelen = createCaelen(scene, { sayCaelenLine: deps.sayCaelenLine });
   const partyBoats: PartyBoats = createPartyBoats(scene);
+  const wrecks: Wrecks = createWrecks(scene);
+  // DEV/VERIFICATION HOOK ONLY (same convention as __fishDebug): where the wrecks are and which
+  // draw tier / chart state each is in. No normal code path reads it.
+  (globalThis as unknown as { __wreckDebug?: unknown }).__wreckDebug = () => wrecks.debug();
 
   return {
     update(inputs) {
@@ -126,6 +131,7 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
       buddy.update(dt, t, boat, playerBoatId, camera, viewport, deps.particles);
       caelen.update(dt, t, boat, camera, viewport, inputs.diver ?? null);
       partyBoats.update(dt, t, camera.position, deps.particles, deps.currentTodK);
+      wrecks.update(dt, camera.position, boat, inputs.diver ?? null);
 
       // the player's own deck party/pole/shower, plus idle animation for every human aboard
       // (captain/crew/party aren't in a HumanRegistry — see this module's header).
@@ -146,6 +152,7 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
       nearHotspot: (x, z) => hotspotWorld.nearHotspot(x, z),
       nearWeed: (x, z) => hotspotWorld.nearWeed(x, z),
       nearRig: (x, z) => hotspotWorld.nearRig(x, z),
+      nearWreck: (x, z) => wrecks.nearWreck(x, z),
     },
     partySites(): readonly PartySite[] { return partyBoats.sites(); },
     isLuigiOn(): boolean { return luigi.isOn(); },
@@ -164,6 +171,7 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
       luigi.dispose();
       caelen.dispose();
       partyBoats.dispose();
+      wrecks.dispose();
       buddy.dispose();
     },
   };

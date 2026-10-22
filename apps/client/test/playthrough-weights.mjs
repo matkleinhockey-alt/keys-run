@@ -59,6 +59,12 @@ const SITES = [
   { name: 'Offshore (Gulf Stream)', table: 'Offshore', bob: OFFSHORE, hotspot: false },
   { name: 'Weedline (hotspot)', table: 'Weedline', bob: OFFSHORE, hotspot: true },
   { name: 'Oil Rig (hotspot)', table: 'Oil Rig', bob: OFFSHORE, hotspot: true },
+  // A wreck is cast on from the reef side of the chart (all six sit on the wall or inshore of it), so
+  // it is compared against a plain reef cast AND a reef cast with the hotspot flag on: the second
+  // is the fair control, since a wreck cast always sets F.hs. Weight on a wreck ignores the bobber
+  // (wreckSizeT), so the bobber only decides which fights are run, not the roll.
+  { name: 'Reef (hotspot control)', table: 'Reef', bob: bobberIn('Reef'), hotspot: true },
+  { name: 'Wreck (hotspot)', table: 'Wreck', bob: bobberIn('Reef'), hotspot: true },
 ];
 
 /** Attentive angler, same rules as playthrough-model.mjs's `angler`. */

@@ -249,7 +249,7 @@ export function createFishingLogic(deps: FishingDeps) {
         F.biteT = rand(4, 10) * (F.hs ? 0.4 : 1);
         F.key = null;
         const cm = Math.round(Math.hypot(F.bob.x - boat.x, F.bob.z - boat.z)) + ' m cast ';
-        toast(spot.kind === 'frenzy' ? cm + 'into the bait — fish on the surface!' : cm + 'into the ' + F.zone.toLowerCase() + '.');
+        toast(spot.kind === 'frenzy' ? cm + 'into the bait — fish on the surface!' : spot.kind === 'wreck' ? cm + 'onto the ' + (spot.wreckName ?? 'wreck').toLowerCase() + ' — big fish hold on the steel.' : cm + 'into the ' + F.zone.toLowerCase() + '.');
       }
     } else if (F.state === 'waiting' || F.state === 'nibble' || F.state === 'bite') {
       const surf = sampleWaterHeight(boat, F.bob.x, F.bob.z, t, ampAt(F.bob.x, F.bob.z), sw, ch);

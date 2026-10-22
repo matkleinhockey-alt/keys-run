@@ -61,6 +61,14 @@ export interface SchoolAnchor {
   x: number;
   z: number;
   r: number;
+  /**
+   * Hold the school at a height above the seabed instead of the species' own water-column band:
+   * `h` metres up with `r` of vertical spread. Set only for schools holding on a structure
+   * (spawn.ts's wreck layer) - over a 15 m hull in 21 m of water, a 'mid' fish otherwise sits at
+   * the 55% line, which is the right height for open reef and exactly wrong for a wreck, where
+   * the point is that they are *on the steel*. Bottom-dwellers ignore it (they sit in the scour).
+   */
+  hold?: { h: number; r: number };
 }
 
 export interface SchoolState {

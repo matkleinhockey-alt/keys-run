@@ -34,6 +34,10 @@
       "types": "./dist/world/current.d.ts",
       "default": "./dist/world/current.js"
     },
+    "./world/wrecks": {
+      "types": "./dist/world/wrecks.d.ts",
+      "default": "./dist/world/wrecks.js"
+    },
     "./world/frenzy": {
       "types": "./dist/world/frenzy.d.ts",
       "default": "./dist/world/frenzy.js"
