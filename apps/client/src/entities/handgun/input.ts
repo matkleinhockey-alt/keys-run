@@ -51,6 +51,8 @@ export interface PistolControls {
   holster(): void;
   fire(): void;
   reload(): void;
+  /** Fire a marine flare. */
+  flare(): void;
   /** Drag look, radians. */
   look(dYaw: number, dPitch: number): void;
   /** Held look keys: -1/0/1 each. */
@@ -61,7 +63,7 @@ export interface PistolControls {
  * fire; everything else is simply swallowed. */
 const SWALLOW = new Set([
   'Space', 'Enter', 'KeyR', 'KeyJ', 'KeyF', 'KeyV', 'KeyE', 'KeyQ', 'KeyK', 'KeyT', 'KeyB',
-  'Digit1', 'Digit2', 'Digit3', 'Numpad1', 'Numpad2', 'Numpad3',
+  'KeyZ', 'Digit1', 'Digit2', 'Digit3', 'Numpad1', 'Numpad2', 'Numpad3',
 ]);
 const LOOK_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']);
 
@@ -96,6 +98,7 @@ export function bindPistolInput(canvas: HTMLCanvasElement, c: PistolControls): (
     if (e.repeat) return;
     if (e.code === 'Space' || e.code === 'Enter') c.fire();
     else if (e.code === 'KeyR') c.reload();
+    else if (e.code === 'KeyZ') c.flare();
   };
   const onKeyUp = (e: KeyboardEvent): void => {
     if (!LOOK_KEYS.has(e.code)) return;

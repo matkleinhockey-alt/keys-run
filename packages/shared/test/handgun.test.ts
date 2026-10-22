@@ -11,6 +11,7 @@ import { mulberry32 } from '../src/rng/index.js';
 import {
   fireBullet, stepBullet, aimBullet, spreadDir, spreadFor, createGun, canFire, pullTrigger, startReload, stepGun,
   takeRounds, reserveRounds, magSizeFor, ammoNotice, gunshotSpooks, birdAwaySeconds, minAirDistTo, fishWithinReach,
+  flareLaunch, flareAt, takeFlare, FLARE_KEY, FLARES_PER_KIT, FLARE_BURN_S, FLARE_IGNITE_S, FLARE_MIN_PITCH,
   birdScatterChance, MAG_SIZE, FIRE_INTERVAL, RELOAD_S, RELOAD_EMPTY_S, WATER_STOP_M, SKIP_ANGLE, ENERGY_STUN, MUZZLE_SPEED,
   BULLET_RANGE, ASSIST_CONE, FISH_SPOOK_S, SPREAD_BASE, SPREAD_PER_HEAT, AMMO_KEY, EXTMAG_KEY, DOT_KEY,
   type BulletState, type BulletTarget, type BulletEnv, type GunState,
@@ -443,5 +444,48 @@ describe('ammunition and the shop', () => {
     expect(ammoNotice(0, 0)).toMatch(/Out of 9 mm/);
     expect(ammoNotice(0, 20)).toMatch(/Reload/);
     expect(ammoNotice(8, 20)).toBeNull();
+  });
+});
+
+describe('the marine flare', () => {
+  const L = flareLaunch({ x: 0, y: 2.5, z: 0 }, { x: 0, y: 0, z: -1 }, { x: 1, z: 0 });
+
+  it('is always lofted, even when aimed level or down', () => {
+    expect(L.vy).toBeGreaterThan(0);
+    expect(Math.atan2(L.vy, Math.hypot(L.vx, L.vz))).toBeGreaterThanOrEqual(FLARE_MIN_PITCH - 1e-9);
+    expect(flareLaunch({ x: 0, y: 2, z: 0 }, { x: 0, y: -1, z: 0 }).vy).toBeGreaterThan(0);
+  });
+
+  it('rises dark, ignites, burns bright, drifts down on the wind, and goes out', () => {
+    expect(flareAt(L, 0.3).phase).toBe('rising');
+    expect(flareAt(L, 0.3).glow).toBe(0);
+    const lit = flareAt(L, FLARE_IGNITE_S + 2);
+    expect(lit.phase).toBe('burning');
+    expect(lit.glow).toBeGreaterThan(0.9);
+    expect(flareAt(L, FLARE_IGNITE_S).y).toBeGreaterThan(10);
+    const later = flareAt(L, FLARE_IGNITE_S + 12);
+    expect(later.y).toBeLessThan(lit.y);
+    expect(later.x).toBeGreaterThan(lit.x);
+    expect(flareAt(L, FLARE_IGNITE_S + FLARE_BURN_S + 0.1).phase).toBe('out');
+  });
+
+  it('fades over its last seconds rather than blinking out', () => {
+    const g = flareAt(L, FLARE_IGNITE_S + FLARE_BURN_S - 1.5).glow;
+    expect(g).toBeLessThan(0.6);
+    expect(g).toBeGreaterThan(0.1);
+  });
+
+  it('is put out by the sea', () => {
+    expect(flareAt(L, FLARE_IGNITE_S + 3, 1e6).phase).toBe('out');
+  });
+
+  it('a kit is three flares, each spent one at a time, and none left is detectable', () => {
+    const bought = buy(emptyInventory(), 'guns', 'flare', 1e6, 0);
+    expect(bought.ok).toBe(true);
+    expect(countOf(bought.inventory, FLARE_KEY)).toBe(FLARES_PER_KIT);
+    let inv = bought.inventory;
+    for (let i = 0; i < FLARES_PER_KIT; i++) { const r = takeFlare(inv); expect(r.ok).toBe(true); inv = r.inventory; }
+    expect(takeFlare(inv).ok).toBe(false);
+    expect(takeFlare(inv).inventory).toBe(inv);
   });
 });

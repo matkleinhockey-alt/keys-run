@@ -153,6 +153,7 @@ function unitsPer(key: string): number {
   if (key === 'bait.ballyhoo') return 6;
   if (key === 'spear.shafts') return 3;
   if (key === 'handgun.ammo') return 50; // a box
+  if (key === 'safety.flare') return 3; // a kit (sim/handgun.ts FLARES_PER_KIT)
   return 1;
 }
 

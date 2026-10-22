@@ -133,7 +133,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       item('pistol-ammo', '9 mm range ammo (50)', 'A box for the boat pistol. Fish, gulls and the horizon not included.', 75, 'consumable', 'handgun.ammo'),
       item('pistol-extmag', 'Extended magazine', 'Six more rounds before you have to stop and reload.', 1_100, 'gear', 'handgun.extmag'),
       item('pistol-dot', 'Red-dot sight', 'A tighter group at range, for people who do not like gulls laughing.', 1_600, 'gear', 'handgun.dot'),
-      item('flare', 'Marine flare kit', 'Required by the Coast Guard, loved by everyone else.', 38, 'consumable', 'safety.flare'),
+      item('flare', 'Marine flare kit', 'Three parachute flares, fired from the pistol grip (Z). Required by the Coast Guard, best after sunset.', 38, 'consumable', 'safety.flare'),
     ],
     enterable: false,
   },

@@ -559,3 +559,68 @@ export function birdScatterChance(distToShooter: number, distToPath: number): nu
   const whiz = distToPath < 6 ? 0.85 : distToPath < 14 ? 0.35 : 0;
   return Math.min(1, Math.max(ear, whiz));
 }
+
+/* ------------------------------------------------------------------------------------------ *
+ * The marine flare (shop item `safety.flare`)
+ *
+ * Fired from the pistol grip with Z. It is a parachute flare, not a bullet: it is launched in an arc,
+ * ignites near the top, burns bright for `FLARE_BURN_S`, and drifts back down on the wind, going
+ * out when the burn ends or it touches the sea. Pure and closed-form (position is a function of
+ * time alone) so the client just samples it and a test can assert the whole life of one.
+ *
+ * Why it is worth firing: it lights the water and the boat for 18 s, which only matters near
+ * sunset or at night (the O key / sunset button), and it startles gulls. Why it is NOT a light
+ * source in the scene graph: entities/town keeps a pool of 4 PointLights because three.js compiles
+ * the light count into every material's program; a fifth light (or a light that exists only while
+ * a flare burns) recompiles every shader in the scene twice per flare. So the client draws it as
+ * an emissive core and an additive glow sprite, which is also what reads as a flare from a boat.
+ * ------------------------------------------------------------------------------------------ */
+export const FLARE_KEY = 'safety.flare';
+/** Flares per kit (`unitsPer` in sim/shop.ts), so the $38 shelf item is a few shots, not one. */
+export const FLARES_PER_KIT = 3;
+export const FLARE_SPEED = 40;
+export const FLARE_IGNITE_S = 0.9;
+export const FLARE_BURN_S = 18;
+export const FLARE_FALL_MS = 0.8;
+/** Minimum launch elevation, rad: a flare fired level would skim the sea; it is always lofted. */
+export const FLARE_MIN_PITCH = 0.62;
+const FLARE_DRAG = 1.4;
+
+export interface FlareLaunch { ox: number; oy: number; oz: number; vx: number; vy: number; vz: number; windX: number; windZ: number }
+export type FlarePhase = 'rising' | 'burning' | 'out';
+
+export function flareLaunch(origin: Vec3, dir: Vec3, wind: { x: number; z: number } = { x: 0, z: 0 }): FlareLaunch {
+  const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
+  let dx = dir.x / l, dy = dir.y / l, dz = dir.z / l;
+  const horiz = Math.hypot(dx, dz) || 1e-6;
+  if (Math.atan2(dy, horiz) < FLARE_MIN_PITCH) {
+    const c = Math.cos(FLARE_MIN_PITCH), s = Math.sin(FLARE_MIN_PITCH);
+    dx = (dx / horiz) * c; dz = (dz / horiz) * c; dy = s;
+  }
+  return { ox: origin.x, oy: origin.y, oz: origin.z, vx: dx * FLARE_SPEED, vy: dy * FLARE_SPEED, vz: dz * FLARE_SPEED, windX: wind.x, windZ: wind.z };
+}
+
+/** Where the flare is `t` seconds after launch, whether it has lit, and how bright (0..1). */
+export function flareAt(f: FlareLaunch, t: number, surfaceY = 0): { x: number; y: number; z: number; phase: FlarePhase; glow: number } {
+  if (t < FLARE_IGNITE_S) {
+    return { x: f.ox + f.vx * t, y: f.oy + f.vy * t - 0.5 * GRAVITY * t * t, z: f.oz + f.vz * t, phase: 'rising', glow: 0 };
+  }
+  // At ignition the shell becomes a parachute flare: velocity relaxes exponentially to (wind, -fall).
+  const x0 = f.ox + f.vx * FLARE_IGNITE_S, y0 = f.oy + f.vy * FLARE_IGNITE_S - 0.5 * GRAVITY * FLARE_IGNITE_S ** 2, z0 = f.oz + f.vz * FLARE_IGNITE_S;
+  const v0x = f.vx, v0y = f.vy - GRAVITY * FLARE_IGNITE_S, v0z = f.vz;
+  const tau = t - FLARE_IGNITE_S;
+  const e = (1 - Math.exp(-FLARE_DRAG * tau)) / FLARE_DRAG;
+  const x = x0 + f.windX * tau + (v0x - f.windX) * e;
+  const y = y0 - FLARE_FALL_MS * tau + (v0y + FLARE_FALL_MS) * e;
+  const z = z0 + f.windZ * tau + (v0z - f.windZ) * e;
+  if (tau >= FLARE_BURN_S || y <= surfaceY) return { x, y: Math.max(y, surfaceY), z, phase: 'out', glow: 0 };
+  // quick flare-up, steady burn, last 3 s fade
+  const glow = Math.min(1, tau / 0.15) * Math.min(1, (FLARE_BURN_S - tau) / 3);
+  return { x, y, z, phase: 'burning', glow };
+}
+
+/** Takes one flare from the inventory; same-reference inventory when there is none. */
+export function takeFlare(inv: Inventory): { inventory: Inventory; ok: boolean } {
+  const next = useOne(inv, FLARE_KEY);
+  return { inventory: next, ok: next !== inv };
+}

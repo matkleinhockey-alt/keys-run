@@ -378,6 +378,24 @@ await H('draw'); await settle('gun');
 await H('setRounds', 60);
 await until(async () => { const s = await S(); return s.mag === 18 || (!s.reloading && s.mag > 0 && s.magSize === 18 && s.mag === s.magSize); }, 'an 18-round magazine', 120000).catch(async () => { await page.keyboard.press('KeyR'); await until(async () => (await S()).mag === 18, '18-round reload', 120000); });
 check('the new magazine actually holds 18', (await S()).mag === 18);
+// ---- the marine flare (shop item safety.flare), fired with Z
+const fc0 = await H('flareCount');
+await page.keyboard.press('KeyZ');
+await page.waitForTimeout(400);
+const noFlareToast = await page.evaluate(() => document.getElementById('toast')?.textContent ?? '');
+if (fc0 === 0) check('with no flares, Z says so instead of silently doing nothing', /No flares/.test(noFlareToast), JSON.stringify(noFlareToast));
+const rf = await shop('buy', 'flare');
+check('a flare kit adds three flares', rf.ok && (await H('flareCount')) === fc0 + 3, `${fc0} -> ${await H('flareCount')}`);
+await page.keyboard.press('KeyO'); // sunset, when a flare is worth firing
+await H('setLook', 0.5, 0.45);
+await page.keyboard.press('KeyZ');
+await until(async () => (await H('flares')).some((f) => f.phase === 'burning' && f.glow > 0.8), 'a burning flare', 240000);
+const fc1 = await H('flareCount');
+check('firing a flare spends one from the inventory', fc1 === fc0 + 2, `${fc0 + 3} -> ${fc1}`);
+await shot('07-flare-burning');
+await until(async () => (await H('flares')).length === 0, 'the flare to go out', 400000);
+check('the flare burns out and is removed (nothing lingers)', (await H('flares')).length === 0);
+await page.keyboard.press('KeyO');
 await H('holster'); await settle('boat'); await assertClean('end of run');
 
 console.log('\nconsole errors:', errs.length ? '\n' + errs.join('\n') : 'none');

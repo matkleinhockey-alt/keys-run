@@ -57,7 +57,7 @@ import { countOf, useOne, type Modifiers } from '@keysrun/shared/sim/shop';
 import type { GearPort } from '@keysrun/shared/sim/gear';
 import type { HandWobble } from '@keysrun/shared/sim/steady';
 import {
-  AMMO_KEY, ASSIST_MAX_DEPTH_M, RELOAD_EMPTY_S, RELOAD_S, REPORT_BIRD_M,
+  AMMO_KEY, ASSIST_MAX_DEPTH_M, FLARE_KEY, takeFlare, RELOAD_EMPTY_S, RELOAD_S, REPORT_BIRD_M,
   aimBullet, ammoNotice, birdAwaySeconds, birdScatterChance, createGun, fireBullet, gunshotSpooks, magSizeFor,
   pullTrigger, startReload, spreadDir, spreadFor, stepBullet, stepGun, FISH_SPOOK_S,
   type BulletEnv, type BulletEvent, type BulletHit, type BulletState, type BulletTarget, type GunState, type Spook,
@@ -74,6 +74,7 @@ import type { AudioSystem } from '../../audio/index.js';
 import { createPistolViewModel, type PistolViewModel } from './viewmodel.js';
 import { createBrass, createFloaters, createStreaks, type Brass, type Floaters, type Streaks } from './fx.js';
 import { createBlood, type Blood } from './blood.js';
+import { createFlares, type Flares } from './flares.js';
 import { createGunHud, type GunHud } from './hud.js';
 import { bindPistolInput } from './input.js';
 
@@ -165,6 +166,7 @@ export function createHandgunSystem(deps: HandgunDeps): HandgunSystem {
   const streaks: Streaks = createStreaks(scene);
   const floaters: Floaters = createFloaters(scene);
   const blood: Blood = createBlood(scene);
+  const flares: Flares = createFlares(scene, deps.particles);
   const hud: GunHud = createGunHud(deps.isTouch, { fire: () => pull(), reload: () => reload(), holster: () => holster() });
   const aimRng = mulberry32((Date.now() ^ 0x9e3779b9) >>> 0);
   const scatterRng = mulberry32((Date.now() ^ 0x85ebca6b) >>> 0);
@@ -337,6 +339,27 @@ export function createHandgunSystem(deps: HandgunDeps): HandgunSystem {
     }
     gun = r.gun;
     lastReloadFrac = 0;
+  }
+
+  /** Z: fire a marine flare (shop item `safety.flare`). Spends one from the inventory through the same
+   * GearPort every other consumable uses; with none, says so. Fired along the aim but always lofted
+   * (sim/handgun.ts `flareLaunch`), lights for ~18 s (flares.ts, no scene light), and the pop startles
+   * gulls within earshot. Best fired around sunset (the O key / sun button), when it is worth seeing. */
+  function flare(): void {
+    if (mode !== 'gun') return;
+    const taken = takeFlare(deps.gear.inventory());
+    if (!taken.ok) { deps.toast('No flares. Deadeye Guns & Ammo sells a marine flare kit (three for $38).'); return; }
+    deps.gear.commit(taken.inventory);
+    const { eye, dir } = aimBasis();
+    vm.muzzle.getWorldPosition(_muz);
+    flares.launch({ x: _muz.x, y: _muz.y, z: _muz.z }, { x: dir.x, y: dir.y, z: dir.z });
+    deps.audio.gunReload('rack'); // the flare gun's thunk; no separate sample for a one-off
+    refreshBirds(simNow, true);
+    for (const tr of tracked.values()) {
+      if (!tr.B.flee && Math.hypot(tr.x - eye.x, tr.z - eye.z) < 60 && scatterRng() < 0.5) scareBird(tr.B, eye.x, eye.z, birdAwaySeconds(tr.kind, false));
+    }
+    const left = countOf(deps.gear.inventory(), FLARE_KEY);
+    deps.toast(left > 0 ? `Flare away. ${left} left.` : 'Flare away. That was the last one.');
   }
 
   function flashNote(text: string, bad = false): void { hud.setNote(text, bad); noteT = 2.4; }
@@ -610,6 +633,7 @@ export function createHandgunSystem(deps: HandgunDeps): HandgunSystem {
     simNow = t;
     floaters.update(dt, t);
     blood.update(dt);
+    flares.update(dt, t, surfaceY);
     brass.update(dt);
     streaks.update(dt);
     if (mode !== 'gun') return;
@@ -649,7 +673,7 @@ export function createHandgunSystem(deps: HandgunDeps): HandgunSystem {
   const unbind = bindPistolInput(deps.canvas, {
     isGun: () => mode === 'gun',
     suspended: () => !deps.gameRunning() || overlayOpen(),
-    toggle, holster, fire: pull, reload,
+    toggle, holster, fire: pull, reload, flare,
     look(dy, dp) { look.yaw += dy; look.pitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, look.pitch + dp)); },
     setKeyLook(yaw, pitch) { keyLook = { yaw, pitch }; },
   });
@@ -671,6 +695,9 @@ export function createHandgunSystem(deps: HandgunDeps): HandgunSystem {
     sync: syncMode,
     fire: pull,
     reload,
+    flare,
+    flares: () => flares.active(),
+    flareCount: () => countOf(deps.gear.inventory(), FLARE_KEY),
     holdFlash(v: boolean) { vm.holdFlash(v); },
     setLook(yaw: number, pitch: number) { look.yaw = yaw; look.pitch = pitch; },
     /** Point the crosshair at a world position, exactly (the scripted-drag aim does not converge at this frame rate). */
@@ -726,7 +753,7 @@ export function createHandgunSystem(deps: HandgunDeps): HandgunSystem {
       synth.push({ info: { kind: 'synthetic-bird', key: 'gull', weight: 0, birdKind: 'gull' }, t: { id, ax: x - 0.3, ay: y, az: z, bx: x + 0.3, by: y, bz: z, radius: 0.5 } });
       return { id, x, y, z };
     },
-    clearSynth() { synth.length = 0; floaters.clear(); blood.clear(); },
+    clearSynth() { synth.length = 0; floaters.clear(); blood.clear(); flares.clear(); },
     giveRounds(n: number) {
       let inv = deps.gear.inventory();
       inv = { ...inv, consumables: { ...inv.consumables, [AMMO_KEY]: (inv.consumables[AMMO_KEY] ?? 0) + n } };
@@ -743,7 +770,7 @@ export function createHandgunSystem(deps: HandgunDeps): HandgunSystem {
     activeSpooks: () => spooks,
     exitToBoat: holster,
     dispose() {
-      unbind(); vm.dispose(); brass.dispose(); streaks.dispose(); floaters.dispose(); blood.dispose(); hud.dispose(); btn.remove();
+      unbind(); vm.dispose(); brass.dispose(); streaks.dispose(); floaters.dispose(); blood.dispose(); flares.dispose(); hud.dispose(); btn.remove();
     },
   };
 }

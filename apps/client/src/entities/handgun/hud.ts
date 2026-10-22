@@ -42,7 +42,7 @@ export function createGunHud(isTouch: boolean, handlers: { fire(): void; reload(
   ammo.append(mag, pips, bar, note);
   const help = el('div', 'gh-help', isTouch
     ? 'Tap to fire · drag to aim'
-    : 'Click / Space fire · R reload · drag or arrows to aim · 9 or Esc holster');
+    : 'Click / Space fire · R reload · Z flare · drag or arrows to aim · 9 or Esc holster');
   const score = el('div', 'gh-score panel');
   root.append(cross, ammo, help, score);
   host.append(root);
