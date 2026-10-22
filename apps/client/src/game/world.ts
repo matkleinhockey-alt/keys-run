@@ -67,6 +67,9 @@ import { updateHUD } from '../ui/hud.js';
 import { createMinimap, type MinimapContact } from '../ui/minimap.js';
 import { populateBoatCards, showHud, showStart } from '../ui/start.js';
 import { toast } from '../ui/toast.js';
+import { createBuffRuntime } from './buffs.js';
+import { emptyInventory, type Inventory } from '@keysrun/shared/sim/shop';
+import { handWobble, tooDrunkToDive } from '@keysrun/shared/sim/steady';
 import { spotClear, findClearSpot } from '../state/game.js';
 import { SPAWN_X, SPAWN_DZ, SPAWN_H } from '../state/constants.js';
 
@@ -446,7 +449,14 @@ export function initWorld(wrap: HTMLElement): World {
     getBoatSpec: () => ({ id: boatSpec.id, brand: boatSpec.brand, name: boatSpec.name }),
     economy: econ,
   });
+  // Food/drink buffs. `inventory` is a stand-in holder until the shop agent's persisted inventory
+  // lands: swap these two accessors for theirs and nothing else changes. Buff state is only ever
+  // `inventory.buffs` (see game/buffs.ts). The window hook is a dev/test seam, like __fishDebugCamera.
+  let inventory: Inventory = emptyInventory();
+  const buffs = createBuffRuntime({ getInventory: () => inventory, setInventory: (i) => { inventory = i; }, toast, mount: wrap });
+  (window as unknown as { __krInv?: unknown }).__krInv = { get: () => inventory, set: (i: Inventory) => { inventory = i; }, buffs, now: () => simTime };
   const fishing = createFishing({
+    getModifiers: () => buffs.mods,
     scene,
     camera,
     getModel: () => model,
@@ -564,6 +574,9 @@ export function initWorld(wrap: HTMLElement): World {
       // line out would otherwise leave fishing's state machine holding a rod-tip/bobber reference
       // while nothing drives its update loop (fixedStep still runs, but the player's attention —
       // and this frame's camera — is about to move to the diver rig).
+      // Two drinks in, the seagull talks you out of it. One drink may dive: the wobble is
+      // camera-only (sim/steady.ts), so it is silly, not dangerous.
+      if (tooDrunkToDive(buffs.mods)) { toast('Caelen: "You can barely stand. Sit down, loser."'); return; }
       if (FishF.state !== 'idle' && FishF.state !== 'caught') fishing.reelIn();
       diver.enterWater(stateBox.state.x, stateBox.state.z, stateBox.state.h);
       setDiveUI(true);
@@ -752,6 +765,8 @@ export function initWorld(wrap: HTMLElement): World {
 
   function frame(dt: number): void {
     const clamped = Math.min(0.05, dt);
+    buffs.update(simTime); // once per frame, simulated seconds: prune expiry, toasts, HUD, modifiers
+    const hand = handWobble(simTime, buffs.mods);
     acc += clamped;
     let steps = 0;
     const events: SimEvent[] = [];
@@ -947,7 +962,7 @@ export function initWorld(wrap: HTMLElement): World {
       // applyBoatVisuals above already kept the (drifting) boat's own transform/wake current —
       // just not its camera/HUD, which the diver owns while its driver is over the side.
       applyDiverVisuals(diverState, diverModel, diverEvents, { t: simTime });
-      updateDiverCamera(camera, diver.cam, diverState, simTime, clamped);
+      updateDiverCamera(camera, diver.cam, diverState, simTime, clamped, hand);
       updateDiverHud(diverState, { canReboard: diver.canReboard });
       // entities/diver/model.ts's head/mask sit ~0.5-0.6 m in front of the model's own origin (so
       // chase view reads correctly) — exactly where the mask camera's forward view also looks, so
@@ -965,7 +980,7 @@ export function initWorld(wrap: HTMLElement): World {
     } else if (land.mode === 'land') {
       land.updateCamera(clamped, simTime);
     } else {
-      updateCamera(clamped, { camera, sky: sceneCtx.sky, sunDisc: sceneCtx.sunDisc, sunDir }, camState, fpState, model, renderState, game.running, boatSpec.len);
+      updateCamera(clamped, { camera, sky: sceneCtx.sky, sunDisc: sceneCtx.sunDisc, sunDir, hand }, camState, fpState, model, renderState, game.running, boatSpec.len);
       // DEV/VERIFICATION HOOK ONLY — lets a Playwright screenshot script place the camera directly
       // for entities/fish visual verification. Unset in every normal run, so this is a no-op outside
       // of test scripts. Applied after updateCamera so it wins for this frame instead of being

@@ -38,6 +38,8 @@ export interface FishingSystemDeps {
    * `diver.mode === 'diver'` — Space doubles as the diver's ascend key, and this module's
    * window-level listener has no idea diving exists; see input.ts's `isSuspended` doc comment). */
   isSuspended?(): boolean;
+  /** Hand steadiness / sway for the strike window (game/buffs.ts `mods`). */
+  getModifiers?: FishingDeps['getModifiers'];
 }
 
 export interface FishingSystem {
@@ -67,6 +69,7 @@ export function createFishing(deps: FishingSystemDeps): FishingSystem {
     onLanded: deps.onLanded,
     onActionWhileCaught: deps.onActionWhileCaught,
     tags: deps.tags,
+    getModifiers: deps.getModifiers,
   });
   const unbindInput = bindFishingInput(logic, deps.fp, deps.getBoat, deps.isSuspended);
 

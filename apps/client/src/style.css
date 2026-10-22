@@ -291,3 +291,7 @@ body.photoing #gauges,body.photoing #mapbox,body.photoing #scorebox,body.photoin
 .raceBoard li.me{opacity:1;font-weight:700;color:var(--sun,#f2c14e)}
 .raceBoard li b{min-width:14px;opacity:.6;font-weight:700}
 .raceBoard li span{margin-left:auto;font-variant-numeric:tabular-nums;opacity:.8}
+/* Timed food/drink buffs (game/buffs.ts): one chip per running buff with time left. */
+#buffs{position:absolute;left:12px;top:150px;display:flex;flex-direction:column;gap:4px;pointer-events:none;z-index:5}
+#buffs .buff{padding:3px 9px;border-radius:9px;background:var(--panel);border:1px solid var(--panel-edge);font-size:12px;font-weight:600}
+#buffs .buff.drink{border-color:#e0a030}
