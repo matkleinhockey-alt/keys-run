@@ -8,7 +8,7 @@
  * and navigation lights use it (see entities/boat/model.ts).
  */
 import * as THREE from 'three';
-import { lerp } from './math.js';
+import { clamp, lerp } from './math.js';
 import type { SceneCtx, SkyPalette } from './scene.js';
 import { toast } from '../ui/toast.js';
 
@@ -49,6 +49,16 @@ export interface TimeOfDayController {
   /** Jump straight to full sunset, no glide. Used by the motel, which does it behind a black fade so
    * nobody watches the sun teleport. Idempotent. Not a toggle: it can never send you back to day. */
   snapToSunset(): void;
+  /**
+   * Set the day(0)/sunset(1) blend directly. `snap` applies it this frame; otherwise it glides at
+   * the usual rate. Unlike `toggleSunset`/`snapToSunset` this is silent — no toast, no `#btnSun`
+   * relabel — because it is for a scene that is not the player's own choice of time of day: the
+   * start screen's beauty shot (`game/splash.ts`) forces sunset before the first frame and hands
+   * the sky back to day, gliding, the moment you leave the dock. Relabelling the sun button for
+   * that would be a lie about a setting the player never touched, and leaving it at sunset would
+   * silently change the game's starting time of day.
+   */
+  setBlend(target: number, snap: boolean): void;
 }
 
 export function createTimeOfDay(ctx: SceneCtx, waterSky: { value: THREE.Color }): TimeOfDayController {
@@ -100,6 +110,15 @@ export function createTimeOfDay(ctx: SceneCtx, waterSky: { value: THREE.Color })
     update: updateTOD,
     getK() { return state.k; },
     isSunset() { return state.target === 1; },
+    setBlend(target, snap) {
+      state.target = clamp(target, 0, 1);
+      state.dirty = true;
+      if (!snap) return;
+      state.k = state.target;
+      // Applied here rather than left to the next `update(dt)`: the splash wants the sunset sky on
+      // the *first* rendered frame, and an un-applied snap would show one frame of noon daylight.
+      applyTOD(state.k);
+    },
     snapToSunset() {
       state.target = 1; state.k = 1; state.dirty = true;
       const b = document.getElementById('btnSun');

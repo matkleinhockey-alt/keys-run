@@ -60,6 +60,20 @@ export function cycleView(fp: FpState, model: BoatModel | null): string {
 
 const tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3();
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
+/**
+ * `camPos`/`camLook` are *smoothed* — they ease toward the wanted eye and aim point at ~4-5 per
+ * second, which is right when the boat moves by being driven and wrong when it moves by being put
+ * somewhere else. Leaving the dock does exactly that: the start screen's beauty shot has the boat
+ * lying to at the Seven Mile Bridge and hands it back to Boot Key Harbor (game/splash.ts and
+ * game/world.ts's `onGo`), 1.4 km away, and without this the first seconds of play are spent
+ * watching the camera fly across the Keys — streaming terrain the whole way — instead of sitting
+ * at the dock. Set by `snapChaseRig()`, consumed and cleared by the next `updateCamera`.
+ */
+let rigSnap = false;
+/** Teleport the chase rig on the next frame rather than easing it. Call right after any
+ * non-physical move of the boat. No-op in the first-person/drive views, which have no smoothing
+ * to defeat — they read the hull's own transform every frame. */
+export function snapChaseRig(): void { rigSnap = true; }
 
 export function updateCamera(
   dt: number,
@@ -138,12 +152,13 @@ export function updateCamera(
       const tt = performance.now() / 1000 * 0.08;
       tmpV.set(boat.x + Math.sin(tt) * dist * 1.3, boat.y + ht * 1.2, boat.z + Math.cos(tt) * dist * 1.3);
     }
-    camPos.lerp(tmpV, 1 - Math.exp(-dt * 4));
+    camPos.lerp(tmpV, rigSnap ? 1 : 1 - Math.exp(-dt * 4));
     let lx = boat.x - Math.sin(boat.h) * 4, lz = boat.z - Math.cos(boat.h) * 4;
     if (F.state === 'fight') { lx = THREE.MathUtils.lerp(boat.x, F.fx, 0.35); lz = THREE.MathUtils.lerp(boat.z, F.fz, 0.35); }
     else if (lineOut()) { lx = THREE.MathUtils.lerp(boat.x, F.bob.x, 0.35); lz = THREE.MathUtils.lerp(boat.z, F.bob.z, 0.35); }
     tmpV2.set(lx, boat.y + 1.8, lz);
-    camLook.lerp(tmpV2, 1 - Math.exp(-dt * 5));
+    camLook.lerp(tmpV2, rigSnap ? 1 : 1 - Math.exp(-dt * 5));
+    rigSnap = false;
     camera.position.copy(camPos);
     if (cam.shake > 0) camera.position.add(tmpV.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(cam.shake * 0.6));
     camera.lookAt(camLook);

@@ -136,7 +136,40 @@ button:focus-visible{outline:3px solid var(--sun);outline-offset:2px}
 
 /* overlays */
 .overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;overflow:auto;background:radial-gradient(ellipse at 50% 120%,rgba(127,227,212,.25),transparent 60%),rgba(6,33,59,.72)}
+/* The start screen is the one overlay with something worth looking at behind it: the live sunset
+   beauty shot (game/splash.ts). The shared `.overlay` veil above — a flat 72%-opaque navy — was
+   hiding it, so #start replaces it with a one-sided wash: near-opaque under the wordmark and the
+   boat cards on the left, clearing to nothing on the right where the bridge and the sun are. The
+   warm band along the bottom is the same move a photographer makes with a graduated filter; it
+   stops the cards' hard right edge from reading as a cut-out pasted over a photo.
+   Not `backdrop-filter: blur()` on the card instead: that blurs the water and the crew, which are
+   the subject, and it costs a full-screen filter pass every frame on exactly the hardware least
+   able to afford one. */
+/* Narrow first: the card is the full width here, so there is no "beside the card" to keep clear
+   and the wash has to be even. It is still much lighter than `.overlay`'s flat 72% navy — enough
+   of the sunset comes through to read as a sky, and the 17px grey lede still clears 4.5:1 against
+   the darkest part of the scene behind it. */
+#start{background:
+  linear-gradient(to top,rgba(255,138,64,.14),transparent 42%),
+  linear-gradient(185deg,rgba(4,16,34,.82),rgba(5,19,40,.86) 55%,rgba(5,16,34,.9))}
 .startcard{width:min(980px,100%);margin:auto}
+@media (min-width:1180px){
+  /* Wide enough to give the shot a whole half of the frame, so: card pushed off the left edge
+     (centred, it would leave the scene showing in two useless slivers either side) and the wash
+     becomes one-sided — near-opaque under the text, clearing to nothing over the boat and the
+     bridge. The warm band along the bottom is the same move a photographer makes with a graduated
+     filter; it stops the card's hard right edge reading as a cut-out pasted over a photo.
+     Not `backdrop-filter: blur()` on the card instead: that blurs the water and the crew, which
+     are the subject, and it costs a full-screen filter pass every frame on exactly the hardware
+     least able to afford one. */
+  #start{justify-content:flex-start;background:
+    linear-gradient(to top,rgba(255,138,64,.16),transparent 38%),
+    linear-gradient(100deg,rgba(4,16,34,.93) 0%,rgba(5,19,40,.9) 34%,rgba(8,24,46,.55) 56%,rgba(22,18,40,.16) 74%,transparent 100%)}
+  .startcard{margin:auto auto auto clamp(24px,5vw,86px);width:min(680px,58%)}
+  /* The controls legend is the longest, least urgent text on the screen; at this width it can
+     have the card's full measure rather than squeezing the lede. */
+  .startcard .controls{max-width:52ch}
+}
 .wordmark{font-family:var(--display);font-weight:900;font-size:clamp(72px,14vw,168px);line-height:.82;letter-spacing:-2px;margin:0;color:var(--ink)}
 .wordmark span{display:block;color:transparent;-webkit-text-stroke:2px var(--flats)}
 /* Sits under the wordmark as a strapline: small, wide-tracked and in the flats teal so it reads
