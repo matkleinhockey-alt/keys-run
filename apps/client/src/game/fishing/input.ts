@@ -50,8 +50,15 @@ export function bindFishingInput(
     }
   };
   const onKeyUp = (e: KeyboardEvent): void => {
+    if (e.code !== 'Space') return;
+    // `held` is dropped even while suspended, ahead of the guard. It is a record of whether the
+    // physical key is down, and swallowing the release leaves it stuck true — which matters later
+    // because `held` doubles as the reel-in input during a fight (update.ts's `reel`): charge a
+    // cast, press F to tie up or J to dive while still holding Space, and the next fish you hook
+    // back aboard reels itself in with nobody touching the key.
+    logic.actionInput.held = false;
     if (isSuspended()) return;
-    if (e.code === 'Space') { logic.actionInput.held = false; logic.onActionUp(getBoat()); }
+    logic.onActionUp(getBoat());
   };
   const onBlur = (): void => { logic.actionInput.held = false; };
   window.addEventListener('keydown', onKeyDown);

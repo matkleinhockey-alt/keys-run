@@ -513,7 +513,11 @@ export function initWorld(wrap: HTMLElement): World {
     // Space doubles as the diver's ascend key (entities/diver/input.ts) and this module's own
     // window-level Space listener has no idea diving exists — see fishing/input.ts's
     // `isSuspended` doc comment for the bug this closes (a stray rod cast firing mid-dive).
-    isSuspended: () => diver.mode === 'diver' || land.mode === 'land',
+    // `handgun.mode` is in here for the same reason one step removed: Space also FIRES the pistol
+    // (entities/handgun/input.ts), so without it every shot charged a rod cast in the background
+    // and the Space release sent a real bobber into the water with the gun still out. The
+    // handgun's `prepare` below only clears a charge that was already running when you drew.
+    isSuspended: () => diver.mode === 'diver' || land.mode === 'land' || handgun.mode === 'gun',
   });
   bindCatchInput(catchFlow, () => stateBox.state);
 
@@ -527,7 +531,10 @@ export function initWorld(wrap: HTMLElement): World {
     camState, fpState, lightMats: tod.lightMats, getTodK: tod.getK, onBuilt: (g) => shadows.applyToSubtree(g),
     isTouch: isTouch(), getBoat: () => stateBox.state, getHullLen: () => boatSpec.len, getModel: () => model,
     refuse: () => (handgun.mode === 'gun' ? 'Holster the pistol first (9).' : diver.mode === 'diver' ? 'Climb back aboard first.' : FishF.state === 'fight' ? 'Land your fish first.' : catchFlow.current ? 'Finish with your catch first.' : null),
-    prepare: () => { if (FishF.state !== 'idle' && FishF.state !== 'caught') fishing.reelIn(); },
+    // Charging counts as a cast in flight even though `state` is still 'idle' while the key is
+    // held: ashore the keyup is suspended (above), so a charge left running stays running, the
+    // cast meter sits half-full behind the town HUD, and the first Space back aboard releases it.
+    prepare: () => { if (FishF.charging || (FishF.state !== 'idle' && FishF.state !== 'caught')) fishing.reelIn(); },
     toast, shop: econ.shop, gameRunning: () => game.running, casino,
   });
 
@@ -638,7 +645,9 @@ export function initWorld(wrap: HTMLElement): World {
       // Two drinks in, the seagull talks you out of it. One drink may dive: the wobble is
       // camera-only (sim/steady.ts), so it is silly, not dangerous.
       if (tooDrunkToDive(buffs.mods)) { toast('Caelen: "You can barely stand. Sit down, loser."'); return; }
-      if (FishF.state !== 'idle' && FishF.state !== 'caught') fishing.reelIn();
+      // ...including a charge still building (state is 'idle' while Space is held), which
+      // underwater is the ascend key and would otherwise release a cast on the way down.
+      if (FishF.charging || (FishF.state !== 'idle' && FishF.state !== 'caught')) fishing.reelIn();
       diver.enterWater(stateBox.state.x, stateBox.state.z, stateBox.state.h);
       setDiveUI(true);
       toast('Overboard — WASD/mouse to swim and look, Space/Ctrl to ascend/descend, Shift to sprint. J to climb back aboard.');
