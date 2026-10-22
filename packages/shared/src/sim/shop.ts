@@ -195,6 +195,14 @@ export interface Modifiers {
   viewBonusM: number;
   /** Extra speargun range, metres (long-range band gun). */
   spearRangeM: number;
+  /**
+   * Speargun reload multiplier — LOWER is faster, 1 = stock.
+   *
+   * Applies to the hand-hauled draw, not to the recover phase: `SPEAR_RELOAD_FLOOR` is an
+   * anti-cheat floor that no purchase may buy past (sim/spear.ts's `startReload` clamps it), so
+   * gear makes the part you perform quicker and leaves the part the server checks alone.
+   */
+  spearReloadMul: number;
   /** Speared-fish tether multiplier — lower is better, the fish runs less far (reel conversion). */
   spearTetherMul: number;
   /** Line/leader strength multiplier in the fight sim (heavy rod, lever reel, fluoro leader). */
@@ -214,7 +222,7 @@ export interface Modifiers {
 }
 
 export const NO_MODIFIERS: Modifiers = {
-  breathMul: 1, swimMul: 1, viewBonusM: 0, spearRangeM: 0, spearTetherMul: 1,
+  breathMul: 1, swimMul: 1, viewBonusM: 0, spearRangeM: 0, spearReloadMul: 1, spearTetherMul: 1,
   lineMul: 1, reelMul: 1, biteMul: 1, rareMul: 1, coolerBonusLb: 0, steadyMul: 1, sway: 0,
 };
 
@@ -236,7 +244,11 @@ export function modifiersFor(inv: Inventory, nowS: number): Modifiers {
   if (g('dive.mask')) m.viewBonusM += 6;
 
   // --- gun counter ---------------------------------------------------------------------------
-  if (g('spear.long')) m.spearRangeM += 6;
+  // The band gun is longer-ranged AND quicker to get back into action: it is the upgrade, so it
+  // should feel like one in the hand, not only on the tape measure. 0.65 takes the 2.8 s draw to
+  // ~1.8 s; the braced recover phase is untouched and still floored.
+  if (g('spear.long')) { m.spearRangeM += 6; m.spearReloadMul *= 0.65; }
+  if (g('spear.reel')) m.spearReloadMul *= 0.85; // the reel takes the line handling out of it
   if (g('spear.reel')) m.spearTetherMul *= 0.6;
 
   // --- tackle and pawn -----------------------------------------------------------------------

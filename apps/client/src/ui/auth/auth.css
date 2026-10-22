@@ -31,6 +31,18 @@
 }
 .krAuthTitle span { color: var(--flats, #7fe3d4); }
 
+/* Strapline under the wordmark. Matches the start screen's .motto, scaled for the smaller
+   gate title so it reads as a tagline and not a second line of the logo. */
+.krAuthMotto {
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--flats, #7fe3d4);
+  opacity: .9;
+  margin: 6px 0 0;
+}
+
 .krAuthSub {
   color: var(--muted, #a9c4d6);
   font-size: 13px;

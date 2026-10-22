@@ -276,7 +276,9 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
     // under-subtracts) — otherwise sitting in a 0.9 m/s stream would slow every reload.
     const kickSpeed = Math.max(0, (diver.speed ?? 0) - 0.75 * water.speed);
     const hand = { drawing: drawing && handsFree, speed: kickSpeed };
-    gun = stepReload(gun, dt, hand);
+    // Gear-scaled draw: the band gun and the reel conversion make the hauled phase quicker
+    // (sim/shop.ts's `spearReloadMul`). No gear = 1 = exactly the stock reload.
+    gun = stepReload(gun, dt, hand, deps.gear?.mods(t).spearReloadMul ?? 1);
     muzzleBubbles.update(dt, water.vx, water.vz);
     speredVisual.tick(dt, t);
     if (shot) {
