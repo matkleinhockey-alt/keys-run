@@ -97,7 +97,14 @@ export function stepSchool(state: SchoolState, V: CreatureVis, ctx: SchoolCtx): 
   if (trigger) {
     if (g.flee <= 0 && V.act === 'glide' && !g.glide) g.glide = rand(1.6, 3.4);
     g.flee = 1.5;
-    g.fleeHeading = Math.atan2(-(trigger.x - g.cx), -(trigger.z - g.cz));
+    // AWAY from the trigger, not toward it. Heading's forward vector is (-sin h, -cos h), so
+    // `atan2(-dx, -dz)` is the *toward* form — it is what bow-riding uses a few lines below to
+    // close on the bow. Flee had the same expression, so a spooked school swam straight at
+    // whatever spooked it, re-entered the trigger radius, re-triggered, and orbited the threat.
+    // Under a stopped boat that is a ring of fish lapping the hull about once a second (measured:
+    // 257 turns in four simulated minutes, identical at every anchor radius — which is what gave
+    // it away as the flee path rather than the anchor).
+    g.fleeHeading = Math.atan2(trigger.x - g.cx, trigger.z - g.cz);
   }
   if (V.act === 'glide' && !g.glide && Math.random() < dt * 0.03) g.glide = rand(1.6, 3.4);
 
@@ -143,7 +150,7 @@ export function stepSchool(state: SchoolState, V: CreatureVis, ctx: SchoolCtx): 
     const pull = clamp((d0 - R) / R + 0.15, 0, 1);
     if (pull > 0) {
       const dir = Math.sin(t * 0.07 + g.phase * 3.1) >= 0 ? 1 : -1;
-      const tang = 0.55 * (1 - pull); // fades out the further from home, so a stray school comes back
+const tang = 0.55 * (1 - pull); // fades out the further from home, so a stray school comes back
       const vx = (-ax / d0) * pull + (-az / d0) * dir * tang;
       const vz = (-az / d0) * pull + (ax / d0) * dir * tang;
       g.heading = angLerp(g.heading, Math.atan2(-vx, -vz), dt * 1.6 * (0.4 + pull));
