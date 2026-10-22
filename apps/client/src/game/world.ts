@@ -302,6 +302,9 @@ export function initWorld(wrap: HTMLElement): World {
     mfdTex: electronics.mfdTex, gpsTex: electronics.gpsTex, sonTex: electronics.sonTex,
     particles, bpm: audio.music.bpm, hypeCallout: audio.music.hypeCallout, sayCaelenLine: audio.sayCaelenLine,
     dogBark: () => audio.engine.bark(),
+    // The pirates read your wallet and cooler to pick their lines (entities/life/pirates.ts). Late-bound:
+    // `catchFlow` is built below, and they only ask once they have sailed up to you.
+    pirateLoot: () => ({ cash: econ.state.cash, coolerLb: catchFlow.cooler.coolerLb(), coolerCount: catchFlow.cooler.cooler.length, boatId: boatSpec.id, boat: `${boatSpec.brand} ${boatSpec.name}` }),
   });
   installWorldLife(life.legacySnapshot());
   document.getElementById('btnSound')?.addEventListener('click', () => { audio.init(); audio.toggleMute(); });
@@ -1078,7 +1081,7 @@ export function initWorld(wrap: HTMLElement): World {
         running: game.running,
       },
       sw, ch, reel: reelAudioState(), buddy: remoteEngines.buddy, traffic: remoteEngines.traffic, racers: remoteEngines.racers,
-      gullSites: life.gullSites(), parties: life.partySites(),
+      gullSites: life.gullSites(), parties: life.partySites(), pirates: life.pirateSite(),
     }, speakerSink);
     if (btnMusicEl) btnMusicEl.textContent = audio.music.label();
 
