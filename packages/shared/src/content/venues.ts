@@ -147,21 +147,22 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
     enterable: true,
   },
   club: {
-    id: 'club', name: 'Pink Flamingo Cabaret', tagline: 'Live entertainment · Cocktails · Girls girls girls',
+    id: 'club', name: 'Pink Flamingo Cabaret', tagline: 'Live entertainment · Cocktails · Under new management',
     greeting: [
-      'Cover is twenty. Flip-flops are fine. Opinions about the show are not.',
-      'Private event tonight, fisherman. Come back when the boat is paid off.',
-      'VIP is full. Everything is full. Walk it off.',
+      'Evening, boss. Rope is down, booth is yours, nobody charges you a nickel.',
+      'Boss is in! Hey — somebody get the good glasses.',
+      'Your club, your rules. Try not to tell the band how to play.',
     ],
-    blurb: 'Magenta neon, a velvet rope and a bouncer the size of a bait freezer. You can not get in yet; what you can do is admire the sign and be turned away with some style.',
+    blurb: 'Magenta neon, a velvet rope and a bouncer the size of a bait freezer. You own the place, which is why the rope comes down and the tab does not exist. The house still takes everyone else\'s money; yours is already in the till.',
     sells: [
-      // SINKS: PRICE 20 -> 50 (the rope is closed anyway; this only sets the price of being turned away with style).
-      item('cover', 'Cover charge', 'Pay to get past the rope.', 50, 'sink', 'club.cover'),
-      // SINKS: PRICE 250 -> 2,500. 'Very expensive' has to be true: ~2/3 of a first-session haul, the biggest discretionary sink in town.
+      // Cover and bottle are COMPED for the owner (sim/club.ts): they stay listed because the club
+      // still charges everyone else, and the panel shows them at $0 with "on the house" rather
+      // than hiding them — a shelf that silently empties reads as broken, not as a perk.
+      item('cover', 'Cover charge', 'Pay to get past the rope. Not you.', 50, 'sink', 'club.cover'),
       item('bottle', 'Bottle service', 'A very expensive way to feel important.', 2_500, 'sink', 'club.bottle'),
-      item('tip', 'Tip jar', 'Money out of the economy, for the cabaret.', 10, 'sink', 'club.tip'),
+      item('tip', 'Tip jar', 'The band and the staff still get paid. Tip them.', 10, 'sink', 'club.tip'),
     ],
-    enterable: false,
+    enterable: true,
   },
   diner: {
     id: 'diner', name: 'Salty Dog Diner', tagline: 'Breakfast all day · Fresh catch · Pie',
@@ -230,8 +231,11 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
   laundromat: {
     id: 'laundromat', name: 'Suds & Sun Coin Laundry', tagline: 'Wash · Dry · Fold',
     greeting: ['Quarters in the machine by the door.'],
-    blurb: 'Nothing here but the warm, sweet smell of fabric softener. A place to wash the fish out of your shorts.',
-    sells: [],
+    blurb: 'The warm, sweet smell of fabric softener. A place to wash the fish out of your shorts, and the bar out of your shirt.',
+    sells: [
+      item('wash', 'Wash & dry', 'Takes the bar out of your shirt. And you.', 8, 'service', 'laundromat.wash'),
+      item('sock', 'Lost-and-found sock', 'A mystery sock. Eight to collect. Nothing happens.', 3, 'sink', 'laundromat.sock'),
+    ],
     enterable: false,
   },
   icecream: {
@@ -253,7 +257,12 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
     greeting: ['Gas pump two is broken. So is pump one.'],
     blurb: 'Chips, ice and a lot of fluorescent light. Boat fuel and snacks will be sold here.',
     sells: [
-      item('fuel', 'Jerry can of fuel', 'Range for the boat.', 30, 'consumable', 'boat.fuel'),
+      // DELISTED. There is no fuel tank in sim/boat.ts, and the services agent's reasoning for
+      // not inventing one is right: a tank that can run dry strands you mid-ocean, and a tank that
+      // cannot is a gauge that never matters. Left listed it would have charged $30 for a can that
+      // does nothing — the same inert-purchase failure already fixed twice. Off the shelf until
+      // there is a fuel system worth having.
+      { ...item('fuel', 'Jerry can of fuel', 'Range for the boat.', 30, 'consumable', 'boat.fuel'), status: 'planned' as const },
       item('snacks', 'Chips and a soda', 'Morale.', 4, 'buff', 'conv.snacks'),
     ],
     enterable: false,

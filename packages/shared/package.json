@@ -121,6 +121,10 @@
     "./sim/gear": {
       "types": "./dist/sim/gear.d.ts",
       "default": "./dist/sim/gear.js"
+    },
+    "./sim/services": {
+      "types": "./dist/sim/services.d.ts",
+      "default": "./dist/sim/services.js"
     }
   },
   "scripts": {

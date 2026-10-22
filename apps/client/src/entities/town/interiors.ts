@@ -44,6 +44,7 @@ export function buildInterior(lot: Lot, kit: TownKit): Interior {
   const mats: THREE.Material[] = [];
   const texs: THREE.Texture[] = [];
   const isBar = lot.id === 'bar';
+  const isClub = lot.id === 'club';
   const y0 = PAD_Y + 0.04, H = lot.h;
   const x0 = lot.u0 + WALL_T, x1 = lot.u1 - WALL_T, v0 = lot.v0 + WALL_T, v1 = lot.v1 - WALL_T;
   const cx = (x0 + x1) / 2;
@@ -54,15 +55,17 @@ export function buildInterior(lot: Lot, kit: TownKit): Interior {
     const g = new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2);
     const rep = isBar ? 2.2 : 1.6;
     const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * (w / rep), uv.getY(i) * (d / rep));
-    const tex = floorTexture(isBar ? 'boards' : 'checker');
-    const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: isBar ? 0.85 : 0.35, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.4, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    const tex = floorTexture(isBar || isClub ? 'boards' : 'checker');
+    const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: isClub ? 0.22 : isBar ? 0.85 : 0.35, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.4, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
     // no receiveShadow in here: the sun never reaches a room under a solid roof, and a cascade lookup on the
     // ceiling just paints shadow-acne blotches over it (seen in the first interior captures)
     const m = new THREE.Mesh(g, mat); m.position.set(cx, y0, Zf((v0 + v1) / 2)); group.add(m);
     geos.push(g); mats.push(mat); texs.push(tex);
   }
   // wall skins and ceiling, in the room's own colours (the exterior boxes are the outside paint)
-  const wall = isBar ? 0x9a7048 : 0xf1e8d6, trim = isBar ? 0x4a3524 : 0xc23a3a, ceil = isBar ? 0x4a3826 : 0xe6e2d6;
+  const wall = isClub ? 0x1a0d18 : isBar ? 0x9a7048 : 0xf1e8d6;
+  const trim = isClub ? 0x5a1340 : isBar ? 0x4a3524 : 0xc23a3a;
+  const ceil = isClub ? 0x120812 : isBar ? 0x4a3826 : 0xe6e2d6;
   const sk = 0.03;
   solid.span(x0, x1, y0, PAD_Y + H - 0.1, Zf(v1) + sk, Zf(v1) + 0.0 + sk * 2, wall);
   solid.span(x0, x0 + sk, y0, PAD_Y + H - 0.1, Zf(v1), Zf(v0), wall);
@@ -107,7 +110,48 @@ export function buildInterior(lot: Lot, kit: TownKit): Interior {
     solid.cyl((b.u0 + b.u1) / 2, y0, Zf((b.v0 + b.v1) / 2), 0.07, 0.07, 0.74, 0x9aa0a6, 6);
   };
 
-  if (isBar) {
+  if (isClub) {
+    // The Pink Flamingo, under new management: the rope is down because the player owns it.
+    // Everything here is emissive rather than lit — the town's light pool is only four PointLights
+    // with hysteresis (entities/town/lights.ts), and a nightclub is exactly the room that would
+    // eat all of them. Magenta neon on near-black does the work for free.
+    const st = box('club-stage');
+    // raised stage with a lit lip
+    solid.span(st.u0, st.u1, y0, y0 + 0.9, Zf(st.v1), Zf(st.v0), 0x241022);
+    solid.span(st.u0, st.u1, y0 + 0.9, y0 + 0.96, Zf(st.v1), Zf(st.v0), 0x3a1a34);
+    solid.span(st.u0, st.u1, y0 + 0.62, y0 + 0.72, Zf(st.v0 - 0.06), Zf(st.v0 - 0.12), 0xff3ea5);
+    glow.pool((st.u0 + st.u1) / 2, y0 + 0.98, Zf((st.v0 + st.v1) / 2), 14, 0xff3ea5);
+    // two poles, floor to ceiling, because the Midnight Express already has one and this is where
+    // it belongs
+    for (const pu of [st.u0 + 5, st.u1 - 5]) {
+      solid.cyl(pu, y0 + 0.96, Zf((st.v0 + st.v1) / 2), 0.07, 0.07, H - 1.1, 0xd8d2cc, 10);
+      glow.halo(pu, y0 + 2.4, Zf((st.v0 + st.v1) / 2), 2.2, 0xff6ec0);
+    }
+    // back-wall neon: the flamingo, plus a strip each side
+    glow.halo(cx + 4, y0 + 4.2, Zf(v1) + 0.3, 5.2, 0xff3ea5);
+    glow.halo(cx - 8, y0 + 3.6, Zf(v1) + 0.3, 2.0, 0x38e0ff);
+    glow.halo(cx + 16, y0 + 3.6, Zf(v1) + 0.3, 2.0, 0x8a3cff);
+
+    // bar down the west wall
+    const cb = box('club-bar');
+    solid.span(cb.u0, cb.u1, y0, y0 + 1.08, Zf(cb.v1), Zf(cb.v0), 0x2a1026);
+    solid.span(cb.u0 - 0.1, cb.u1 + 0.1, y0 + 1.08, y0 + 1.16, Zf(cb.v1 + 0.1), Zf(cb.v0 - 0.15), 0x6a2250);
+    glow.halo(cb.u1 + 0.4, y0 + 1.6, Zf((cb.v0 + cb.v1) / 2), 2.4, 0x38e0ff);
+    stoolRow(cb.v0 + 1, cb.v1 - 1, cb.v0, 0, 0x000000); // no stools along v; booths carry the seating
+
+    // the owner's booth — bigger, its own light, and it faces the stage
+    const ob = box('club-booth-owner');
+    booth(ob, 'e', 0x7a1f52);
+    glow.pool((ob.u0 + ob.u1) / 2, y0 + 0.06, Zf((ob.v0 + ob.v1) / 2), 5.5, 0xffd36e);
+    glow.halo((ob.u0 + ob.u1) / 2, y0 + 2.2, Zf((ob.v0 + ob.v1) / 2), 1.8, 0xffc24a);
+    booth(box('club-booth-1'), 'e', 0x4a1636);
+
+    // DJ booth in the back corner
+    const dj = box('club-dj');
+    solid.span(dj.u0, dj.u1, y0, y0 + 1.2, Zf(dj.v1), Zf(dj.v0), 0x1d0c1a);
+    solid.span(dj.u0, dj.u1, y0 + 1.2, y0 + 1.26, Zf(dj.v1), Zf(dj.v0), 0x3a1a34);
+    glow.halo((dj.u0 + dj.u1) / 2, y0 + 1.5, Zf((dj.v0 + dj.v1) / 2), 1.6, 0x38ff9e);
+  } else if (isBar) {
     const c = box('bar-counter');
     solid.span(c.u0, c.u1, y0, y0 + 1.08, Zf(c.v1), Zf(c.v0), 0x3a2a1c);
     solid.span(c.u0 - 0.1, c.u1 + 0.1, y0 + 1.08, y0 + 1.16, Zf(c.v1 + 0.1), Zf(c.v0 - 0.15), 0x9a6a3c);

@@ -16,9 +16,23 @@ const own = (...buys: Array<[keyof typeof VENUES, string]>): Inventory => {
 };
 
 describe('the shelf', () => {
-  it('every item is for sale, priced, and maps to an effect', () => {
+  /**
+   * Items deliberately kept off the shelf, with the reason. Anything NOT in here must be live:
+   * the point of this suite is that the town does not promise what it cannot deliver, and
+   * "status: 'planned'" is how 35 items shipped as decoration in the first place. Delisting has to
+   * be a decision someone wrote down, not a default.
+   */
+  const DELISTED: Readonly<Record<string, string>> = {
+    fuel: 'No fuel tank exists in sim/boat.ts. A tank that can run dry strands the player; one that cannot is a gauge that never matters.',
+  };
+
+  it('every item is for sale, priced, and maps to an effect — or is delisted on purpose', () => {
     for (const v of Object.values(VENUES)) {
       for (const s of v.sells) {
+        if (s.status === 'planned') {
+          expect(DELISTED[s.id], `${v.id}/${s.id} is off the shelf with no recorded reason`).toBeTruthy();
+          continue;
+        }
         expect(s.status, `${v.id}/${s.id}`).toBe('live');
         expect(s.price, `${v.id}/${s.id} price`).toBeGreaterThan(0);
         expect(s.effect.key, `${v.id}/${s.id} effect`).toMatch(/\./);

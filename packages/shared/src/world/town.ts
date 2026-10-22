@@ -147,7 +147,7 @@ export const LOTS: readonly Lot[] = [
   { id: 'liquor', venue: 'liquor', style: 'liquor', u0: -100, u1: -86, v0: 46, v1: 66, h: 4.2, door: -93, enterable: false },
   // Row 1, east
   { id: 'bar', venue: 'bar', style: 'bar', u0: 8, u1: 34, v0: 46, v1: 70, h: 4.8, door: 21, enterable: true },
-  { id: 'club', venue: 'club', style: 'club', u0: 34, u1: 68, v0: 46, v1: 72, h: 6.6, door: 44, enterable: false },
+  { id: 'club', venue: 'club', style: 'club', u0: 34, u1: 68, v0: 46, v1: 72, h: 6.6, door: 44, enterable: true },
   { id: 'gifts', venue: 'gifts', style: 'gifts', u0: 68, u1: 100, v0: 46, v1: 68, h: 4.4, door: 84, enterable: false },
   // Row 2
   { id: 'pawn', venue: 'pawn', style: 'pawn', u0: -100, u1: -70, v0: 100, v1: 122, h: 4.6, door: -85, enterable: false },
@@ -280,6 +280,15 @@ export const INTERIOR_BOXES: readonly InteriorBox[] = [
   { id: 'diner-booth-w2', lot: 'diner', u0: -31.6, u1: -28.4, v0: 55.5, v1: 59.5 },
   { id: 'diner-booth-e1', lot: 'diner', u0: -11.6, u1: -8.4, v0: 50, v1: 54 },
   { id: 'diner-booth-e2', lot: 'diner', u0: -11.6, u1: -8.4, v0: 55.5, v1: 59.5 },
+  // Pink Flamingo Cabaret: a stage along the back wall, the owner's booth on the east side where
+  // it can see the whole room, a bar on the west, and the DJ tucked in the back corner. The door
+  // is at u=44, so the whole front-left quarter stays clear as the entrance hall the walker and
+  // test/town.test.ts both require.
+  { id: 'club-stage', lot: 'club', u0: 42, u1: 60, v0: 64, v1: 70 },
+  { id: 'club-bar', lot: 'club', u0: 36, u1: 40, v0: 56, v1: 68 },
+  { id: 'club-booth-owner', lot: 'club', u0: 62, u1: 66.4, v0: 58, v1: 64 },
+  { id: 'club-booth-1', lot: 'club', u0: 62, u1: 66.4, v0: 50, v1: 55 },
+  { id: 'club-dj', lot: 'club', u0: 61, u1: 66, v0: 66, v1: 70 },
 ];
 
 export interface Interact {
@@ -300,9 +309,14 @@ export const INTERACTS: readonly Interact[] = [
     id: `door-${l.id}`, kind: 'venue', venue: l.venue, u: l.door, v: l.v0 - 0.9, r: 2.6,
     prompt: l.venue === 'club' ? 'F  Talk to the doorman' : l.venue === 'guns' ? 'F  Step up to the counter' : 'F  Go to the door',
   })),
-  // The walk-in bar and diner are served from the counter, not the door
+  // The walk-in venues are served from inside, not the door. Dropping out of the generated list
+  // above is why `enterable` has to come with an interior interaction point: the club went
+  // enterable and its only way to interact vanished with it, which test/town.test.ts caught by
+  // asserting every interaction point is somewhere a person can actually stand.
   { id: 'counter-bar', kind: 'venue', venue: 'bar', u: 21, v: 59.3, r: 2.6, prompt: 'F  Order at the bar' },
   { id: 'counter-diner', kind: 'venue', venue: 'diner', u: -21.5, v: 58.8, r: 2.6, prompt: 'F  Sit at the counter' },
+  // The club is served from the owner's booth: you walk in past the rope and sit down.
+  { id: 'booth-club', kind: 'venue', venue: 'club', u: 60.2, v: 61, r: 2.8, prompt: 'F  Take the owner\'s booth' },
   { id: 'marlin', kind: 'plaque', u: 16, v: 22.2, r: 2.4, prompt: 'F  Read the plaque',
     text: 'BLUE MARLIN, 612 LB. Boated 1957 off Sombrero Reef. The plaque says "released" because the town got embarrassed.' },
 ];

@@ -62,6 +62,7 @@ import { F as FishF, lineOut as fishingLineOut } from './fishing/state.js';
 import { createCatchFlow } from './catch/catch-flow.js';
 import { createEconomySystem } from './economy/system.js';
 import { createGearScreen } from '../ui/gear.js';
+import { createServicesSystem } from './services/index.js';
 import { bindCatchInput } from './catch/input.js';
 
 import { updateHUD } from '../ui/hud.js';
@@ -244,6 +245,10 @@ export function initWorld(wrap: HTMLElement): World {
 
   const econ = createEconomySystem({ getModel: () => model, onGuestsChanged: () => shadows.applyToSubtree(model.group) });
   let boatSpec: Boat = econ.startingBoat(); // the last hull you owned and picked; a new wallet is the Grady "Actively Sinking"
+  // Town services (motel, cabaret, lotto, laundromat). The shop UI calls services.canBuy(key) before charging
+  // and services.onPurchased(key) after; the inventory port is the one line to fill in (see game/services).
+  const services = createServicesSystem({ tod, economy: econ, toast, boatName: () => boatSpec.name });
+  (window as unknown as { __servicesDebug?: unknown }).__servicesDebug = services; // DEV/VERIFICATION ONLY
   let model: BoatModel = makeBoat(boatSpec, { wealth: econ.wealthFor(boatSpec.len), lightMats: tod.lightMats, todK: tod.getK(), mfdTex: electronics.mfdTex, gpsTex: electronics.gpsTex, sonTex: electronics.sonTex });
   scene.add(model.group);
 
