@@ -37,9 +37,11 @@ export const SHIP_B = 4.4;
 const SPEC: HullSpec = {
   ...HULLS.grady,
   F: 1.45, spring: 1.0, yk: 0.95, dr0: 40, dr1: 62, rake: 2.6, entry: 0.5, steps: [],
+  // Brighter than "dark planking" reads on paper: the first pass (hull 0x5c4431) multiplied by the
+  // grey plank texture and a low sun came out solid black in the browser, seams invisible.
   colors: {
-    bottom: 0x2b3426, boot: 0x2d2318, hull: 0x5c4431, cove: 0x7b2c22,
-    rub: 0x1d150e, cap: 0x6a5038, liner: 0x4a3a2a, deck: 0x8a7352,
+    bottom: 0x3f4a38, boot: 0x4a3a28, hull: 0xb8905f, cove: 0xb8402f,
+    rub: 0x3a2c1e, cap: 0x8a6a48, liner: 0x6a5238, deck: 0x8a7352,
   },
 };
 
@@ -68,7 +70,7 @@ function plankTexture(): THREE.CanvasTexture | null {
   let s = 7;
   const rnd = (): number => { s = (s * 16807) % 2147483647; return s / 2147483647; };
   for (let p = 0; p < 8; p++) {
-    const y0 = p * 32, tone = 168 + Math.floor(rnd() * 56);
+    const y0 = p * 32, tone = 205 + Math.floor(rnd() * 45);
     ctx.fillStyle = `rgb(${tone},${tone - 6},${tone - 14})`;
     ctx.fillRect(0, y0, 256, 32);
     for (let g = 0; g < 14; g++) {
@@ -207,7 +209,7 @@ export function buildPirateShip(): PirateShip {
     hull.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
   }
   geos.push(hull);
-  g.add(new THREE.Mesh(hull, mat(new THREE.MeshStandardMaterial({ vertexColors: true, map: plank, roughness: 0.92, flatShading: true, side: THREE.DoubleSide }))));
+  g.add(new THREE.Mesh(hull, mat(new THREE.MeshStandardMaterial({ vertexColors: true, map: plank, roughness: 0.92, flatShading: true, side: THREE.DoubleSide, emissive: 0x4a3826, emissiveIntensity: 1 }))));
 
   // ---- deck, laid along the stations
   const st = Array.from({ length: NS + 1 }, (_, i) => hullStation(SPEC, L, B, i / NS));
@@ -236,8 +238,8 @@ export function buildPirateShip(): PirateShip {
   }
 
   // ---- bulwarks and cap rail: short planked wall along the gunwale, both sides
-  const wall = mat(wood(0x4a3626));
-  const capRail = mat(wood(0x2c2016));
+  const wall = mat(wood(0x7a5c40));
+  const capRail = mat(wood(0x4a3826));
   for (let i = 0; i < NS; i += 1) {
     const A = st[i], Z = st[i + 1];
     for (const sx of [-1, 1]) {
@@ -259,9 +261,9 @@ export function buildPirateShip(): PirateShip {
   // ---- doghouse (cabin top), aft of the mast
   const mastZ = -2.2;
   const hz = 1.3;
-  const dh = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.8, 3.3), mat(wood(0x4d3a2a)));
+  const dh = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.8, 3.3), mat(wood(0x7a5e42)));
   dh.position.set(0, deckAt(hz) + 0.4, hz); dh.castShadow = true; g.add(dh);
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.1, 3.6), mat(wood(0x6b5239)));
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.1, 3.6), mat(wood(0x92704c)));
   roof.position.set(0, deckAt(hz) + 0.85, hz); roof.castShadow = true; g.add(roof);
   const glass = mat(new THREE.MeshStandardMaterial({ color: 0x14100a, roughness: 0.3 }));
   for (const sx of [-1, 1]) for (const dz of [-0.9, 0.9]) {
@@ -300,7 +302,7 @@ export function buildPirateShip(): PirateShip {
   const canvasTone = 0xd6c79c;
   const mainGeo = sailGeo(
     [V(0, boomY + 0.08, 0.2), V(0, boomY + 0.08, boomLen - 0.1), V(0, 9.8, 4.75), V(0, 7.55, 0.2)],
-    0.55, 7, 6, [[5, 4], [6, 5], [1, 0]],
+    0.55, 7, 6, [[5, 4], [1, 0]],
     [
       { u0: 0.14, u1: 0.4, v0: 0.12, v1: 0.34, color: 0x8a3b2c }, // rust-red patch, lower luff
       { u0: 0.58, u1: 0.8, v0: 0.46, v1: 0.66, color: 0x6c7a80 }, // grey sailcloth
@@ -310,7 +312,9 @@ export function buildPirateShip(): PirateShip {
     canvasTone,
   );
   geos.push(mainGeo);
-  const sailMat = mat(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, side: THREE.DoubleSide }));
+  // Emissive because canvas is translucent: backlit (the usual view of a sail, sun behind it) the
+  // first pass came out olive and dead. A little self-light keeps it reading as old canvas.
+  const sailMat = mat(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, side: THREE.DoubleSide, emissive: 0x5a5038, emissiveIntensity: 0.55 }));
   const mainSail = new THREE.Mesh(mainGeo, sailMat);
   mainSail.castShadow = true;
   rig.add(mainSail);

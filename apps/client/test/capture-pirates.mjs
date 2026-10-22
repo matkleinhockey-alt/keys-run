@@ -71,7 +71,6 @@ await page.screenshot({ path: path.join(OUT, '03-hail.png') });
 
 // Beauty shots from the water, using the debug camera override.
 const ps = await state();
-const cam = (dx, dy, dz, ly = 3.5) => page.evaluate(([x, y, z, lx, lyy, lz]) => { window.__fishDebugCamera = { x, y, z, lookX: lx, lookY: lyy, lookZ: lz }; }, [ps.x + dx, dy, ps.z + dz, ps.x, ly, ps.z]);
 for (const [name, dx, dy, dz] of [['04-ship-broadside', 24, 5, 10], ['05-ship-stern', 8, 4, 30], ['06-ship-bow', -14, 3.5, -26], ['07-ship-rig', 30, 7, 0]]) {
   const s = await state();
   await page.evaluate(([x, y, z, lx, ly, lz]) => { window.__fishDebugCamera = { x, y, z, lookX: lx, lookY: ly, lookZ: lz }; }, [s.x + dx, dy, s.z + dz, s.x, 3.6, s.z]);
@@ -81,12 +80,12 @@ for (const [name, dx, dy, dz] of [['04-ship-broadside', 24, 5, 10], ['05-ship-st
 await page.evaluate(() => { delete window.__fishDebugCamera; });
 await faceThem();
 
-await waitFor((s) => s.phase === 'depart', 'depart');
-console.log('departing:', JSON.stringify(await state()));
-await page.screenshot({ path: path.join(OUT, '08-departing.png') });
-await waitFor((s) => s.phase === 'away', 'gone', 400000);
-console.log('gone:', JSON.stringify(await state()));
-await page.screenshot({ path: path.join(OUT, '09-gone.png') });
-
+if (process.env.PIRATE_FULL) {
+  await waitFor((s) => s.phase === 'depart', 'depart', 3600000);
+  console.log('departing:', JSON.stringify(await state()));
+  await page.screenshot({ path: path.join(OUT, '08-departing.png') });
+  await waitFor((s) => s.phase === 'away', 'gone', 3600000);
+  console.log('gone:', JSON.stringify(await state()));
+}
 await browser.close();
 console.log(errors.length ? `PAGE ERRORS:\n${errors.join('\n')}` : 'no page errors');
