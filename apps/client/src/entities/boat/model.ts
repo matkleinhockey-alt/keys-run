@@ -597,6 +597,23 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
       h2.rotation.set(0, Math.PI / 2, Math.PI);
     }
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) add(new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.04, 0.08), blk), sx * (CW / 2 - 0.08), cs2 + 0.02, coolerZ + sz * (CD / 2 - 0.08));
+
+    // The ammo can, stowed against the cooler: a surplus .50-cal steel box, which is what the
+    // 9 mm for the pistol (entities/handgun/**) rides in. Olive drab, hinged lid, folded carry
+    // handle, rubber-gasketed rim. Purely a prop — the rounds themselves live in the shop
+    // inventory ('handgun.ammo'), bought at Deadeye Guns & Ammo, so this is where they are KEPT,
+    // not a place that hands out free ones.
+    const AW = 0.30, AD = 0.165, AH = 0.185;
+    const ax2 = CW / 2 + 0.03 + AD / 2;   // hard against the cooler's side, clear of its handles
+    const od = M(0x4a5241, { roughness: 0.85 }), odDark = M(0x3a4133, { roughness: 0.85 });
+    // the body runs fore-and-aft, long side to the cooler, the way one actually sits on a sole
+    add(new THREE.Mesh(new THREE.BoxGeometry(AD, AH, AW), od), ax2, cs2 + AH / 2, coolerZ);
+    add(new THREE.Mesh(new THREE.BoxGeometry(AD + 0.012, 0.022, AW + 0.012), odDark), ax2, cs2 + AH, coolerZ);       // gasket rim
+    add(new THREE.Mesh(new THREE.BoxGeometry(AD + 0.008, 0.028, AW + 0.008), od), ax2, cs2 + AH + 0.026, coolerZ);   // lid
+    // carry handle, folded flat along the lid, and the latch lever on the forward end
+    const hdl = add(new THREE.Mesh(new THREE.TorusGeometry(0.052, 0.009, 5, 10, Math.PI), odDark), ax2, cs2 + AH + 0.042, coolerZ);
+    hdl.rotation.set(Math.PI / 2, 0, 0);
+    add(new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.05, 0.016), odDark), ax2, cs2 + AH + 0.012, coolerZ - AW / 2 - 0.012);
   }
 
   // marine speaker pods with LED rings — `leds` collects a handle per ring so
