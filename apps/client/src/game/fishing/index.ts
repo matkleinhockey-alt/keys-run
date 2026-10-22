@@ -14,6 +14,7 @@ import { createRodViewModel } from './rod-viewmodel.js';
 import { createFishingLogic, type LandedFish } from './update.js';
 import { bindFishingInput } from './input.js';
 import { F, lineOut, fishingActive } from './state.js';
+import { NO_SPOTS, type SpotQuery } from './spot.js';
 
 export { F, lineOut, fishingActive } from './state.js';
 export type { LandedFish } from './update.js';
@@ -27,6 +28,8 @@ export interface FishingSystemDeps {
   particles: ParticleSystem;
   boatInput: BoatInput;
   getBoat(): BoatState;
+  /** Frenzy/weedline/rig lookup (life.spots); omitted by harnesses with no life systems. */
+  spots?: SpotQuery;
   onLanded(fish: LandedFish): void;
   onActionWhileCaught(): void;
   /** True while the fishing Space/cast input should be ignored (game/world.ts passes
@@ -58,6 +61,7 @@ export function createFishing(deps: FishingSystemDeps): FishingSystem {
     rodVM,
     particles: deps.particles,
     boatInput: deps.boatInput,
+    spots: deps.spots ?? NO_SPOTS,
     onLanded: deps.onLanded,
     onActionWhileCaught: deps.onActionWhileCaught,
   });

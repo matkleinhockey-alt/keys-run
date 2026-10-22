@@ -453,6 +453,7 @@ export function initWorld(wrap: HTMLElement): World {
     particles,
     boatInput: input,
     getBoat: () => stateBox.state,
+    spots: life.spots,
     onLanded(fish) { catchFlow.landFish({ key: fish.key, weight: fish.weight, x: fish.fx, z: fish.fz, zone: fish.zone }); },
     onActionWhileCaught() { catchFlow.releaseFish(); },
     // Space doubles as the diver's ascend key (entities/diver/input.ts) and this module's own

@@ -65,3 +65,34 @@ function setText(id: string, text: string): void {
   const el = $(id);
   if (el) el.textContent = text;
 }
+
+const COMPASS_16 = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+/** World north is -z and east is +x (the minimap's own frame), so compass bearing = atan2(dx,-dz). */
+function bearingDeg(dx: number, dz: number): number { return ((Math.atan2(dx, -dz) * 180 / Math.PI) % 360 + 360) % 360; }
+/** 16-point compass word for a world-space offset, e.g. "NNE". */
+export function compassWord(dx: number, dz: number): string { return COMPASS_16[Math.round(bearingDeg(dx, dz) / 22.5) % 16]; }
+
+let calloutEl: HTMLElement | null = null;
+let calloutText = '';
+/** The "birds are working" arrow: points at the nearest live frenzy relative to the bow, with
+ * distance. Lazily built (no index.html/CSS churn) and pointer-events:none so it can never eat a
+ * click meant for the throttle/cast. `null` hides it. The boat's heading is `-h` as a compass
+ * bearing (the gHdg gauge above does exactly that), so the on-screen angle is bearing - heading. */
+export function setHotspotCallout(c: { dist: number; dx: number; dz: number; h: number } | null): void {
+  if (!c) { if (calloutEl) calloutEl.style.display = 'none'; return; }
+  if (!calloutEl) {
+    const host = $('hud');
+    if (!host) return;
+    calloutEl = document.createElement('div');
+    calloutEl.id = 'hsCallout';
+    calloutEl.style.cssText = 'position:absolute;top:136px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:8px;'
+      + 'padding:6px 12px;border-radius:18px;background:rgba(13,59,102,.78);color:#f2c14e;font:700 14px sans-serif;pointer-events:none;z-index:5';
+    calloutEl.innerHTML = '<span style="display:inline-block;font-size:20px;line-height:1">▲</span><span></span>';
+    host.appendChild(calloutEl);
+  }
+  calloutEl.style.display = 'flex';
+  const rel = bearingDeg(c.dx, c.dz) - (-c.h * 180 / Math.PI);
+  (calloutEl.firstElementChild as HTMLElement).style.transform = `rotate(${rel.toFixed(0)}deg)`;
+  const txt = 'Birds working · ' + Math.round(c.dist / 10) * 10 + ' m ' + compassWord(c.dx, c.dz);
+  if (txt !== calloutText) { calloutText = txt; (calloutEl.lastElementChild as HTMLElement).textContent = txt; }
+}
