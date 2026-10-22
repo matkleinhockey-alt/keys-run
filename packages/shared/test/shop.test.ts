@@ -27,6 +27,27 @@ describe('the shelf', () => {
     fuel: 'No fuel tank exists in sim/boat.ts. A tank that can run dry strands the player; one that cannot is a gauge that never matters.',
   };
 
+  it('no venue advertises something for "one day" — the copy promises only what ships', () => {
+    // The complaint this comes from: the town was full of things described as coming later, which
+    // reads as a broken game rather than a roadmap. Two blurbs went on saying a round / a hot
+    // breakfast "will one day" do something for months after both buffs were actually wired, and
+    // the Stop-N-Go promised fuel that is deliberately delisted. Prose is the one part of a shop
+    // nothing else type-checks, so it gets a guard of its own.
+    // "will be <anything>" is deliberately broad: the tackle shop's own blurb read "this is where
+    // better tackle will be bought" for as long as the ladder went unsold, and a narrower pattern
+    // let exactly that through when this guard was first written.
+    const FUTURE = /\bwill (?:one day|soon|be)\b|\bone day\b|\bcoming (?:soon|later)\b|\bnot yet\b/i;
+    for (const v of Object.values(VENUES)) {
+      for (const [field, text] of [['blurb', v.blurb], ['tagline', v.tagline]] as const) {
+        expect(FUTURE.test(text), `${v.id} ${field} promises something later: "${text}"`).toBe(false);
+      }
+      for (const s of v.sells) {
+        if (s.status !== 'live') continue;
+        expect(FUTURE.test(s.blurb), `${v.id}/${s.id} blurb promises something later`).toBe(false);
+      }
+    }
+  });
+
   it('every item is for sale, priced, and maps to an effect — or is delisted on purpose', () => {
     for (const v of Object.values(VENUES)) {
       for (const s of v.sells) {

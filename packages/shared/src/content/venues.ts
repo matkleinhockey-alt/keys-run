@@ -143,7 +143,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       'Fish story? Take a stool. The good ones get a free round. The bad ones get a free round anyway.',
       'You smell like bait and sunscreen. Welcome home.',
     ],
-    blurb: 'Weathered boards, a tin roof, a jukebox and a bartender called Dot who has seen every sunburn. A round here will one day cost you Luigi-mode steadiness and buy you hype.',
+    blurb: 'Weathered boards, a tin roof, a jukebox and a bartender called Dot who has seen every sunburn. A round here costs you Luigi-mode steadiness and buys you hype, for seven minutes.',
     sells: [
       item('beer', 'Cold one', 'Lowers your cast accuracy, raises the crowd\'s opinion of you.', 5, 'buff', 'bar.beer'),
       // SINKS: PRICE 60 -> 250. A sink only works if it costs a visible slice of a session. 60 was ~15 seconds of income. 250 = 1 effective minute.
@@ -193,7 +193,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       'The mahi sandwich is the mahi you sold us last week. You are welcome.',
       'Pie of the day is key lime. Pie of every day is key lime.',
     ],
-    blurb: 'Chrome, red vinyl booths and a jukebox that only plays one song. A hot breakfast here will one day steady your hands for the next fight.',
+    blurb: 'Chrome, red vinyl booths and a jukebox that only plays one song. A hot breakfast here steadies your hands for the next fifteen minutes of fighting fish.',
     sells: [
       item('breakfast', 'Fisherman\'s breakfast', 'A buff to line handling for a few minutes.', 14, 'buff', 'diner.breakfast'),
       item('coffee', 'Bottomless coffee', 'A longer, more forgiving strike window.', 3, 'buff', 'diner.coffee'),
@@ -288,7 +288,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
   convenience: {
     id: 'convenience', name: 'Stop-N-Go', tagline: 'Gas · Snacks · Live bait (maybe)',
     greeting: ['Gas pump two is broken. So is pump one.'],
-    blurb: 'Chips, ice and a lot of fluorescent light. Boat fuel and snacks will be sold here.',
+    blurb: 'Chips, ice, snacks and a lot of fluorescent light. Both gas pumps have been broken for years and nobody is in a hurry about it.',
     sells: [
       // DELISTED. There is no fuel tank in sim/boat.ts, and the services agent's reasoning for
       // not inventing one is right: a tank that can run dry strands you mid-ocean, and a tank that
