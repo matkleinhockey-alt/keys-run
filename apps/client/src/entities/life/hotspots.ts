@@ -11,8 +11,9 @@
  * from `hashCell(WORLD_SEED, cell, attempt, salt)` instead of legacy's `Math.random()` rejection
  * sampling (which was also order-dependent: adding hotspot #41 would have reshuffled every one
  * after it). Rig placement needed no such treatment — legacy's 4 rig sites are already fixed
- * coordinates, not randomised at all. Per-blade jitter inside a weed patch, and the exact instant
- * a frenzy flares up, stay `Math.random()` — purely cosmetic, not world content.
+ * coordinates, not randomised at all. Per-blade jitter inside a weed patch stays `Math.random()` — purely
+ * cosmetic. Frenzy *timing* is world content too (everyone races to the same boil), so it is
+ * `frenzyActive(WORLD_SEED, site, wallClock)` from shared/world/frenzy.ts, not a local timer.
  *
  * Fish anchoring (legacy `ensureAnchors`) is explicitly **not** ported — it reaches into
  * `entities/fish/**`'s `groups`/`spawnGroupAt`/`VIS`, which this task does not own. `fish` counts
@@ -27,13 +28,21 @@ import { WB, HUMPS, CREEKS, depthAt, zoneAt, type Zone } from '@keysrun/shared/w
 import { chainZ, shoreInfo } from '@keysrun/shared/world/chain';
 import { ampFor, waveHBase } from '@keysrun/shared/waves';
 import { hashCell } from '@keysrun/shared/rng';
+import { frenzyActive } from '@keysrun/shared/world/frenzy';
 import { WORLD_SEED, SALT } from '../../state/constants.js';
 import { lerp, rand } from '../../core/math.js';
 import { toast } from '../../ui/toast.js';
+import { setHotspotCallout, compassWord } from '../../ui/hud.js';
 import type { ParticleSystem } from '../../world/particles.js';
 
 const HS_COUNTS: Record<Zone, number> = { Creek: 3, Flats: 7, Backcountry: 6, Bridge: 4, 'Hawk Channel': 5, Reef: 6, Offshore: 9 };
 const ZONE_CODE: Record<Zone, number> = { Creek: 0, Flats: 1, Backcountry: 2, Bridge: 3, 'Hawk Channel': 4, Reef: 5, Offshore: 6 };
+
+/** Announce radius and cast-capture radius. The boil is ~11 m across, but the bobber drifts and
+ * a cast is a 12-85 m lob with no aiming aid, so 40 m is generous on purpose: missing a frenzy
+ * you drove a kilometre to by 20 m would feel like a bug, not a skill check. */
+const HOTSPOT_CALL_M = 1500;
+const HOTSPOT_CAST_M = 40;
 
 export interface GullSite { x: number; z: number }
 
@@ -44,7 +53,8 @@ export interface Hotspot extends GullSite {
   weeds: THREE.Mesh[];
   fish: number;
   amp: number;
-  fT: number;
+  /** Stable id fed to `frenzyActive` — the same `cell` placement hashes from, so it never shifts. */
+  site: number;
   active: boolean;
   fr: number;
   told: boolean;
@@ -104,7 +114,7 @@ function spawnHotspot(scene: THREE.Scene, zone: Zone, i: number): Hotspot | null
     }
   }
   scene.add(g);
-  return { zone, x, z, g, birds, weeds, fish: 2 + Math.floor(Math.random() * 3), amp: ampFor(depthAt(x, z)), fT: rand(3, 20), active: false, fr: 0, told: false };
+  return { zone, x, z, g, birds, weeds, fish: 2 + Math.floor(Math.random() * 3), amp: ampFor(depthAt(x, z)), site: ZONE_CODE[zone] * 1000 + i, active: false, fr: 0, told: false };
 }
 
 export interface WeedPatch extends GullSite {
@@ -250,7 +260,7 @@ function spawnRigs(scene: THREE.Scene, lightMats: LightMatEntry[]): Rig[] {
 }
 
 export interface HotspotWorld {
-  update(dt: number, t: number, boat: { x: number; z: number }, camera: { x: number; z: number }, particles: ParticleSystem): void;
+  update(dt: number, t: number, boat: { x: number; z: number; h?: number }, camera: { x: number; z: number }, particles: ParticleSystem): void;
   /** `audio/engine.ts`'s `AudioFrameInputs.gullSites` — legacy `AUD.gull`'s nearest-hotspot pick
    * (index.html:3214). Hotspots only (rigs/weeds carry their own, much sparser bird life). */
   gullSites(): GullSite[];
@@ -258,6 +268,9 @@ export interface HotspotWorld {
    * `nearRig`/`nearWeed` (index.html:2133-2134). */
   nearRig(x: number, z: number, r?: number): Rig | null;
   nearWeed(x: number, z: number, extra?: number): WeedPatch | null;
+  /** The nearest bird/bait frenzy that is on right now within `r` m of (x,z) — what a cast
+   * landing there is "into". `fr` is the (eased) frenzy strength. */
+  nearHotspot(x: number, z: number, r?: number): { fr: number } | null;
   /** Raw snapshots for `stubs.ts`'s `installWorldLife` — see that module's header; membership is
    * fixed after construction (only each site's internal position/animation state mutates in
    * place), so a one-time call after `createHotspotWorld` stays accurate. */
@@ -283,11 +296,22 @@ export function createHotspotWorld(scene: THREE.Scene, lightMats: LightMatEntry[
   return {
     update(dt, t, boat, camera, particles) {
       // ---- hotspots: feeding frenzies come and go; birds circle and, during a frenzy, plunge ----
+      // Wall clock, not `t`: `t` is this client's sim time, so two players would never agree on
+      // when a spot is boiling — and a frenzy only works as an event if everyone can race to it.
+      const nowS = Date.now() / 1000;
+      let call: { dist: number; dx: number; dz: number } | null = null;
       for (const h of hotspots) {
-        h.fT -= dt;
-        if (h.fT <= 0) { h.active = !h.active; h.fT = h.active ? rand(14, 28) : rand(10, 26); }
+        h.active = frenzyActive(WORLD_SEED, h.site, nowS);
         h.fr = lerp(h.fr, h.active ? 1 : 0, Math.min(1, dt * 0.7));
         const fr = h.fr;
+        // Announce from far beyond render range (the birds are culled past ~1.1 km, so without
+        // this you would only learn of a frenzy by stumbling into it). 1.5 km is ~40 s at planing
+        // speed: far enough to be a decision, close enough to still be on when you arrive.
+        const hdx = h.x - boat.x, hdz = h.z - boat.z, hd = Math.hypot(hdx, hdz);
+        if (h.active && hd < HOTSPOT_CALL_M) {
+          if (!call || hd < call.dist) call = { dist: hd, dx: hdx, dz: hdz };
+          if (!h.told) { h.told = true; toast('Birds working, ' + Math.round(hd / 10) * 10 + ' m ' + compassWord(hdx, hdz)); }
+        } else if (!h.active && h.fr < 0.05) h.told = false; // re-arm so the next frenzy here is announced too
         const dCam = Math.hypot(h.x - camera.x, h.z - camera.z);
         const near = dCam < 900;
         h.g.visible = dCam < 1100;
@@ -331,8 +355,9 @@ export function createHotspotWorld(scene: THREE.Scene, lightMats: LightMatEntry[
           const a = Math.random() * 6.283, r = Math.sqrt(Math.random()) * 9, v = rand(1.5, 3.5);
           particles.spawnP(h.x + Math.cos(a) * r, 0.15, h.z + Math.sin(a) * r, Math.cos(a) * v, rand(2, 4.5), Math.sin(a) * v, rand(0.4, 0.8), rand(0.18, 0.32), 0.95, true);
         }
-        if (fr > 0.6 && !h.told && Math.hypot(h.x - boat.x, h.z - boat.z) < 320) { h.told = true; toast('Birds diving and fish busting bait — that’s a hot spot! Cast into it.'); }
       }
+
+      setHotspotCallout(call && boat.h !== undefined ? { dist: call.dist, dx: call.dx, dz: call.dz, h: boat.h } : null);
 
       // ---- weedlines: drift slowly, frigatebirds circle overhead ----
       for (const w of weeds) {
@@ -371,6 +396,15 @@ export function createHotspotWorld(scene: THREE.Scene, lightMats: LightMatEntry[
       }
     },
     gullSites(): GullSite[] { return hotspots.map((h) => ({ x: h.x, z: h.z })); },
+    nearHotspot(x, z, r = HOTSPOT_CAST_M): { fr: number } | null {
+      let best: Hotspot | null = null, bd = r;
+      for (const h of hotspots) {
+        if (!h.active) continue;
+        const d = Math.hypot(h.x - x, h.z - z);
+        if (d < bd) { bd = d; best = h; }
+      }
+      return best ? { fr: best.fr } : null;
+    },
     nearRig(x, z, r = 60): Rig | null {
       for (const R of rigs) if (R.g && R.fl && Math.hypot(R.x - x, R.z - z) < r) return R;
       return null;

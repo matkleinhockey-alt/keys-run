@@ -31,6 +31,7 @@ import * as THREE from 'three';
 import { createRacerFleet, type RacerFleet } from './racers.js';
 import { createTrafficFleet, type TrafficFleet } from './traffic.js';
 import { createPelicanFlocks, type PelicanFlocks } from './pelicans.js';
+import type { SpotQuery } from '../../game/fishing/spot.js';
 import { createHotspotWorld, type HotspotWorld, type GullSite } from './hotspots.js';
 import { createFishingBuddy, type FishingBuddy } from './buddy.js';
 import { createLuigiMode, type LuigiMode } from './luigi.js';
@@ -83,6 +84,8 @@ export interface LifeSystems {
   update(inputs: LifeFrameInputs): void;
   engineSources(): { traffic: RemoteEngineSource[]; racers: RemoteEngineSource[]; buddy: RemoteEngineSource | undefined };
   gullSites(): GullSite[];
+  /** Fishing's spot lookup (game/fishing/spot.ts): live frenzies, weedlines, rigs. */
+  spots: SpotQuery;
   /** Moored party boats within earshot, for `audio/engine.ts`'s `updateParties` — pass straight
    * into `audio.update`'s `parties`. */
   partySites(): readonly PartySite[];
@@ -139,6 +142,11 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
       return { traffic: trafficFleet.engineSources(), racers: racerFleet.engineSources(), buddy: buddy.engineSource() };
     },
     gullSites(): GullSite[] { return hotspotWorld.gullSites(); },
+    spots: {
+      nearHotspot: (x, z) => hotspotWorld.nearHotspot(x, z),
+      nearWeed: (x, z) => hotspotWorld.nearWeed(x, z),
+      nearRig: (x, z) => hotspotWorld.nearRig(x, z),
+    },
     partySites(): readonly PartySite[] { return partyBoats.sites(); },
     isLuigiOn(): boolean { return luigi.isOn(); },
     toggleBuddy(): void { buddy.toggle(); },

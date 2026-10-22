@@ -20,6 +20,7 @@ import { toast } from '../../ui/toast.js';
 import { F } from './state.js';
 import type { FishingVisuals } from './visuals.js';
 import type { RodViewModel } from './rod-viewmodel.js';
+import { resolveCastSpot, type SpotQuery } from './spot.js';
 
 function $(id: string): HTMLElement | null { return document.getElementById(id); }
 
@@ -41,6 +42,8 @@ export interface FishingDeps {
   rodVM: RodViewModel;
   particles: ParticleSystem;
   boatInput: BoatInput;
+  /** Bird/bait frenzies, weedlines and rigs — `entities/life`'s `HotspotWorld`. */
+  spots: SpotQuery;
   onLanded(fish: LandedFish): void;
   /** legacy's `case 'caught': if (now-caughtT>1600) releaseFish();` — delegated to game/catch. */
   onActionWhileCaught(): void;
@@ -236,11 +239,14 @@ export function createFishingLogic(deps: FishingDeps) {
       if (p >= 1) {
         F.state = 'waiting';
         deps.particles.splash(F.bob.x, F.bob.z, 8, 0.6);
-        F.zone = zoneAt(F.bob.x, F.bob.z);
-        F.hs = null; // bird/bait hotspots, weedlines and rigs are unscheduled — see src/stubs.ts
+        const spot = resolveCastSpot(deps.spots, F.bob.x, F.bob.z, zoneAt(F.bob.x, F.bob.z));
+        F.zone = spot.zone; F.hs = spot.hs;
+        // biteT is untouched by the spot: the `* 0.4` is the whole frenzy bite-speed payoff and
+        // the only knob, so it stays in one place.
         F.biteT = rand(4, 10) * (F.hs ? 0.4 : 1);
         F.key = null;
-        toast(Math.round(Math.hypot(F.bob.x - boat.x, F.bob.z - boat.z)) + ' m cast into the ' + F.zone.toLowerCase() + '.');
+        const cm = Math.round(Math.hypot(F.bob.x - boat.x, F.bob.z - boat.z)) + ' m cast ';
+        toast(spot.kind === 'frenzy' ? cm + 'into the bait — fish on the surface!' : cm + 'into the ' + F.zone.toLowerCase() + '.');
       }
     } else if (F.state === 'waiting' || F.state === 'nibble' || F.state === 'bite') {
       const surf = sampleWaterHeight(boat, F.bob.x, F.bob.z, t, ampAt(F.bob.x, F.bob.z), sw, ch);
