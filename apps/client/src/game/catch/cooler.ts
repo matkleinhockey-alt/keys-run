@@ -6,6 +6,9 @@ import { COOLER_CAP } from '@keysrun/shared/content/boats';
 import { MEAT_PRICE, NO_SALE } from '@keysrun/shared/content/economy';
 import { MARINAS, type Marina } from '@keysrun/shared/world/depth';
 import { clamp } from '../../core/math.js';
+import { toast } from '../../ui/toast.js';
+import { coolerCapFor, ICE_KEY, ICE_BONUS_LB, type GearPort } from '@keysrun/shared/sim/gear';
+import { countOf, useOne } from '@keysrun/shared/sim/shop';
 
 function $(id: string): HTMLElement | null { return document.getElementById(id); }
 
@@ -47,8 +50,26 @@ export function nearMarina(boatX: number, boatZ: number): Marina | null {
   return null;
 }
 
-export function createCooler() {
+/**
+ * `gear` is optional: without it the cooler is exactly the boat's base capacity.
+ *
+ * ICE. A bag is spent when the first fish of a load goes in (`keepFish`) and keeps that load iced
+ * (+ICE_BONUS_LB) until the weigh-in empties the cooler. Spending at keep-time rather than at
+ * purchase or at the dock means a bag is only used when it is used, and a load you never keep
+ * anything in costs nothing. The catch: the keep-or-release card is built BEFORE the fish is
+ * kept, so `capNow` counts a bag you are *about to* spend as already open — otherwise the one
+ * fish that needs the extra room (a 40 lb cobia into a 150 lb robalo already at 120) would be
+ * refused by a cap that the very same keep would raise.
+ */
+export function createCooler(gear?: GearPort) {
   const cooler: CoolerFish[] = [];
+  let iced = false;
+  const capNow = (boatId: string): number => {
+    const base = COOLER_CAP[boatId] ?? 300;
+    if (!gear) return base;
+    const willIce = !iced && countOf(gear.inventory(), ICE_KEY) > 0;
+    return coolerCapFor(base, gear.mods(0), iced || willIce);
+  };
   const coolerLb = (): number => cooler.reduce((a, f) => a + f.weight, 0);
 
   function updateCoolerUI(): void {
@@ -59,7 +80,7 @@ export function createCooler() {
   /** legacy `prepareKeepChoice` (index.html:2969-2974). Returns whether `btnKeep` should be
    * disabled, and the note to show under the catch card. */
   function prepareKeepChoice(boatId: string, key: string, weight: number): { disabled: boolean; note: string } {
-    const cap = COOLER_CAP[boatId] ?? 300;
+    const cap = capNow(boatId);
     const left = cap - coolerLb();
     let note = '';
     if (CR_ONLY[key]) note = CR_ONLY[key];
@@ -70,12 +91,17 @@ export function createCooler() {
   /** legacy `keepFish` (index.html:2975-2979), minus the DOM-disabled re-check (the caller —
    * game/catch/catch-flow.ts — already knows whether keeping is allowed). */
   function keepFish(fish: CoolerFish): void {
+    if (gear && !iced && countOf(gear.inventory(), ICE_KEY) > 0) {
+      gear.commit(useOne(gear.inventory(), ICE_KEY));
+      iced = true;
+      toast(`Bag of ice dumped in — cooler holds ${ICE_BONUS_LB} lb more until you weigh in.`);
+    }
     cooler.push(fish);
     updateCoolerUI();
   }
 
   function openCooler(boatBrand: string, boatName: string, boatId: string): void {
-    const cap = COOLER_CAP[boatId] ?? 300;
+    const cap = capNow(boatId);
     const capEl = $('coolerCap');
     if (capEl) capEl.textContent = `${Math.round(coolerLb())} of ${cap} lb · ${boatBrand} ${boatName}`;
     const list = $('coolerList');
@@ -100,6 +126,7 @@ export function createCooler() {
     const where = locationName ? ` at ${locationName}` : '';
     const summary = `Weighed in ${cooler.length} fish (${Math.round(lb)} lb)${where}. Top fish: ${big.name}, ${big.weight.toFixed(1)} lb. +${bonus.toLocaleString()} points!`;
     cooler.length = 0;
+    iced = false; // the ice melts by the time you are back out; a new load needs a new bag
     updateCoolerUI();
     return { bonus, summary };
   }

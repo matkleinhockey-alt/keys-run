@@ -27,7 +27,7 @@ import { mulberry32, type Rng } from '@keysrun/shared/rng';
 import {
   createGun, canFire, stepReload, startReload,
   fire, assistAim, stepSpear, spearFightParamsFor, startSpearFight, stepSpearFight,
-  SPEAR_RELOAD, drawRateFor,
+  SPEAR_RELOAD, drawRateFor, spearRangeFor, SPEAR_RANGE,
   type GunState, type ShotState, type CapsuleTarget, type SpearFightState, type SpearFightParams, type Vec3,
 } from '@keysrun/shared/sim/spear';
 import { createGunViewModel } from './gun-viewmodel.js';
@@ -36,6 +36,8 @@ import { createSpearFightUI } from './fight-ui.js';
 import { createReloadHint } from './reload-hint.js';
 import { createSperedFishVisual } from './speared-fish-visual.js';
 import { toast } from '../../ui/toast.js';
+import { takeShaft, shaftNotice, type GearPort } from '@keysrun/shared/sim/gear';
+import { countOf, NO_MODIFIERS } from '@keysrun/shared/sim/shop';
 import { SPECIES } from '@keysrun/shared/content/species';
 import type { CaughtFishInfo } from '../../game/catch/catch-flow.js';
 
@@ -70,6 +72,10 @@ export interface SpeargunDeps {
   camera: THREE.Camera;
   getTargets(): readonly SpearTarget[];
   onLanded(fish: CaughtFishInfo): void;
+  /** The player's inventory (spear.long / spear.reel / spear.shafts). Omitted = the stock gun with
+   * unlimited shafts, i.e. exactly the pre-shop behaviour — wiring the real inventory in is
+   * passing this one object. */
+  gear?: GearPort;
 }
 
 export interface Speargun {
@@ -91,6 +97,11 @@ export interface Speargun {
    * for a tension/stamina HUD, same role as game/fishing's directly-readable `F` singleton
    * (`F.fight.tension`/`.stam`). */
   getFightState(): SpearFightState | null;
+  /** Effective range of the last shot fired (or the gun's current range before any), m. world.ts
+   * sizes its near-miss spook ray from this so a stock gun does not spook fish at 24 m. */
+  lastShotRangeM(): number;
+  /** Bought shafts left, or null when no inventory is wired (unlimited). For a HUD pill. */
+  shaftsLeft(): number | null;
   /** Target the last shot's aim assist locked onto, or null. */
   assistTargetId(): string | number | null;
   /** Target aim assist would lock onto right now — the live reticle feed, no side effects. */
@@ -154,6 +165,18 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
 
   /** Target id the most recent shot's assist locked onto — see `assistTargetId`. */
   let lastAssist: string | number | null = null;
+  /** Last simulated time seen by `update`, for `GearPort.mods(nowS)` (the spear's gear is
+   * permanent so the value never matters, but the port wants one). */
+  let simNow = 0;
+  let lastRange = SPEAR_RANGE;
+
+  /** Range the NEXT shot would have — long gun bonus, and the spare shaft's cut if none are left.
+   * Shared by the assist (so the lead is solved for the shaft that will fly) and `tryFire`. */
+  function nextRange(): number {
+    const g = deps.gear;
+    if (!g) return SPEAR_RANGE;
+    return spearRangeFor(g.mods(simNow).spearRangeM, countOf(g.inventory(), 'spear.shafts') <= 0);
+  }
 
   function tryFire(diver: DiverAimInput): boolean {
     if (shot || speared) return false; // one shaft out at a time — see this module's header
@@ -175,9 +198,21 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
     // the shaft physically leaves. Passing both lets assist lock on what the player is actually
     // pointing at and still fire a shaft that converges on it — see assistAim's `eye` doc.
     deps.camera.getWorldPosition(tmpEye);
-    const assist = assistAim(origin, diver.aimDir, deps.getTargets(), { eye: { x: tmpEye.x, y: tmpEye.y, z: tmpEye.z } });
+    // Spend the shaft FIRST (spending is an event, and this is where the shot happens) so the
+    // range the assist solves for is the one of the shaft that actually flies: a spare is 60%
+    // range and a lead computed for 24 m would be wrong for it.
+    let range = SPEAR_RANGE;
+    if (deps.gear) {
+      const taken = takeShaft(deps.gear.inventory());
+      deps.gear.commit(taken.inventory);
+      range = spearRangeFor(deps.gear.mods(simNow).spearRangeM, taken.spare);
+      const note = shaftNotice(taken.left, taken.spare);
+      if (note) toast(note);
+    }
+    lastRange = range;
+    const assist = assistAim(origin, diver.aimDir, deps.getTargets(), { range, eye: { x: tmpEye.x, y: tmpEye.y, z: tmpEye.z } });
     lastAssist = assist.targetId;
-    shot = fire(origin, { x: assist.dx, y: assist.dy, z: assist.dz });
+    shot = fire(origin, { x: assist.dx, y: assist.dy, z: assist.dz }, range);
     gun = startReload(SPEAR_RELOAD);
     shaftVisual.setVisible(true);
     shaftVisual.update(shot);
@@ -206,8 +241,11 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
     gunVM.muzzle.getWorldPosition(tmpMuzzle);
     deps.camera.getWorldPosition(tmpEye);
     return assistAim({ x: tmpMuzzle.x, y: tmpMuzzle.y, z: tmpMuzzle.z }, diver.aimDir, deps.getTargets(),
-      { strength: 0, eye: { x: tmpEye.x, y: tmpEye.y, z: tmpEye.z } }).targetId;
+      { strength: 0, range: nextRange(), eye: { x: tmpEye.x, y: tmpEye.y, z: tmpEye.z } }).targetId;
   }
+
+  function lastShotRangeM(): number { return lastRange; }
+  function shaftsLeft(): number | null { return deps.gear ? countOf(deps.gear.inventory(), 'spear.shafts') : null; }
 
   function isActive(): boolean { return !!shot || !!speared; }
 
@@ -228,6 +266,7 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
     // The bands can only be worked with the shaft out of the gun and nothing on the line: a fish
     // being hauled has both hands on the reel line. That is also what makes a fight cost you the
     // follow-up shot, which is the point of a one-shot gun.
+    simNow = t;
     const handsFree = !shot && !speared && !diver.blackedOut;
     const water = currentAt(diver.position.x, diver.position.z, t, Math.max(0, -diver.position.y));
     // Leverage is lost by KICKING, not by being carried: a diver drifting with the current is
@@ -253,7 +292,7 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
         shaftVisual.setVisible(false);
         shot = null;
         if (target && hit.held) {
-          const params = spearFightParamsFor(target.key, target.weight);
+          const params = spearFightParamsFor(target.key, target.weight, (deps.gear?.mods(simNow) ?? NO_MODIFIERS).spearTetherMul);
           speared = { target, params, fight: startSpearFight(hit.point.x, hit.point.z) };
           floatLine.setVisible(true);
           fightUI.show(fightLabelFor(target.key, target.weight));
@@ -341,5 +380,5 @@ export function createSpeargun(deps: SpeargunDeps): Speargun {
     reloadHint.dispose();
   }
 
-  return { update, tryFire, setHauling, setDrawing, getReloadState, isActive, getFightState, assistTargetId, aimTargetId, reset, debugForceReloadReady, setViewVisible, dispose };
+  return { update, tryFire, setHauling, setDrawing, getReloadState, isActive, getFightState, assistTargetId, aimTargetId, lastShotRangeM, shaftsLeft, reset, debugForceReloadReady, setViewVisible, dispose };
 }

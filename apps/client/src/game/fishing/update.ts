@@ -16,6 +16,7 @@ import { chooseFish, fightParamsFor, scaledLenM, startFight, stepFight, type Fig
 import { xoshiro128ss } from '@keysrun/shared/rng';
 import { SPECIES } from '@keysrun/shared/content/species';
 import type { Tackle } from '@keysrun/shared/content/tackle';
+import { rigCast, rigLeader, type CastRig, type GearPort } from '@keysrun/shared/sim/gear';
 import type { TaggedFish } from '@keysrun/shared/sim/tagging';
 import { clamp, lerp, rand } from '../../core/math.js';
 import { toast } from '../../ui/toast.js';
@@ -52,6 +53,9 @@ export interface FishingDeps {
   /** The equipped rod-and-line outfit (shared/content/tackle). Omitted = the starter 30 lb; this is
    * the seam a tackle shop plugs into — see content/tackle.ts. */
   getTackle?(): Tackle;
+  /** The player's inventory (rod.*, reel.lever, bait, leader). Omitted = stock rod, no bait —
+   * exactly the pre-shop behaviour; wiring the real inventory in is passing this one object. */
+  gear?: GearPort;
   /** legacy's `case 'caught': if (now-caughtT>1600) releaseFish();` — delegated to game/catch. */
   onActionWhileCaught(): void;
   /** Tag-and-release registry (game/catch/tags.ts). Omitted = every fish is untagged. */
@@ -73,6 +77,11 @@ export function createFishingLogic(deps: FishingDeps) {
   /** legacy `input.action` — held true while Space is down. Set directly by game/fishing/input.ts
    * (on keydown/keyup); `onAction`/`onActionUp` are edge-triggered calls from that same module. */
   const actionInput = { held: false };
+
+  /** Bait on the line for the current cast; null = bare hook. Spent in `cast` completion (below),
+   * where the bobber lands and the zone is known, because the right bait depends on the water. */
+  let rig: CastRig | null = null;
+  let simNow = 0;
 
   function setRod(v: boolean): void { deps.getModel().rodPivot.visible = v; }
 
@@ -121,6 +130,7 @@ export function createFishingLogic(deps: FishingDeps) {
     $('fight')?.classList.add('hidden');
     $('strike')?.classList.add('hidden');
     F.fight = null; F.fightParams = null;
+    rig = null;
     if (msg) toast(msg);
   }
 
@@ -129,7 +139,7 @@ export function createFishingLogic(deps: FishingDeps) {
    * before the strike). */
   function chooseFishLocal(): void {
     const hump = nearHump(F.bob.x, F.bob.z);
-    const fish = chooseFish(F.zone, F.bob, { hotspot: !!F.hs, hump }, clientRng);
+    const fish = chooseFish(F.zone, F.bob, { hotspot: !!F.hs, hump, rareMul: rig?.rareMul }, clientRng);
     F.key = fish.key; F.sp = SPECIES[fish.key]; F.weight = fish.weight;
     // A tagged fish in range may be this one — then it fights at its own grown weight.
     F.tag = deps.tags?.pickRecapture(fish.key, F.bob.x, F.bob.z, clientRng) ?? null;
@@ -142,7 +152,7 @@ export function createFishingLogic(deps: FishingDeps) {
     $('strike')?.classList.add('hidden');
     visuals.hideHooked();
     F.key = null; F.tag = null; F.state = 'waiting';
-    F.biteT = rand(4, 8) * (F.hs ? 0.5 : 1);
+    F.biteT = rand(4, 8) * (F.hs ? 0.5 : 1) * (rig?.biteMul ?? 1); // the bait is still on the hook
     toast(msg);
   }
 
@@ -150,7 +160,16 @@ export function createFishingLogic(deps: FishingDeps) {
     $('strike')?.classList.add('hidden');
     if (!F.key) chooseFishLocal();
     const key = F.key!, S = F.sp!;
-    const params = fightParamsFor(key, F.weight, F.drag, deps.getTackle?.());
+    // Rod / reel gear is permanent (Modifiers.lineMul / reelMul); the fluoro leader is a
+    // consumable and is spent here, on the hookup it protects, not on the cast.
+    let gear: { lineMul: number; reelMul: number; fluoro: boolean } | undefined;
+    if (deps.gear) {
+      const m = deps.gear.mods(simNow);
+      const leader = rigLeader(deps.gear.inventory());
+      if (leader.fluoro) { deps.gear.commit(leader.inventory); toast('Fluorocarbon leader rigged.'); }
+      gear = { lineMul: m.lineMul, reelMul: m.reelMul, fluoro: leader.fluoro };
+    }
+    const params = fightParamsFor(key, F.weight, F.drag, deps.getTackle?.(), gear);
     F.fightParams = params;
     F.fight = startFight(params, F.fx, F.fz, clientRng);
     const sizeT = (F.weight - S.min) / (S.max - S.min);
@@ -183,6 +202,7 @@ export function createFishingLogic(deps: FishingDeps) {
     F.state = 'idle';
     F.key = null; F.tag = null;
     F.charging = false;
+    rig = null;
     F.caughtT = 0;
     $('castbar')?.classList.add('hidden');
     setRod(false);
@@ -230,6 +250,7 @@ export function createFishingLogic(deps: FishingDeps) {
 
   function update(dt: number, t: number, boat: BoatState, sw: number, ch: number): void {
     const model = deps.getModel();
+    simNow = t;
 
     if (F.charging) {
       F.chargeT += dt;
@@ -259,7 +280,16 @@ export function createFishingLogic(deps: FishingDeps) {
         F.zone = spot.zone; F.hs = spot.hs;
         // biteT is untouched by the spot: the `* 0.4` is the whole frenzy bite-speed payoff and
         // the only knob, so it stays in one place.
-        F.biteT = rand(4, 10) * (F.hs ? 0.4 : 1);
+        // Bait is spent HERE: the cast has landed and `F.zone` is known, which decides shrimp vs
+        // ballyhoo (sim/gear.ts rigCast). biteMul multiplies the wait, so it composes with the
+        // frenzy's 0.4 instead of replacing it.
+        rig = null;
+        if (deps.gear) {
+          rig = rigCast(deps.gear.inventory(), F.zone, deps.gear.mods(simNow));
+          deps.gear.commit(rig.inventory);
+          if (rig.bait) toast(rig.bait === 'shrimp' ? 'Live shrimp on the hook.' : 'Rigged ballyhoo on the hook.');
+        }
+        F.biteT = rand(4, 10) * (F.hs ? 0.4 : 1) * (rig?.biteMul ?? 1);
         F.key = null; F.tag = null;
         const cm = Math.round(Math.hypot(F.bob.x - boat.x, F.bob.z - boat.z)) + ' m cast ';
         toast(spot.kind === 'frenzy' ? cm + 'into the bait — fish on the surface!' : cm + 'into the ' + F.zone.toLowerCase() + '.');

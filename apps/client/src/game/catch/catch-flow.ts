@@ -27,6 +27,7 @@ import { beamBetween } from '../../entities/boat/hull.js';
 import { makeFishMesh } from '../fishing/fish-mesh.js';
 import { buildPulleyBlock } from './pulley.js';
 import { isHoldable } from './display-mode.js';
+import type { GearPort } from '@keysrun/shared/sim/gear';
 import { createCooler, meatLine, nearMarina, type CoolerFish } from './cooler.js';
 import { createPortrait } from './portrait.js';
 import type { Backdrop } from './render-pipeline.js';
@@ -180,12 +181,14 @@ export interface CatchFlowDeps {
   /** Pays the player for a landed fish (game/economy/system.ts). Optional so harnesses that build
    * a catch flow without a wallet still work. Called from `landFish` — the one path rod and spear
    * both take — so every landing pays exactly once, whichever tool landed it. */
+  /** Player inventory — only the cooler reads it (bagged ice). Omitted = no ice, base capacity. */
+  gear?: GearPort;
   economy?: { payForCatch(key: string, weight: number): { value: number; trophy: boolean; personalBest: boolean } };
 }
 
 export function createCatchFlow(deps: CatchFlowDeps) {
   const session: SessionStats = { count: 0, score: 0, caught: new Set(), best: null, slam1: false, slam2: false };
-  const cooler = createCooler();
+  const cooler = createCooler(deps.gear);
   const portrait = createPortrait('fishCanvas');
   // Shares `#fishCanvas` with `portrait` — see underwater-trophy.ts's header: only one of the two
   // is ever "shown" at a time (a rod catch and a speared catch can't both be the current catch).
