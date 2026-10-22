@@ -183,16 +183,53 @@ export function createBannerPlanes(scene: THREE.Scene): BannerPlanes {
   };
   group.add(letters);
 
-  // The cloth the letters are pinned to — one long double-sided strip, same travelling wave.
-  const CLOTH_SEGS = 48;
-  const clothGeo = new THREE.PlaneGeometry(1, LETTER_H * 1.5, CLOTH_SEGS, 1);
+  // The cloth the letters are pinned to.
+  //
+  // Six rows rather than two, at the heights in `ROW_Y`, so one strip can carry a sewn WHITE HEM
+  // along each edge without a second mesh: the outer pair of rows is white, the inner pair red,
+  // and the 2% gap between them makes the join crisp rather than a gradient across the whole
+  // banner. A plain red rectangle read as a slab of card; the hem is most of what makes it look
+  // like cloth somebody stitched.
+  const CLOTH_SEGS = 56;
+  const ROW_Y = [1.0, 0.84, 0.82, -0.82, -0.84, -1.0];
+  const ROW_WHITE = [true, true, false, false, true, true];
+  const CLOTH_HALF_H = LETTER_H * 0.78;
+  const clothGeo = new THREE.PlaneGeometry(1, 1, CLOTH_SEGS, ROW_Y.length - 1);
   // Opaque on purpose. Transparent, it sorted against the equally-transparent letters that sit in
-// exactly the same plane, and three's painter sort has no stable answer at identical depth — the
-// cloth won about half the time and the slogan came out as dark smudges.
-const clothMat = new THREE.MeshStandardMaterial({ color: 0xe8341f, roughness: 0.85, side: THREE.DoubleSide });
+  // exactly the same plane, and three's painter sort has no stable answer at identical depth —
+  // the cloth won about half the time and the slogan came out as dark smudges.
+  const clothMat = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.88, side: THREE.DoubleSide });
+  {
+    const col = new Float32Array(clothGeo.attributes.position.count * 3);
+    const red = new THREE.Color(0xd92d1b), white = new THREE.Color(0xf6f1e6);
+    for (let r = 0; r < ROW_Y.length; r++) {
+      const c = ROW_WHITE[r] ? white : red;
+      for (let sg = 0; sg <= CLOTH_SEGS; sg++) {
+        const vi = r * (CLOTH_SEGS + 1) + sg;
+        col[vi * 3] = c.r; col[vi * 3 + 1] = c.g; col[vi * 3 + 2] = c.b;
+      }
+    }
+    clothGeo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  }
   const cloth = new THREE.Mesh(clothGeo, clothMat);
   cloth.frustumCulled = false;
   group.add(cloth);
+
+  // The tow line, and the spar the cloth is laced to. A banner does not float along behind the
+  // aeroplane on its own — without these the first captures had forty metres of canvas hanging in
+  // clear air a dozen metres off the tail, which is the single thing that made it read as pasted
+  // on rather than towed.
+  const ropeGeo = new THREE.CylinderGeometry(0.07, 0.07, 1, 5);
+  ropeGeo.translate(0, 0.5, 0); // pivot at one end, so it can be aimed and stretched
+  const ropeMat = new THREE.MeshStandardMaterial({ color: 0x2b2b2b, roughness: 0.9 });
+  const rope = new THREE.Mesh(ropeGeo, ropeMat);
+  rope.frustumCulled = false;
+  group.add(rope);
+  const sparGeo = new THREE.CylinderGeometry(0.1, 0.1, CLOTH_HALF_H * 2.1, 6);
+  const sparMat = new THREE.MeshStandardMaterial({ color: 0x9aa0a4, roughness: 0.5, metalness: 0.5 });
+  const spar = new THREE.Mesh(sparGeo, sparMat);
+  spar.frustumCulled = false;
+  group.add(spar);
 
   let pass: Pass | null = null;
   let gap = rand(12, 40); // the first one comes along reasonably soon
@@ -201,6 +238,7 @@ const clothMat = new THREE.MeshStandardMaterial({ color: 0xe8341f, roughness: 0.
   const tmpP = new THREE.Vector3();
   const tmpS = new THREE.Vector3(1, 1, 1);
   const ZERO = new THREE.Vector3(0, 0, 0);
+  const UP = new THREE.Vector3(0, 1, 0);
 
   const VENUE_IDS = Object.keys(VENUES) as VenueId[];
 
@@ -267,6 +305,37 @@ const clothMat = new THREE.MeshStandardMaterial({ color: 0xe8341f, roughness: 0.
       const midX = P.x + bx * (span / 2), midZ = P.z + bz * (span / 2);
       const nx = Math.cos(P.h), nz = -Math.sin(P.h);
       const facing = (camera.x - midX) * nx + (camera.z - midZ) * nz >= 0 ? 1 : -1;
+
+      /**
+       * What the wind is doing to the cloth at `back` metres behind the plane.
+       *
+       * Everything that rides the banner — the cloth rows, every letter, the spar — reads this
+       * one function, so they move as one piece of fabric instead of three things that happen to
+       * share a sine.
+       *
+       * Two things make it read as cloth rather than a ribbon on a stick:
+       *
+       *  - an ENVELOPE. The leading edge is laced to a rigid spar and cannot move, so amplitude
+       *    is zero there and grows toward the free end. Without it the whole banner flapped in
+       *    lockstep including the end bolted to the aeroplane, which is the thing that made it
+       *    look like a rigid slab being waggled.
+       *  - TWIST. A real banner rolls about its own long axis as the wave passes, so the top edge
+       *    leads the bottom and you catch the back of it. One vertical offset shared by both
+       *    edges can only ever be a ribbon seen edge-on.
+       *
+       * Two frequencies, deliberately not harmonically related, so the loop never lands on an
+       * obvious beat over a pass that lasts a couple of minutes.
+       */
+      const wave = (back: number): { sag: number; twist: number } => {
+        const f = Math.min(1, Math.max(0, (back - TOW_GAP) / Math.max(1, span - TOW_GAP)));
+        const env = f * f;                       // nailed at the spar, loosest at the tail
+        const a = t * 2.05 - back * 0.21;
+        const b = t * 1.27 - back * 0.13;
+        return {
+          sag: -0.4 - f * 1.9 + (Math.sin(a) * 0.9 + Math.sin(b) * 0.5) * env,
+          twist: (Math.sin(a + 0.6) * 0.42 + Math.sin(b * 1.4) * 0.2) * env,
+        };
+      };
       for (let i = 0; i < MAX_LETTERS; i++) {
         // Which character this physical slot carries. Slot 0 is nearest the plane; whether that
         // end is the viewer's LEFT or RIGHT depends on which side of the banner they are on, so
@@ -275,16 +344,16 @@ const clothMat = new THREE.MeshStandardMaterial({ color: 0xe8341f, roughness: 0.
         const ch = i < letterCount ? P.text[facing === 1 ? letterCount - 1 - i : i] : ' ';
         if (i >= letterCount || ch === ' ') { tmpM.compose(tmpP.set(0, 0, 0), tmpQ.identity(), ZERO); letters.setMatrixAt(i, tmpM); continue; }
         const back = TOW_GAP + i * LETTER_GAP;
-        const phase = t * 2.1 - back * 0.22;
-        // sag deepens down the length; the ripple is vertical, like real towed cloth
-        const sag = -0.5 - (back / span) * 1.6 + Math.sin(phase) * 0.42;
-        const yaw = P.h + Math.sin(phase) * 0.05;
-        tmpP.set(P.x + bx * back, y + sag, P.z + bz * back);
+        const w = wave(back);
+        const yaw = P.h + w.twist * 0.12;
+        tmpP.set(P.x + bx * back, y + w.sag, P.z + bz * back);
         // `+ facing * PI/2`, not minus: a quad yawed by h + PI/2 has its front pointing along
         // (cos h, 0, -sin h), which is `n` below — so when the camera is on the +n side that is
         // the orientation that shows it the FRONT. Taking the other one shows the back face and
         // the slogan comes out mirrored, which is what the first two captures did.
-        tmpQ.setFromEuler(new THREE.Euler(0, yaw + facing * (Math.PI / 2), Math.sin(phase) * 0.07, 'YXZ'));
+        // The letter rolls with the cloth it is stitched to — `facing` flips the roll with the
+        // side, or the text would lean the wrong way on half the passes.
+        tmpQ.setFromEuler(new THREE.Euler(0, yaw + facing * (Math.PI / 2), -facing * w.twist, 'YXZ'));
         tmpM.compose(tmpP, tmpQ, tmpS);
         letters.setMatrixAt(i, tmpM);
         const idx = atlas.index.get(ch) ?? atlas.index.get(' ')!;
@@ -297,22 +366,35 @@ const clothMat = new THREE.MeshStandardMaterial({ color: 0xe8341f, roughness: 0.
       letters.instanceMatrix.needsUpdate = true;
       cell.needsUpdate = true;
 
-      // the cloth strip behind the letters, same wave
+      // The cloth. Each station gets a centre point on the wave and an UP vector rolled by the
+      // twist, and the six rows hang off that — which is what lets the top and bottom edges
+      // disagree and the banner show you its back as the wave goes down it.
       const clothPos = clothGeo.attributes.position as THREE.BufferAttribute;
-      for (let s = 0; s <= CLOTH_SEGS; s++) {
-        const f = s / CLOTH_SEGS;
-        const back = TOW_GAP + f * (span - TOW_GAP);
-        const phase = t * 2.1 - back * 0.22;
-        const sag = -0.5 - (back / span) * 1.6 + Math.sin(phase) * 0.42;
-        for (const row of [0, 1]) {
-          const vi = row * (CLOTH_SEGS + 1) + s;
-          clothPos.setXYZ(vi, bx * back + P.x, y + sag + (row === 0 ? LETTER_H * 0.75 : -LETTER_H * 0.75), bz * back + P.z);
+      for (let sg = 0; sg <= CLOTH_SEGS; sg++) {
+        const back = TOW_GAP + (sg / CLOTH_SEGS) * (span - TOW_GAP);
+        const w = wave(back);
+        const cxp = P.x + bx * back, cyp = y + w.sag, czp = P.z + bz * back;
+        // up, rolled about the banner's own long axis: cos up the world Y, sin out along n
+        const ux = Math.sin(w.twist) * nx, uy = Math.cos(w.twist), uz = Math.sin(w.twist) * nz;
+        for (let r = 0; r < ROW_Y.length; r++) {
+          const o = ROW_Y[r] * CLOTH_HALF_H;
+          clothPos.setXYZ(r * (CLOTH_SEGS + 1) + sg, cxp + ux * o, cyp + uy * o, czp + uz * o);
         }
       }
       clothPos.needsUpdate = true;
       clothGeo.computeVertexNormals();
-      cloth.position.set(0, 0, 0);
-      cloth.rotation.set(0, 0, 0);
+
+      // The spar at the leading edge, and the tow line back to the tail.
+      const head = wave(TOW_GAP);
+      const hx = P.x + bx * TOW_GAP, hy = y + head.sag, hz = P.z + bz * TOW_GAP;
+      spar.position.set(hx, hy, hz);
+      spar.rotation.set(0, P.h, head.twist, 'YXZ');
+      const tailX = P.x - fx * 3.4, tailY = y - 0.35, tailZ = P.z - fz * 3.4;
+      const rdx = hx - tailX, rdy = hy - tailY, rdz = hz - tailZ;
+      const rlen = Math.hypot(rdx, rdy, rdz) || 1;
+      rope.position.set(tailX, tailY, tailZ);
+      rope.scale.set(1, rlen, 1);
+      rope.quaternion.setFromUnitVectors(UP, tmpP.set(rdx / rlen, rdy / rlen, rdz / rlen));
     },
     debug() {
       if (!pass) return null;
@@ -342,6 +424,7 @@ const clothMat = new THREE.MeshStandardMaterial({ color: 0xe8341f, roughness: 0.
       plane.geo.forEach((g) => g.dispose());
       plane.mats.forEach((m) => m.dispose());
       letterGeo.dispose(); letterMat.dispose();
+      ropeGeo.dispose(); ropeMat.dispose(); sparGeo.dispose(); sparMat.dispose();
       clothGeo.dispose(); clothMat.dispose();
       atlas.tex.dispose();
     },
