@@ -55,6 +55,8 @@ export const BUFF_SECONDS: Readonly<Record<string, number>> = {
   'diner.mahi': 900,
   'diner.pie': 480,
   'bar.wings': 600,
+  'bar.beer': 420,
+  'diner.breakfast': 900,
   'bar.shot': 240,
   'liquor.sixer': 300,
   'icecream.cone': 300,
@@ -219,12 +221,16 @@ export function modifiersFor(inv: Inventory, nowS: number): Modifiers {
   // --- food, drink and the consequences ------------------------------------------------------
   if (buffActive(inv, 'diner.coffee', nowS)) m.steadyMul *= 1.25;
   if (buffActive(inv, 'diner.mahi', nowS)) { m.steadyMul *= 1.12; m.breathMul *= 1.05; }
+  // A hot breakfast is the venue copy's own promise ("will one day steady your hands for the next
+  // fight") — so it is the one food buff that reaches the fight itself, not just the strike window.
+  if (buffActive(inv, 'diner.breakfast', nowS)) { m.steadyMul *= 1.18; m.lineMul *= 1.06; }
   if (buffActive(inv, 'diner.pie', nowS)) m.steadyMul *= 1.08;
   if (buffActive(inv, 'bar.wings', nowS)) m.steadyMul *= 1.06;
   if (buffActive(inv, 'icecream.cone', nowS)) m.steadyMul *= 1.05;
   if (buffActive(inv, 'conv.snacks', nowS)) m.steadyMul *= 1.05;
   // Drinking is a liability on purpose. The bar's own copy says a round does not help you.
   if (buffActive(inv, 'bar.shot', nowS)) m.sway = Math.min(1, m.sway + 0.35);
+  if (buffActive(inv, 'bar.beer', nowS)) m.sway = Math.min(1, m.sway + 0.22);
   if (buffActive(inv, 'liquor.sixer', nowS)) m.sway = Math.min(1, m.sway + 0.5);
   if (m.sway > 0) m.steadyMul *= 1 - 0.4 * m.sway;
 

@@ -134,7 +134,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
     blurb: 'Chrome, red vinyl booths and a jukebox that only plays one song. A hot breakfast here will one day steady your hands for the next fight.',
     sells: [
       item('breakfast', 'Fisherman\'s breakfast', 'A buff to line handling for a few minutes.', 14, 'buff', 'diner.breakfast'),
-      item('coffee', 'Bottomless coffee', 'Shorter strike reaction window.', 3, 'buff', 'diner.coffee'),
+      item('coffee', 'Bottomless coffee', 'A longer, more forgiving strike window.', 3, 'buff', 'diner.coffee'),
       item('mahi-sand', 'Grilled mahi sandwich', 'Stamina for the dive.', 16, 'buff', 'diner.mahi'),
       item('pie', 'Key lime pie', 'Morale. The gull will still call you a loser.', 7, 'buff', 'diner.pie'),
     ],

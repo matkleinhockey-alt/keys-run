@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { VENUES } from '../src/content/venues.js';
 import {
   buy, emptyInventory, modifiersFor, useOne, countOf, has, pruneBuffs, buffActive,
-  NO_MODIFIERS, slotOf, type Inventory,
+  NO_MODIFIERS, slotOf, BUFF_SECONDS, type Inventory,
 } from '../src/sim/shop.js';
 
 const own = (...buys: Array<[keyof typeof VENUES, string]>): Inventory => {
@@ -26,14 +26,28 @@ describe('the shelf', () => {
     }
   });
 
-  it('every gear item actually changes something — no inert purchases', () => {
-    // The failure this catches is a shop item that takes your money and does nothing, which is
-    // worse than one that is honestly greyed out.
+  it('no gear or buff item is inert — nothing takes your money and does nothing', () => {
+    // The failure this catches is a shop item that charges you and changes nothing, which is worse
+    // than one honestly greyed out.
+    //
+    // The first version of this test only looked at `kind === 'gear'`, and two buffs (bar.beer and
+    // diner.breakfast) shipped inert straight through it — found by the agent wiring the buff
+    // consumers, not by the test that existed to prevent exactly this. Buffs are the easier kind
+    // to miss, because they only exist while their timer runs.
     for (const v of Object.values(VENUES)) {
       for (const s of v.sells) {
-        if (s.effect.kind !== 'gear') continue;
+        if (s.effect.kind !== 'gear' && s.effect.kind !== 'buff') continue;
         const m = modifiersFor(own([v.id, s.id]), 0);
-        expect(JSON.stringify(m), `${v.id}/${s.id} is inert`).not.toBe(JSON.stringify(NO_MODIFIERS));
+        expect(JSON.stringify(m), `${v.id}/${s.id} (${s.effect.key}) is inert`).not.toBe(JSON.stringify(NO_MODIFIERS));
+      }
+    }
+  });
+
+  it('every buff has a duration — one without is a buff that expires instantly', () => {
+    for (const v of Object.values(VENUES)) {
+      for (const s of v.sells) {
+        if (s.effect.kind !== 'buff') continue;
+        expect(BUFF_SECONDS[s.effect.key], `${v.id}/${s.id} has no BUFF_SECONDS`).toBeGreaterThan(0);
       }
     }
   });
