@@ -157,6 +157,10 @@
     "./world/casino": {
       "types": "./dist/world/casino.d.ts",
       "default": "./dist/world/casino.js"
+    },
+    "./sim/handgun": {
+      "types": "./dist/sim/handgun.d.ts",
+      "default": "./dist/sim/handgun.js"
     }
   },
   "scripts": {

@@ -281,6 +281,9 @@ export interface HotspotWorld {
   listRigs(): readonly Rig[];
   listWeeds(): readonly WeedPatch[];
   listHotspots(): readonly Hotspot[];
+  /** Every gull, tern and frigatebird at the bait spots and weedlines, for the boat pistol's target
+   * list (game/handgun). The array is rebuilt on each call, so call it per shot, not per frame. */
+  birds(): Bird[];
 }
 
 /** Builds and animates hotspots, weedlines and oil rigs — legacy's `hotspots`/`WEEDS`/`RIGS`
@@ -424,5 +427,8 @@ export function createHotspotWorld(scene: THREE.Scene, lightMats: LightMatEntry[
     listRigs(): readonly Rig[] { return rigs; },
     listWeeds(): readonly WeedPatch[] { return weeds; },
     listHotspots(): readonly Hotspot[] { return hotspots; },
+    birds(): Bird[] {
+      return [...hotspots.flatMap((h) => h.birds.map((b) => b.B)), ...weeds.flatMap((w) => w.birds.map((b) => b.B))];
+    },
   };
 }

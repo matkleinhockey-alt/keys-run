@@ -463,9 +463,13 @@ describe('the GearPort seam', () => {
     const covered = new Set(['spear.long', 'spear.reel', 'spear.shafts', 'rod.heavy', 'rod.used', 'reel.lever',
       'bait.shrimp', 'bait.ballyhoo', 'leader.fluoro', 'cooler.ice',
       // the ladder rungs — measured in the 'tackle.braid80 / tackle.braid130' block below
-      tackleKey('braid80'), tackleKey('braid130')]);
+      tackleKey('braid80'), tackleKey('braid130'),
+      // the boat pistol's shelf items are covered in handgun.test.ts ("ammunition and the shop")
+      'handgun.ammo', 'handgun.extmag', 'handgun.dot',
+      // the marine flare kit: fired from the pistol grip, see handgun.test.ts "the marine flare"
+      'safety.flare']);
     const mine = [...VENUES.guns.sells, ...VENUES.tackle.sells, ...VENUES.pawn.sells]
-      .map((s) => s.effect.key).filter((k) => k !== 'safety.flare');
+      .map((s) => s.effect.key);
     for (const k of mine) expect(covered.has(k), k).toBe(true);
     expect(SPECIES.wahoo).toBeDefined();
   });

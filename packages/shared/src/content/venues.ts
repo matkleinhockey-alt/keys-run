@@ -123,7 +123,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       'Browsing is free. Dropping things is not.',
       'We do spearguns, flare guns and a very good lecture on both.',
     ],
-    blurb: 'A proper Keys gun counter, bars on the windows and a flag out front. In this game it is where the harpoon gun gets its upgrades: longer range, faster shafts, and a reel that does not fight back.',
+    blurb: 'A proper Keys gun counter, bars on the windows and a flag out front. In this game it is where the harpoon gun gets its upgrades: longer range, faster shafts, and a reel that does not fight back. It also sells ammunition for the boat pistol, which is for plinking at gulls and the occasional ballyhoo and is a different kind of hobby.',
     sells: [
       item('spear-shaft', 'Stainless spear shafts (3)', 'Replacement shafts for the diver\'s speargun.', 45, 'consumable', 'spear.shafts'),
       // PRICE 380 -> 2,200. +6 m on SPEAR_RANGE 18 is +33% reach = ~1.8x the water a shot covers. Spear income is not in the
@@ -132,7 +132,15 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       // PRICE 210 -> 1,400. Tether x0.6 saves fish that would otherwise strip the tether; a landing aid, not a rate boost, so
       // cheaper than the long gun but a real purchase (~1/3 of a session).
       item('spear-reel', 'Reel-line conversion', 'A fish on the spear runs less far before you can haul.', 1_400, 'gear', 'spear.reel'),
-      item('flare', 'Marine flare kit', 'Required by the Coast Guard, loved by everyone else.', 38, 'consumable', 'safety.flare'),
+      // The boat pistol (sim/handgun.ts). The pistol itself is NOT sold: every boat in the Keys has one in the
+      // console, and the mode is the feature - selling the gun would put it behind a paywall nobody asked for.
+      // What the counter sells is what makes it cost something: a box of 50 is $75 ($1.50 a round, i.e. a
+      // 12-round magazine is $18 - a visible slice of a minute's income, not a session's), and two upgrades
+      // priced in the spear gear's band (a tighter group / a longer mag are comfort, not a rate boost).
+      item('pistol-ammo', '9 mm range ammo (50)', 'A box for the boat pistol. Fish, gulls and the horizon not included.', 75, 'consumable', 'handgun.ammo'),
+      item('pistol-extmag', 'Extended magazine', 'Six more rounds before you have to stop and reload.', 1_100, 'gear', 'handgun.extmag'),
+      item('pistol-dot', 'Red-dot sight', 'A tighter group at range, for people who do not like gulls laughing.', 1_600, 'gear', 'handgun.dot'),
+      item('flare', 'Marine flare kit', 'Three parachute flares, fired from the pistol grip (Z). Required by the Coast Guard, best after sunset.', 38, 'consumable', 'safety.flare'),
     ],
     enterable: true,
   },

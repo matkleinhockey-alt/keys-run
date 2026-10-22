@@ -33,6 +33,8 @@ function spawnFlock(F: PelicanFlock, boat: { x: number; z: number }, near: boole
 }
 
 export interface PelicanFlocks {
+  /** Every pelican, for the boat pistol's target list (game/handgun). */
+  birds(): Bird[];
   update(dt: number, t: number, boat: { x: number; z: number }, camera: { x: number; z: number }, particles: ParticleSystem): void;
 }
 
@@ -50,6 +52,7 @@ export function createPelicanFlocks(scene: THREE.Scene, boat: { x: number; z: nu
   }
 
   return {
+    birds(): Bird[] { return flocks.flatMap((F) => F.birds); },
     update(dt, t, boat2, camera, particles) {
       for (const F of flocks) {
         if (Math.hypot(F.x - boat2.x, F.z - boat2.z) > 1100) spawnFlock(F, boat2, false);

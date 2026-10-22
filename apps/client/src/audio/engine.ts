@@ -593,6 +593,126 @@ export function createAudioEngine() {
     });
   }
 
+
+  // -------------------------------------------------------------------------------------------
+  // The boat pistol (game/handgun). Synthesised like everything else here - no sample files.
+  // -------------------------------------------------------------------------------------------
+
+  /** Lazily-built open-water echo for gunfire: two delay taps (a near reflection off the water and
+   * a far one off the mangroves/bridge) through a lowpass, with a little feedback so it trails off
+   * rather than repeating once. Built on the first shot so a player who never draws the gun pays
+   * for no extra nodes. Open water has no walls to ring, so it is a slapback, not a reverb: short
+   * taps, dark, quiet, and gone in a second and a half. */
+  let gunEcho: GainNode | null = null;
+  function gunEchoIn(): GainNode | null {
+    if (gunEcho) return gunEcho;
+    if (!ctx) return null;
+    const c = ctx;
+    const input = c.createGain(); input.gain.value = 1;
+    const tapA = c.createDelay(1.5); tapA.delayTime.value = 0.21;
+    const tapB = c.createDelay(1.5); tapB.delayTime.value = 0.46;
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1900; lp.Q.value = 0.5;
+    const fb = c.createGain(); fb.gain.value = 0.3;
+    const out = c.createGain(); out.gain.value = 0.34;
+    input.connect(tapA); input.connect(tapB);
+    tapA.connect(lp); tapB.connect(lp);
+    lp.connect(out); out.connect(requireBus());
+    lp.connect(fb); fb.connect(tapA);
+    gunEcho = input;
+    return input;
+  }
+
+  interface GunOpts {
+    dur: number; gain: number; att?: number;
+    type?: BiquadFilterType; freq?: number; freqTo?: number; q?: number;
+    tone?: number; toneTo?: number; wave?: OscillatorType;
+    /** 0..1 how much of this layer feeds the echo. */
+    echo?: number;
+    /** Seconds after "now" - for layers that follow the shot (the brass, the slide). */
+    delay?: number;
+  }
+  function gunLayer(o: GunOpts): void {
+    if (!ready || !on || !ctx) return;
+    const c = ctx, t = c.currentTime + (o.delay ?? 0);
+    const g = c.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(o.gain, t + (o.att ?? 0.002));
+    g.gain.exponentialRampToValueAtTime(0.0001, t + o.dur);
+    g.connect(requireBus());
+    if (o.echo) {
+      const e = gunEchoIn();
+      if (e) { const send = c.createGain(); send.gain.value = o.echo; g.connect(send); send.connect(e); }
+    }
+    if (o.tone !== undefined) {
+      const src = c.createOscillator();
+      src.type = o.wave ?? 'sine';
+      src.frequency.setValueAtTime(o.tone, t);
+      if (o.toneTo) src.frequency.exponentialRampToValueAtTime(o.toneTo, t + o.dur);
+      src.connect(g); src.start(t); src.stop(t + o.dur + 0.05);
+    } else {
+      const src = c.createBufferSource(); src.buffer = noise;
+      const f = c.createBiquadFilter(); f.type = o.type ?? 'lowpass';
+      f.frequency.setValueAtTime(o.freq ?? 800, t);
+      if (o.freqTo) f.frequency.exponentialRampToValueAtTime(o.freqTo, t + o.dur);
+      f.Q.value = o.q ?? 0.8;
+      src.connect(f); f.connect(g);
+      src.start(t, Math.random() * 1.5); src.stop(t + o.dur + 0.05);
+    }
+  }
+
+  /** The report. Three layers the way a real one is built: the supersonic crack (a very short,
+   * very bright noise burst), the body (a low-passed noise blast that falls in pitch), and the
+   * thump you feel in your chest (a sine sliding down). The echo takes the crack and body but not
+   * the thump - a sub-100 Hz thump does not bounce off water, it just goes. `k` (0..1) scales the
+   * whole thing so a suppressed or distant variant could reuse it. */
+  function gunshot(k = 1): void {
+    gunLayer({ dur: 0.07, gain: 0.85 * k, att: 0.0008, type: 'highpass', freq: 2800, q: 0.7, echo: 0.9 });
+    gunLayer({ dur: 0.26, gain: 0.75 * k, att: 0.001, type: 'lowpass', freq: 1700, freqTo: 220, q: 0.9, echo: 1 });
+    gunLayer({ dur: 0.18, gain: 0.7 * k, att: 0.001, tone: 150, toneTo: 42, wave: 'sine' });
+    // the little metallic ring of the action cycling
+    gunLayer({ dur: 0.09, gain: 0.08 * k, att: 0.001, tone: 2100, toneTo: 1500, wave: 'square', delay: 0.02 });
+  }
+  /** Dry fire: hammer on an empty chamber. */
+  function gunClick(): void {
+    gunLayer({ dur: 0.035, gain: 0.5, att: 0.0005, type: 'bandpass', freq: 3200, q: 3 });
+    gunLayer({ dur: 0.05, gain: 0.18, att: 0.0005, tone: 900, toneTo: 500, wave: 'triangle' });
+  }
+  /** The brass hitting the deck (or the water): a short bright ring, pitched a little differently
+   * each time so a string of casings is not a machine gun of identical clinks. */
+  function gunBrass(overWater = false): void {
+    const f = 3400 + Math.random() * 1400;
+    if (overWater) { gunLayer({ dur: 0.1, gain: 0.07, type: 'lowpass', freq: 1400, freqTo: 400, delay: 0.16 + Math.random() * 0.08 }); return; }
+    const d = 0.2 + Math.random() * 0.1;
+    gunLayer({ dur: 0.12, gain: 0.1, att: 0.0005, tone: f, toneTo: f * 0.8, wave: 'triangle', delay: d });
+    gunLayer({ dur: 0.07, gain: 0.07, att: 0.0005, tone: f * 1.6, toneTo: f * 1.3, wave: 'triangle', delay: d + 0.07 });
+  }
+  /** Reload sounds: 'out' the magazine dropping free, 'in' it seating, 'rack' the slide. */
+  function gunReload(part: 'out' | 'in' | 'rack'): void {
+    if (part === 'out') {
+      gunLayer({ dur: 0.06, gain: 0.3, att: 0.0008, type: 'bandpass', freq: 1500, q: 2 });
+      gunLayer({ dur: 0.1, gain: 0.12, tone: 520, toneTo: 330, wave: 'triangle', delay: 0.14 });
+    } else if (part === 'in') {
+      gunLayer({ dur: 0.05, gain: 0.35, att: 0.0008, type: 'bandpass', freq: 1100, q: 2.5 });
+      gunLayer({ dur: 0.08, gain: 0.2, att: 0.0008, tone: 700, toneTo: 420, wave: 'square' });
+    } else {
+      gunLayer({ dur: 0.16, gain: 0.3, att: 0.001, type: 'bandpass', freq: 900, freqTo: 2600, q: 1.6 });
+      gunLayer({ dur: 0.05, gain: 0.35, att: 0.0008, type: 'bandpass', freq: 2400, q: 3, delay: 0.17 });
+    }
+  }
+  /** A bullet's passage: `kind` is where it ended. 'skip' is the ricochet's rising whine. */
+  function gunImpact(kind: 'skip' | 'splash' | 'thud', x: number, z: number): void {
+    if (kind === 'skip') {
+      gunLayer({ dur: 0.45, gain: 0.12, att: 0.002, tone: 2300, toneTo: 900, wave: 'sawtooth', echo: 0.4, delay: 0.02 });
+      return;
+    }
+    if (kind === 'splash') { const L = prevListener ?? { x, z }; splash(x, z, 0.5, L.x, L.z); return; }
+    gunLayer({ dur: 0.08, gain: 0.2, type: 'lowpass', freq: 500, freqTo: 150 });
+  }
+  /** The confirmation tick for a hit - deliberately small and non-violent. */
+  function gunHitTick(): void {
+    gunLayer({ dur: 0.12, gain: 0.12, att: 0.001, tone: 1320, toneTo: 1760, wave: 'triangle' });
+  }
+
   /** legacy `AUD.gull` (index.html:3153-3157). */
   function gull(x: number, z: number): void {
     if (!ctx) return;
@@ -1397,6 +1517,7 @@ export function createAudioEngine() {
     init, setPlayerBoat, startEngines, stopEngines, toggleMute, isMuted, isReady, audioContext, masterBus,
     splash, slam, cast, nibble, strike, snap, land, gull, caelenSquawk, bark,
     casinoReels, casinoSpin, casinoStop, casinoWin, casinoDud, casinoClick, casinoAmbience,
+    gunshot, gunClick, gunBrass, gunReload, gunImpact, gunHitTick,
     update, bindVisibilitySuspend, dispose,
     /** Exposed for `music/radio.ts`, which needs to patch into the same `bus`/compressor chain and
      * read `ready`/`on` without this module exporting its whole closure. */
