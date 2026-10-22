@@ -73,6 +73,31 @@ function glslVisibilityStatements(): string {
   return lines.join('\n  ');
 }
 
+/**
+ * Mask view bonus (Modifiers.viewBonusM) -> shader, with NO new uniform.
+ *
+ * The override above is a global ShaderChunk, so it can only read uniforms three itself uploads to
+ * every fogged material. Adding one would mean per-material onBeforeCompile (the coupling this
+ * file exists to avoid), and recompiling is not an option either (three's program cache keys on
+ * material parameters, not chunk text, so a changed chunk string is silently ignored).
+ * What every material DOES receive each frame is scene.fog's `fogNear`, and underwater it is dead
+ * weight: the underwater branch never reads it, and topside the 260 m near plane moving by <=
+ * 40 m is invisible. So underwater/index.ts writes `FOG_NEAR_BASE + bonusM` into scene.fog.near
+ * and the shader recovers `bonusM = clamp(fogNear - FOG_NEAR_BASE, 0, 40)`. Float32 resolves
+ * 260 + 6 to ~3e-5 m, so the round trip is exact for our purposes.
+ *
+ * Camera far (60 m, entities/diver/camera.ts DIVE_CAMERA_FAR) is deliberately NOT touched: the
+ * depth-band table tops out at 30 m, +6 m mask = 36 m < 60, so the tight far plane (chosen for
+ * depth-buffer precision, see that file) still sits beyond everything the fog lets you see.
+ */
+export const FOG_NEAR_BASE = 260;
+export const MAX_VIEW_BONUS_M = 40;
+let viewBonusM = 0;
+export function setUnderwaterViewBonus(m: number): void {
+  viewBonusM = Number.isFinite(m) ? Math.min(MAX_VIEW_BONUS_M, Math.max(0, m)) : 0;
+}
+export function getUnderwaterViewBonus(): number { return viewBonusM; }
+
 let installed = false;
 
 export function installUnderwaterFog(): void {
@@ -111,6 +136,10 @@ export function installUnderwaterFog(): void {
     // (still colour-shifted) uwBelowColor with plain depth-scaled haze — nothing should read as
     // visible past the table's own distance, regardless of how little its blue channel absorbed.
     ${glslVisibilityStatements()}
+    #ifndef FOG_EXP2
+      // Wide-view mask: extends visibility. See setUnderwaterViewBonus for the fogNear encoding.
+      uwVis += clamp(fogNear - ${FOG_NEAR_BASE.toFixed(1)}, 0.0, ${MAX_VIEW_BONUS_M.toFixed(1)});
+    #endif
     float uwTurbidity = smoothstep(uwVis * 0.6, uwVis, uwDist);
     vec3 uwHaze = uwInscatter * uwAmbientK;
     uwBelowColor = mix(uwBelowColor, uwHaze, uwTurbidity);

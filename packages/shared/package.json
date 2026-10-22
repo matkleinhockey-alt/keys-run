@@ -74,6 +74,10 @@
       "types": "./dist/sim/boat-shadow.d.ts",
       "default": "./dist/sim/boat-shadow.js"
     },
+    "./sim/dive-gear": {
+      "types": "./dist/sim/dive-gear.d.ts",
+      "default": "./dist/sim/dive-gear.js"
+    },
     "./sim/diver": {
       "types": "./dist/sim/diver.d.ts",
       "default": "./dist/sim/diver.js"

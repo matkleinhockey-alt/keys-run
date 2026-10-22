@@ -12,6 +12,9 @@ import {
   type DiverState, type DiverEvent, type DiverInput,
 } from '@keysrun/shared/sim/diver';
 import type { BoatInput } from '@keysrun/shared/sim/boat';
+import { loadoutFor, shouldChargeFill, type DiveLoadout } from '@keysrun/shared/sim/dive-gear';
+import { readDiverGear, spendDiverFill } from './gear.js';
+import { setUnderwaterViewBonus } from '../../world/underwater/fog-override.js';
 import { makeDiverEnv } from './physics.js';
 import { createDiverButtons, bindDiverInput, type DiverButtons } from './input.js';
 import { createDiverCamState, bindDiverPointerControls, cycleDiverView, type DiverCamState } from './camera.js';
@@ -62,12 +65,17 @@ export function createDiverController(deps: DiverControllerDeps): DiverControlle
   let state: DiverState | null = null;
   let canReboard = false;
   let wakingT = 0;
+  // This dive's gear, resolved once at entry (see sim/dive-gear.ts for the tank rule). Fixed for the
+  // dive so buying/spending mid-dive can never move the gauge under the player.
+  let loadout: DiveLoadout = loadoutFor(readDiverGear());
+  let fillCharged = false;
 
   function exitToBoat(): void {
     mode = 'boat';
     state = null;
     canReboard = false;
     wakingT = 0;
+    setUnderwaterViewBonus(0);
     unbindInput?.(); unbindInput = null;
     unbindPointer?.(); unbindPointer = null;
   }
@@ -85,7 +93,10 @@ export function createDiverController(deps: DiverControllerDeps): DiverControlle
       // inside the hull. Same forward/right convention as sim/boat.ts (fx=-sin(h), fz=-cos(h)).
       const rx = Math.cos(boatHeading), rz = -Math.sin(boatHeading);
       const x = boatX + rx * 4, z = boatZ + rz * 4;
-      state = createDiverState(x, -0.2, z, boatHeading);
+      loadout = loadoutFor(readDiverGear());
+      fillCharged = false;
+      setUnderwaterViewBonus(loadout.viewBonusM);
+      state = createDiverState(x, -0.2, z, boatHeading, loadout.airMax);
       cam.yaw = boatHeading; cam.pitch = -0.15; cam.mode = 'mask';
       mode = 'diver';
       canReboard = false;
@@ -108,7 +119,7 @@ export function createDiverController(deps: DiverControllerDeps): DiverControlle
       if (state.blackedOut) {
         wakingT += dt;
         const input: DiverInput = { fwd: false, back: false, left: false, right: false, ascend: false, descend: false, sprint: false, lookYaw: cam.yaw, lookPitch: cam.pitch };
-        state = stepDiver(state, input, makeDiverEnv(t), dt);
+        state = stepDiver(state, input, { ...makeDiverEnv(t), swimMul: loadout.swimMul }, dt);
         if (wakingT >= BLACKOUT_WAKE_DELAY) {
           const events = state.events;
           exitToBoat();
@@ -122,9 +133,10 @@ export function createDiverController(deps: DiverControllerDeps): DiverControlle
         ascend: buttons.ascend, descend: buttons.descend, sprint: buttons.sprint,
         lookYaw: cam.yaw, lookPitch: cam.pitch,
       };
-      state = stepDiver(state, input, makeDiverEnv(t), dt);
+      state = stepDiver(state, input, { ...makeDiverEnv(t), swimMul: loadout.swimMul }, dt);
 
       const depth = Math.max(0, -state.y);
+      if (shouldChargeFill(loadout, depth, fillCharged)) { fillCharged = true; spendDiverFill(); }
       const dx = state.x - boatX, dz = state.z - boatZ;
       canReboard = depth < REBOARD_SURFACE_DEPTH && Math.hypot(dx, dz) < REBOARD_RADIUS;
 
