@@ -207,8 +207,10 @@ const tang = 0.55 * (1 - pull); // fades out the further from home, so a stray s
   } else {
     g.turn = 0;
   }
-  g.cx += fx * sp * dt;
-  g.cz += fz * sp * dt;
+  g.vx = fx * sp;
+  g.vz = fz * sp;
+  g.cx += g.vx * dt;
+  g.cz += g.vz * dt;
   // keep a long-wandering school from drifting off the playable chart entirely
   g.cx = clamp(g.cx, WB.x0 + 5, WB.x1 - 5);
   g.cz = clamp(g.cz, WB.z0 + 5, WB.z1 - 5);

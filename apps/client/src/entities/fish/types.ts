@@ -78,6 +78,21 @@ export interface SchoolState {
   cx: number;
   cz: number;
   heading: number;
+  /**
+   * The centroid's world velocity this step, m/s (`vy` is 0: schools translate horizontally and a
+   * member's vertical motion is the bob, which averages out). Written by `stepSchool` where the
+   * centroid is advanced, so it is the EXACT translation applied, not an estimate — including the
+   * flee multiplier, the anchor's 0.75 and the boundary turn's 0.6.
+   *
+   * It exists for aim assist's lead (sim/spear.ts). Two estimates were tried in its place and both
+   * were worse than no lead at all: species cruise speed along the fish's own facing overshoots,
+   * because a member holds a formation offset rather than swimming along its nose, and one-frame
+   * differencing of a member's world position returns the swim WIGGLE (a measured, suspiciously
+   * constant 1.93 m/s of lateral oscillation) instead of net travel. The school's own translation
+   * is neither: it is smooth by construction and is what actually carries the fish through the
+   * water, so it needs no low-pass and costs two stores per school per step.
+   */
+  vx: number; vz: number;
   /** Group-level wander phase (legacy `g.ph`). */
   phase: number;
   /** -1/0/1 sticky boundary-avoidance turn direction (legacy `g.turn`). */

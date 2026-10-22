@@ -467,11 +467,23 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
       // the real mesh (precision 0.24 -> 0.50 at recall 0.975 -> 0.86).
       const cap = fishCapsule(V, m, swimClock.value);
       const id = `${state.id}#${i}`;
-      // Lead is DISABLED: `vx/vy/vz` are reported as zero, so `assistAim` skips its lead branch
-      // and aims at the fish's current position.
+      // Lead is ON, carried by the SCHOOL's own translation (`SchoolState.vx/vz`, written by
+      // stepSchool where the centroid advances). Measured in the real game before this, firing
+      // down the real aim/assist path at real fish:
       //
-      // This is a measured decision, not an oversight. Three ways of supplying a velocity were
-      // tried against a tracked yellowtail at 4-7 m:
+      //     5-9 m    4/7   57%
+      //     9-13 m   1/10  10%
+      //     13-18 m  0/10   0%
+      //
+      // which is the gun claiming 18 m of range and being useless past about nine, with the
+      // nearest fish typically sitting at ten. It is geometry, not the hold roll: the shaft needs
+      // 0.61 s to cross 13 m and 0.92 s to cross 18, and a 1 m/s fish has moved 0.6-0.9 m by then
+      // — several capsule radii. Inside 7 m the flight is 0.3 s and the error still lands on the
+      // body, which is why the near band worked and nothing else did.
+      //
+      // Two earlier estimates were tried HERE and both were worse than no lead, which is why this
+      // reads from the school instead of deriving anything per fish. Against a tracked yellowtail
+      // at 4-7 m:
       //
       //   no velocity (lead off)                  6/14  (43%)
       //   nose direction x species cruise speed   2/16  (13%)
@@ -485,11 +497,12 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
       // The measured magnitude was a suspiciously constant 1.93 m/s, which is that oscillation,
       // not progress through the water.
       //
-      // A correct lead needs velocity low-passed over ~0.3 s so the wiggle averages out and net
-      // travel survives. That means carrying smoothed per-member state through the sim rather
-      // than deriving it in a query, which is a real change to the fish hot path and wants its
-      // own pass. Until then, aiming true beats leading wrong.
-      const vx = 0, vy = 0, vz = 0;
+      // Both failures are the same mistake: deriving a velocity from the FISH, whose own motion is
+      // formation-holding plus wiggle. The school's translation needs no low-pass and no per-member
+      // state — it is smooth by construction and it is what carries the fish through the water.
+      // vy stays 0: a member's vertical motion is the bob, which is oscillation about a level
+      // path and averages to nothing over a flight time.
+      const vx = state.vx, vy = 0, vz = state.vz;
       out.push({
         id, key: state.type,
         // Stable for this fish's whole lifetime: derived from its identity (school id + member

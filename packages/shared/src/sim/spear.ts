@@ -359,7 +359,7 @@ export function assistAim(
   const ux = dir.x / dl, uy = dir.y / dl, uz = dir.z / dl;
 
   let bestAng = Infinity;
-  let best: { x: number; y: number; z: number; id: string | number } | null = null;
+  let best: { x: number; y: number; z: number; vx: number; vy: number; vz: number; id: string | number } | null = null;
 
   for (const t of targets) {
     if (t.catchable === false) continue;
@@ -390,22 +390,61 @@ export function assistAim(
     if (ang > cone) continue;
     if (ang < bestAng) {
       bestAng = ang;
-      // Keep the intercept POINT, not a direction: the final firing direction has to be computed
-      // from the muzzle to that point, or the shaft leaves parallel to the eye's line instead of
-      // converging on it.
-      best = { x: aimX, y: aimY, z: aimZ, id: t.id };
+      // Keep the target's CURRENT centre and its velocity, not the intercept: the blend below has
+      // to adhere toward where the fish is and lead from there, and those two corrections get
+      // different strengths. The final firing direction is then computed from the muzzle to that
+      // point, or the shaft leaves parallel to the eye's line instead of converging on it.
+      best = { x: cx, y: cy, z: cz, vx, vy, vz, id: t.id };
     }
   }
 
   if (!best) return { dx: ux, dy: uy, dz: uz, targetId: null, applied: 0 };
 
-  // Blend in the eye frame: how far the player's aim is moved toward the intercept is an assist
-  // decision, and `strength` < 1 is what keeps a badly-aimed shot a miss.
-  const bx = best.x - eye.x, by = best.y - eye.y, bz = best.z - eye.z;
+  // Two corrections, and they are NOT the same kind of thing — which is the bug this shape fixes.
+  //
+  //  - ADHESION, toward where the fish actually is, covers the player's own aim error. `strength`
+  //    < 1 belongs here: it is what keeps a badly-aimed shot a miss.
+  //  - LEAD, from there to the intercept, covers the shaft's travel time. The player has no
+  //    instrument for this — no tracer, no sight, refraction shifting everything — so scaling it
+  //    down is not "partial assist", it is a guaranteed miss whenever the lead exceeds the
+  //    capsule. Measured in the real game: the shaft needs 0.61 s to reach 13 m and a 1 m/s fish
+  //    moves 0.61 m in that time, against capsules of 0.12-0.33 m radius. At strength 0.65 the
+  //    shot was aimed 0.21 m behind a 0.3 m fish and missed every time, which is why the gun was
+  //    useless past about 9 m while claiming 18.
+  //
+  // So adhesion is blended and lead is applied in full, and the TOTAL is then clamped to the cone
+  // below — the anti-aimbot bound still holds, it is just no longer spent on physics the player
+  // cannot see.
+  const d0b = Math.hypot(best.x - eye.x, best.y - eye.y, best.z - eye.z);
+  const rpx = eye.x + ux * d0b, rpy = eye.y + uy * d0b, rpz = eye.z + uz * d0b;
+  const adhX = rpx + (best.x - rpx) * strength;
+  const adhY = rpy + (best.y - rpy) * strength;
+  const adhZ = rpz + (best.z - rpz) * strength;
+  let leadX = adhX, leadY = adhY, leadZ = adhZ;
+  if (best.vx || best.vy || best.vz) {
+    for (let i = 0; i < 2; i++) {
+      const d = Math.hypot(leadX - origin.x, leadY - origin.y, leadZ - origin.z);
+      const tof = timeToDistance(Math.min(d, range), range);
+      leadX = adhX + best.vx * tof; leadY = adhY + best.vy * tof; leadZ = adhZ + best.vz * tof;
+    }
+  }
+  const bx = leadX - eye.x, by = leadY - eye.y, bz = leadZ - eye.z;
   const bl = Math.hypot(bx, by, bz) || 1;
-  let ax = ux + (bx / bl - ux) * strength;
-  let ay = uy + (by / bl - uy) * strength;
-  let az = uz + (bz / bl - uz) * strength;
+  let ax = bx / bl, ay = by / bl, az = bz / bl;
+  // Clamp the whole correction to the cone — the server plausibility bound (docs/ARCHITECTURE.md)
+  // applies to the aim that leaves the client, however the correction was arrived at. Rotating
+  // partway along the arc from the player's own aim is how a correction that would overshoot the
+  // bound degrades: the shot is still helped, just not past what the server will believe.
+  const dot = clamp(ax * ux + ay * uy + az * uz, -1, 1);
+  const want = Math.acos(dot);
+  if (want > cone) {
+    // Gram-Schmidt the perpendicular component out of the desired aim, then rotate `cone` along it.
+    let px3 = ax - ux * dot, py3 = ay - uy * dot, pz3 = az - uz * dot;
+    const pl3 = Math.hypot(px3, py3, pz3) || 1;
+    px3 /= pl3; py3 /= pl3; pz3 /= pl3;
+    const c = Math.cos(cone), sN = Math.sin(cone);
+    ax = ux * c + px3 * sN; ay = uy * c + py3 * sN; az = uz * c + pz3 * sN;
+  }
   const al = Math.hypot(ax, ay, az) || 1;
   ax /= al; ay /= al; az /= al;
   // Convert that aim into a direction the SHAFT can use: point the muzzle at the spot the blended

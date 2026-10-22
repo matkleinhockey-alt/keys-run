@@ -27,7 +27,7 @@ function school(type: string, r: number, heading: number): SchoolState {
   }));
   return {
     id: `p:${heading.toFixed(2)}`, type, cx: DX, cz: DZ, heading, phase: heading * 17.3,
-    turn: 0, flee: 0, fleeHeading: heading, bowRide: 0, glide: 0, dive: 0, diveTimer: 9,
+    vx: 0, vz: 0, turn: 0, flee: 0, fleeHeading: heading, bowRide: 0, glide: 0, dive: 0, diveTimer: 9,
     diveTarget: 0, anchor: { x: DX, z: DZ, r }, resident: true, members,
   };
 }
