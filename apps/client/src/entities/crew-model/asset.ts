@@ -114,6 +114,12 @@ export function loadCrewAsset(): Promise<CrewAsset> {
 // are placed at scale 1: the pipeline sized them (stripper ~1.62 m as she crouches, annie ~1.61 m).
 // ---------------------------------------------------------------------------------------------
 
+/**
+ * `stripper` (dance-02) is built by the pipeline but NOT staged in the club — see world/town.ts's
+ * note on the dancer NPCs. Its source model is unrigged, and the fitted skeleton built for it does
+ * not hold the mesh under the clip. It stays here because the asset and its rig script are still in
+ * the tree and the only thing between it and the stage is the vertex weighting.
+ */
 export type DancerKind = 'stripper' | 'annie';
 
 const DANCER_URLS: Record<DancerKind, string> = {
@@ -136,6 +142,34 @@ function warnIfUnlit(root: THREE.Object3D, url: string): void {
   });
 }
 
+/**
+ * The Pink Flamingo is lit by nothing. Its whole look is emissive neon on near-black (interiors.ts
+ * says why: the town's light pool is four PointLights with hysteresis and a nightclub would eat all
+ * of them), so a figure with ordinary lit materials renders as a black silhouette on a black stage —
+ * which is exactly what the first capture showed. Every other surface in that room is emissive, so
+ * the dancers are too: their own albedo texture is fed back as an emissive map, which lifts them off
+ * the background while keeping their actual colours instead of flooding them with a flat tint.
+ *
+ * Mutates the template's materials, which every clone shares — deliberate, since both dancers stand
+ * in the same unlit room, and it is done once at load rather than per figure.
+ */
+function litForADarkRoom(root: THREE.Object3D): void {
+  const EMISSIVE = 0.62; // enough to read across the room; above ~0.8 she goes flat and loses her shading
+  const seen = new Set<THREE.Material>();
+  root.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    for (const mat of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+      if (seen.has(mat) || !(mat instanceof THREE.MeshStandardMaterial)) continue;
+      seen.add(mat);
+      mat.emissiveMap = mat.map;
+      mat.emissive.setScalar(1);
+      mat.emissiveIntensity = EMISSIVE;
+      mat.needsUpdate = true;
+    }
+  });
+}
+
 /** Loads (once per dancer) a stage dancer's template + clip. Clone with SkeletonUtils, never `.clone()`. */
 export function loadDancerAsset(kind: DancerKind): Promise<CrewAsset> {
   const hit = dancerPending.get(kind);
@@ -145,6 +179,7 @@ export function loadDancerAsset(kind: DancerKind): Promise<CrewAsset> {
   const p = loader.loadAsync(url).then((gltf) => {
     disableShadows(gltf.scene);
     warnIfUnlit(gltf.scene, url);
+    litForADarkRoom(gltf.scene);
     const clip = gltf.animations[0];
     if (!clip) throw new Error(`[crew-model] ${url} has no animations`);
     return { template: gltf.scene, clip };
