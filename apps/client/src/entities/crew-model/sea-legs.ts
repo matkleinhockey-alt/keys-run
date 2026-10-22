@@ -201,8 +201,6 @@ export interface SeaLegsRig {
   root: THREE.Object3D;
   /** The figure root's resting y in its parent (the deck height at its slot). */
   restY: number;
-  /** Hip-to-ankle length in the parent's units (metres), for keeping the feet on the deck. */
-  legLen: number;
   spine: THREE.Object3D[]; // Spine, Spine1, Spine2
   neck: THREE.Object3D | null;
   head: THREE.Object3D | null;
@@ -211,6 +209,9 @@ export interface SeaLegsRig {
   foot: THREE.Object3D[];
   leftArm: THREE.Object3D | null;
   rightArm: THREE.Object3D | null;
+  /** Last frame's clip pose (`pre`) and what we turned it into (`post`), per edited bone. See
+   * `restoreClipPose`. */
+  applied: Map<THREE.Object3D, { pre: THREE.Quaternion; post: THREE.Quaternion }>;
 }
 
 /** GLTFLoader strips the ':' from Mixamo's `mixamorig:Spine` (three's PropertyBinding sanitises
@@ -223,7 +224,7 @@ function findBone(root: THREE.Object3D, name: string): THREE.Object3D | null {
   return hit;
 }
 
-export function createSeaLegsRig(root: THREE.Object3D, heightM: number): SeaLegsRig {
+export function createSeaLegsRig(root: THREE.Object3D): SeaLegsRig {
   const req = (n: string): THREE.Object3D[] => {
     const b = findBone(root, n);
     return b ? [b] : [];
@@ -231,8 +232,6 @@ export function createSeaLegsRig(root: THREE.Object3D, heightM: number): SeaLegs
   return {
     root,
     restY: root.position.y,
-    // Hip joint to ankle is ~48% of standing height in an adult.
-    legLen: heightM * 0.48,
     spine: [...req('Spine'), ...req('Spine1'), ...req('Spine2')],
     neck: findBone(root, 'Neck'),
     head: findBone(root, 'Head'),
@@ -241,6 +240,7 @@ export function createSeaLegsRig(root: THREE.Object3D, heightM: number): SeaLegs
     foot: [...req('LeftFoot'), ...req('RightFoot')],
     leftArm: findBone(root, 'LeftArm'),
     rightArm: findBone(root, 'RightArm'),
+    applied: new Map(),
   };
 }
 
@@ -254,6 +254,18 @@ const _axisZ = new THREE.Vector3(0, 0, 1);
 const _tmpQ = new THREE.Quaternion();
 const _parentQ = new THREE.Quaternion();
 const _d = new THREE.Quaternion();
+const _v = new THREE.Vector3();
+
+/** Mean height of the feet in the root's parent space (i.e. relative to the deck). */
+function footHeight(rig: SeaLegsRig, parent: THREE.Object3D): number {
+  if (!rig.foot.length) return 0;
+  let y = 0;
+  for (const f of rig.foot) {
+    f.updateWorldMatrix(true, false);
+    y += parent.worldToLocal(_v.setFromMatrixPosition(f.matrixWorld)).y;
+  }
+  return y / rig.foot.length;
+}
 
 /** Rotation of `bone` relative to `root`, from local quaternions only (bone world matrices are
  * stale between mixer.update and render). The rig's only scale is uniform, so this is exact. */
@@ -261,6 +273,19 @@ function rootSpaceQuat(bone: THREE.Object3D, root: THREE.Object3D, out: THREE.Qu
   out.identity();
   for (let o: THREE.Object3D | null = bone; o && o !== root; o = o.parent) out.premultiply(o.quaternion);
   return out;
+}
+
+/**
+ * Puts back the clip's pose on any bone the mixer didn't rewrite this frame. three's
+ * PropertyMixer only writes a bone when its sampled value changed since the last write — so once
+ * the dance eases to a stop (timeScale 0, every time the boat gets going), the mixer leaves our
+ * previous edit in place and the next edit would stack on top of it, frame after frame. A bone
+ * still holding exactly what we wrote last frame was not touched by the mixer.
+ */
+function restoreClipPose(rig: SeaLegsRig): void {
+  for (const [bone, a] of rig.applied) {
+    if (bone.quaternion.equals(a.post)) bone.quaternion.copy(a.pre);
+  }
 }
 
 interface Edit { bone: THREE.Object3D; delta: THREE.Quaternion; orig: THREE.Quaternion }
@@ -284,8 +309,7 @@ function bodyRot(ax: number, az: number, out: THREE.Quaternion): THREE.Quaternio
 
 /**
  * Measures the deck under `rig.root`, steps the physics and poses the bones. Call after
- * mixer.update (which rewrites every bone's local rotation each frame, so these edits never
- * accumulate) and after dance.ts sets the root's own rotation. `restRotY` is the slot's yaw —
+ * mixer.update and after dance.ts sets the root's own rotation. `restRotY` is the slot's yaw —
  * the body frame is the deck rotated by it, not the root (whose lean is cosmetic).
  * `armWeight` scales the arm secondary motion down while the clip is driving the arms hard.
  */
@@ -310,6 +334,9 @@ export function applySeaLegs(rig: SeaLegsRig, s: SeaLegsState, restRotY: number,
   // A crouch also pitches the torso forward a little to keep the hips' mass over the feet.
   const torsoFwd = fwd + knee * 0.45;
 
+  restoreClipPose(rig);
+  root.position.y = rig.restY;
+  const footBefore = footHeight(rig, parent);
   _edits.length = 0;
   const d = _d;
   const spineShare = [0.35, 0.65, 0.9];
@@ -339,10 +366,15 @@ export function applySeaLegs(rig: SeaLegsRig, s: SeaLegsState, restRotY: number,
     const p = e.bone.parent;
     if (p && p !== root) rootSpaceQuat(p, root, _parentQ).invert();
     else _parentQ.identity();
+    let a = rig.applied.get(e.bone);
+    if (!a) rig.applied.set(e.bone, (a = { pre: new THREE.Quaternion(), post: new THREE.Quaternion() }));
+    a.pre.copy(e.bone.quaternion);
     e.bone.quaternion.copy(_parentQ.multiply(target));
+    a.post.copy(e.bone.quaternion);
   }
 
-  // Thigh and shin of similar length bending ±knee leave the ankle (legLen)(1−cos knee) higher;
-  // sink the hips by that much so the feet stay on the deck instead of lifting off it.
-  root.position.y = rig.restY - rig.legLen * (1 - Math.cos(knee));
+  // Bending the knees draws the feet up toward the hips; sink the whole body by however far they
+  // actually rose (measured, not a straight-leg formula — the clip's legs are rarely straight) so
+  // they stay planted on the deck. Any lift the clip itself has (a dance step) is preserved.
+  root.position.y = rig.restY - (footHeight(rig, parent) - footBefore);
 }

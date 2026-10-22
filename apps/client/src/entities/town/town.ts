@@ -99,7 +99,12 @@ export function createTown(deps: TownDeps): Town {
   let forceHidden = false;
 
   const world: Array<{ i: Interact; x: number; z: number }> = INTERACTS.map((i) => { const [x, z] = toWorld(TOWN_FRAME, i.u, i.v); return { i, x, z }; });
-  const lotRects = LOTS.filter((l) => l.enterable).map((l) => ({ id: l.id, l }));
+  // Every walk-in lot, with its doorway in world space: interiors are built and drawn by distance to the
+  // DOOR (interiors.ts explains why not the centre), nearest-first so a long street builds the right one.
+  const lotRects = LOTS.filter((l) => l.enterable).map((l) => {
+    const [dx, dz] = toWorld(TOWN_FRAME, l.door, l.v0);
+    return { id: l.id, l, dx, dz };
+  });
 
   function finish(b: TownBuild): void {
     build = b;
@@ -136,7 +141,10 @@ export function createTown(deps: TownDeps): Town {
     ensureBuilt(): void {
       while (!build) pump(1);
       ensurePeople();
-      for (const l of lotRects) ensureInterior(l.id);
+      // Interiors are NOT built here any more. This used to build the bar and the diner (two rooms) so land
+      // mode started with them ready; at thirteen rooms that is thirteen batches, seven textures and a dozen
+      // shopkeepers (a `makeHuman` is ~15 meshes) in the one frame you tie up. `update` builds the room you
+      // are inside immediately and its neighbours one per frame as you approach, which is all anyone sees.
     },
 
     update(dt, t, cam): void {
@@ -167,13 +175,16 @@ export function createTown(deps: TownDeps): Town {
       if (b.near.visible) {
         if (distance < NEAR_RANGE) ensurePeople();
         people?.update(t, dt, cam, (x, z) => toLocal(TOWN_FRAME, x, z));
+        // The room you are standing in exists this frame (an empty shell for even one frame reads as a bug);
+        // every other room is built at most one per frame, so crossing the street never stacks two builds.
+        let built = false;
+        if (inside) { if (!interiors.has(inside)) ensureInterior(inside); built = true; }
         for (const l of lotRects) {
-          const [lx, lz] = toWorld(TOWN_FRAME, (l.l.u0 + l.l.u1) / 2, (l.l.v0 + l.l.v1) / 2);
-          const d = Math.hypot(cam.x - lx, cam.z - lz);
-          if (d < INTERIOR_BUILD_RANGE) ensureInterior(l.id);
+          const d = Math.hypot(cam.x - l.dx, cam.z - l.dz);
+          if (!built && d < INTERIOR_BUILD_RANGE && !interiors.has(l.id)) { ensureInterior(l.id); built = true; }
           const it = interiors.get(l.id);
           if (it) {
-            it.group.visible = d < INTERIOR_RANGE;
+            it.group.visible = inside === l.id || d < INTERIOR_RANGE;
             if (it.group.visible) {
               for (const p of it.people) p.human.update(t, 0);
             }

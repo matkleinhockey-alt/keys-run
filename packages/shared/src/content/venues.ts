@@ -107,7 +107,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       item('ice-bag', 'Bag of ice', 'Keeps the cooler honest.', 4, 'consumable', 'cooler.ice'),
       item('leader-fluoro', '80 lb fluorocarbon leader', 'Fewer bite-offs on toothy fish.', 22, 'consumable', 'leader.fluoro'),
     ],
-    enterable: false,
+    enterable: true,
   },
   guns: {
     id: 'guns', name: 'Deadeye Guns & Ammo', tagline: 'Firearms · Ammunition · Spearguns · Pawn',
@@ -127,7 +127,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       item('spear-reel', 'Reel-line conversion', 'A fish on the spear runs less far before you can haul.', 1_400, 'gear', 'spear.reel'),
       item('flare', 'Marine flare kit', 'Required by the Coast Guard, loved by everyone else.', 38, 'consumable', 'safety.flare'),
     ],
-    enterable: false,
+    enterable: true,
   },
   bar: {
     id: 'bar', name: 'The Rusty Anchor', tagline: 'Cold beer · Hot wings · No shirt, no problem',
@@ -199,7 +199,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       item('tank-pony', 'Slung pony bottle and reg', 'The big one: more than twice as long on the bottom.', 4_500, 'gear', 'dive.tank'),
       item('fill', 'Air fill', 'Tops the bottle back up. Steve will do it while you wait.', 12, 'consumable', 'dive.fill'),
     ],
-    enterable: false,
+    enterable: true,
   },
   liquor: {
     id: 'liquor', name: 'Cheap Beer & Lotto', tagline: 'Wine · Spirits · Scratch-offs',
@@ -209,7 +209,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       item('sixer', 'Six-pack for the cooler', 'The deck party notices.', 9, 'buff', 'liquor.sixer'),
       item('scratch', 'Scratch-off ticket', 'A tiny chance at a big number.', 5, 'sink', 'liquor.scratch'),
     ],
-    enterable: false,
+    enterable: true,
   },
   gifts: {
     id: 'gifts', name: 'Conch Republic Gifts', tagline: 'T-shirts · Shells · Hot sauce',
@@ -230,14 +230,14 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       item('flag-fishon', '"Fish On" pennant', 'Red and white, for when it is, and when it is not.', 14, 'cosmetic', 'cosmetic.flag.fishon'),
       item('flag-loser', 'White flag', 'The seagull has a point. Fly it first.', 9, 'cosmetic', 'cosmetic.flag.loser'),
     ],
-    enterable: false,
+    enterable: true,
   },
   pawn: {
     id: 'pawn', name: 'Keys Pawn & Loan', tagline: 'We buy gold · We buy tackle · No questions',
     greeting: ['Whatever it is, it is worth less than you think.'],
     blurb: 'Used rods, used reels, used regrets. Sell back gear you have outgrown.',
     sells: [item('used-rod', 'Used spinning rod', 'Cheap and cheerful.', 40, 'gear', 'rod.used')],
-    enterable: false,
+    enterable: true,
   },
   laundromat: {
     id: 'laundromat', name: 'Suds & Sun Coin Laundry', tagline: 'Wash · Dry · Fold',
@@ -247,21 +247,21 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       item('wash', 'Wash & dry', 'Takes the bar out of your shirt. And you.', 8, 'service', 'laundromat.wash'),
       item('sock', 'Lost-and-found sock', 'A mystery sock. Eight to collect. Nothing happens.', 3, 'sink', 'laundromat.sock'),
     ],
-    enterable: false,
+    enterable: true,
   },
   icecream: {
     id: 'icecream', name: 'Cone Zone Ice Cream', tagline: 'Soft serve · Key lime · Shakes',
     greeting: ['Waffle cone or cup? Be honest.'],
     blurb: 'Soft-serve in a pastel building shaped like a cone, if you squint.',
     sells: [item('cone', 'Key lime cone', 'Cool off.', 5, 'buff', 'icecream.cone')],
-    enterable: false,
+    enterable: true,
   },
   motel: {
     id: 'motel', name: 'Sunset Motor Lodge', tagline: 'Vacancy · Color TV · Ice machine',
     greeting: ['Room 7 is free. It has a view of the other motel.'],
     blurb: 'A two-storey roadside motel with a neon sign that has never once said NO VACANCY. A night here will skip the clock to sunset and save.',
     sells: [item('night', 'One night, room 7', 'Skips to sunset.', 79, 'service', 'motel.night')],
-    enterable: false,
+    enterable: true,
   },
   convenience: {
     id: 'convenience', name: 'Stop-N-Go', tagline: 'Gas · Snacks · Live bait (maybe)',
@@ -276,6 +276,6 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       { ...item('fuel', 'Jerry can of fuel', 'Range for the boat.', 30, 'consumable', 'boat.fuel'), status: 'planned' as const },
       item('snacks', 'Chips and a soda', 'Morale.', 4, 'buff', 'conv.snacks'),
     ],
-    enterable: false,
+    enterable: true,
   },
 };

@@ -30,14 +30,14 @@ page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
 
 await page.goto(URL, { waitUntil: 'load' });
 await page.waitForTimeout(800);
+// Offline play skips the login gate (no API server needed).
+const offline = page.locator('.krAuthOffline');
+if (await offline.count()) { await offline.click(); await page.waitForTimeout(600); }
 for (let i = 0; i < 4 && !(await tierLabel(page))?.includes('High'); i++) {
   await page.keyboard.press('KeyG');
   await page.waitForTimeout(300);
 }
 await page.waitForTimeout(6000);
-// Offline play skips the login gate (no API server needed).
-const offline = page.locator('.krAuthOffline');
-if (await offline.count()) { await offline.click(); await page.waitForTimeout(600); }
 await page.click('#btnGo');
 await page.waitForTimeout(1500);
 for (let i = 0; i < 20; i++) { await page.mouse.wheel(0, -120); await page.waitForTimeout(30); }

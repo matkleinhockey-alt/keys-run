@@ -29,7 +29,7 @@
  */
 import * as THREE from 'three';
 import type { BoatState } from '@keysrun/shared/sim/boat';
-import { DECK_TOP, PAD, PAD_Y, SURFACES, TOWN_FRAME, toLocal, COLLIDERS, groundAt } from '@keysrun/shared/world/town';
+import { DECK_TOP, PAD, PAD_Y, SURFACES, TOWN_FRAME, LOTS, toLocal, COLLIDERS, groundAt } from '@keysrun/shared/world/town';
 import { VENUES } from '@keysrun/shared/content/venues';
 import { buy, emptyInventory } from '@keysrun/shared/sim/shop';
 import type { LightMatEntry } from '../../core/time-of-day.js';
@@ -239,7 +239,7 @@ export function createLandSystem(deps: LandDeps): LandSystem {
   // ---------------------------------------------------------------- place names
   function placeFor(x: number, z: number): { place: string; sub: string } {
     const inside = town.insideLot(x, z);
-    if (inside) return { place: VENUES[inside === 'diner' ? 'diner' : 'bar'].name, sub: 'Boot Key Harbor City' };
+    if (inside) return { place: VENUES[LOTS.find((l) => l.id === inside)?.venue ?? 'bar'].name, sub: 'Boot Key Harbor City' };
     const g = groundAt(x, z);
     if (g !== null && g < PAD_Y - 0.05) return { place: ctl.mooring?.marina ?? 'Marina', sub: 'Dock' };
     const [u, v] = toLocal(TOWN_FRAME, x, z);
@@ -319,6 +319,7 @@ export function createLandSystem(deps: LandDeps): LandSystem {
     hideTown: (hidden: boolean) => town.debugHide(hidden),
     camera: () => ({ near: camera.near, far: camera.far, fov: +camera.fov.toFixed(2), x: +camera.position.x.toFixed(1), y: +camera.position.y.toFixed(1), z: +camera.position.z.toFixed(1) }),
     boatCam: () => ({ yaw: +deps.camState.yaw.toFixed(3), pitchOff: +deps.camState.pitchOff.toFixed(3), zoom: deps.camState.zoom, dYaw: +deps.fpState.dYaw.toFixed(3), dPitch: +deps.fpState.dPitch.toFixed(3), view: deps.fpState.view, pref: deps.fpState.pref }),
+    shops: () => LOTS.map((l) => ({ id: l.id, venue: l.venue, door: l.door, v0: l.v0, depth: l.v1 - l.v0 })),
     pad: PAD,
     // verification only: own everything / wear / strip (the till is not wired to the wallet yet)
     wardrobe: {

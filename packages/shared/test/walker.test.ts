@@ -5,7 +5,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { createWalkerState, stepWalker, canStand, WALK_SPEED, SPRINT_SPEED, STEP_MAX, type WalkerEnv, type WalkerInput, type WalkerState } from '../src/sim/walker.js';
-import { COLLIDERS, groundAt, findBerth, TOWN_FRAME, toWorld, PAD_Y, DECK_TOP, marinaDecks } from '../src/world/town.js';
+import { COLLIDERS, groundAt, findBerth, TOWN_FRAME, toWorld, PAD_Y, DECK_TOP, marinaDecks, toLocal, LOTS, INTERACTS } from '../src/world/town.js';
+import { flood, nearestReached, pathTo } from './walk-grid.js';
 import { MARINAS } from '../src/world/depth.js';
 
 const none: WalkerInput = { fwd: false, back: false, left: false, right: false, sprint: false, lookYaw: 0 };
@@ -137,5 +138,56 @@ describe('walking in Boot Key Harbor City', () => {
       s = stepWalker(s, { ...none, fwd: true, lookYaw: Math.atan2(-dx, -dz) }, env, DT);
     }
     expect(Math.hypot(tx - s.x, tz - s.z)).toBeLessThan(0.7);
+  });
+});
+
+describe('walking into every shop', () => {
+  const env: WalkerEnv = { ground: groundAt, colliders: COLLIDERS };
+  const F = TOWN_FRAME;
+  const around = (l: (typeof LOTS)[number]): { u0: number; u1: number; v0: number; v1: number } => ({ u0: l.u0 - 3, u1: l.u1 + 3, v0: l.v0 - 4, v1: l.v1 + 1 });
+
+  it('steps from the sidewalk through the door and up to the counter of every walk-in venue, with the real walker', () => {
+    for (const l of LOTS.filter((x) => x.enterable)) {
+      const prompt = INTERACTS.find((i) => i.venue === l.venue && i.id.startsWith('counter-'))!;
+      const g = flood(l.door, l.v0 - 1.5, around(l));
+      const hit = nearestReached(g, prompt.u, prompt.v, 0.4)!;
+      expect(hit, l.id).not.toBeNull();
+      // follow the grid path with the real stepWalker: head for a waypoint a couple of cells ahead
+      const path = pathTo(g, hit[0], hit[1]);
+      const [sx, sz] = toWorld(F, path[0][0], path[0][1]);
+      let s = createWalkerState(sx, sz, 0, env);
+      let k = 0;
+      for (let i = 0; i < 6000 && k < path.length - 1; i++) {
+        const [tu, tv] = path[Math.min(path.length - 1, k + 2)];
+        const [tx, tz] = toWorld(F, tu, tv);
+        const dx = tx - s.x, dz = tz - s.z;
+        if (Math.hypot(dx, dz) < 0.3) { k += 1; continue; }
+        s = stepWalker(s, { ...none, fwd: true, lookYaw: Math.atan2(-dx, -dz) }, env, DT);
+      }
+      const [px, pz] = toWorld(F, prompt.u, prompt.v);
+      const short = Math.hypot(s.x - px, s.z - pz);
+      expect(short, `${l.id}: stopped ${short.toFixed(1)} m short of the counter`).toBeLessThan(1.2);
+      expect(s.y).toBe(PAD_Y);
+    }
+  });
+
+  it('survives random inputs inside every shop without ever standing in furniture or a wall', () => {
+    let seed = 987654;
+    const rnd = (): number => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+    for (const l of LOTS.filter((x) => x.enterable)) {
+      const [x0, z0] = toWorld(F, l.door, l.v0 + 2);
+      let s = createWalkerState(x0, z0, 0, env);
+      let input: WalkerInput = { ...none };
+      let deepest = 0;
+      for (let i = 0; i < 6000; i++) {
+        if (i % 15 === 0) input = { fwd: rnd() < 0.6, back: rnd() < 0.15, left: rnd() < 0.3, right: rnd() < 0.3, sprint: rnd() < 0.5, lookYaw: rnd() * 6.28 };
+        s = stepWalker(s, input, env, DT);
+        if (groundAt(s.x, s.z) === null) throw new Error(`${l.id}: walked onto nothing at step ${i}`);
+        for (const c of COLLIDERS) if (s.x > c.x0 && s.x < c.x1 && s.z > c.z0 && s.z < c.z1) throw new Error(`${l.id}: inside a collider at step ${i}`);
+        deepest = Math.max(deepest, toLocal(F, s.x, s.z)[1] - l.v0);
+      }
+      // it actually explored the room rather than sitting in the doorway
+      expect(deepest, l.id).toBeGreaterThan(1.5);
+    }
   });
 });

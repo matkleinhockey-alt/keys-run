@@ -59,8 +59,8 @@ export interface AnimatedFigure {
 }
 
 /** Call after `object` is at its slot position — sea-legs.ts keeps its feet on that deck height. */
-export function createAnimatedFigure(object: THREE.Object3D, mixer: THREE.AnimationMixer, action: THREE.AnimationAction, restRotY: number, heightM: number): AnimatedFigure {
-  return { object, mixer, action, restRotY, drive: 0, seaLegs: createSeaLegsRig(object, heightM), seaLegsState: createSeaLegsState() };
+export function createAnimatedFigure(object: THREE.Object3D, mixer: THREE.AnimationMixer, action: THREE.AnimationAction, restRotY: number): AnimatedFigure {
+  return { object, mixer, action, restRotY, drive: 0, seaLegs: createSeaLegsRig(object), seaLegsState: createSeaLegsState() };
 }
 
 // Same "fast" threshold entities/life/deck-party.ts (feat/audio-life) uses for its own party —

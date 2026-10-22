@@ -1,0 +1,209 @@
+[
+  {
+    "label": "offshore, 2.3 km out",
+    "dist": 2386.3,
+    "rootVisible": false,
+    "near": false,
+    "far": false,
+    "lights": false,
+    "callsWithTown": 1282,
+    "callsWithout": 1321,
+    "deltaCalls": -39,
+    "deltaTris": -5000,
+    "samplesOn": [
+      1282,
+      1323,
+      1216
+    ],
+    "samplesOff": [
+      1321,
+      1359,
+      1247
+    ],
+    "programs": 48
+  },
+  {
+    "label": "west of the bridge, 2 km away",
+    "dist": 1944.6,
+    "rootVisible": false,
+    "near": false,
+    "far": false,
+    "lights": false,
+    "callsWithTown": 585,
+    "callsWithout": 585,
+    "deltaCalls": 0,
+    "deltaTris": 62000,
+    "samplesOn": [
+      555,
+      597,
+      585
+    ],
+    "samplesOff": [
+      597,
+      585,
+      585
+    ],
+    "programs": 48
+  },
+  {
+    "label": "Hawk Channel, 1 km out (far silhouette: 2 draw calls)",
+    "dist": 1069.2,
+    "rootVisible": true,
+    "near": false,
+    "far": true,
+    "lights": false,
+    "callsWithTown": 1558,
+    "callsWithout": 1556,
+    "deltaCalls": 2,
+    "deltaTris": 2000,
+    "samplesOn": [
+      1532,
+      1560,
+      1558
+    ],
+    "samplesOff": [
+      1536,
+      1556,
+      1559
+    ],
+    "programs": 53
+  },
+  {
+    "label": "harbour mouth, ~350 m (far silhouette)",
+    "dist": 319.7,
+    "rootVisible": true,
+    "near": false,
+    "far": true,
+    "lights": false,
+    "callsWithTown": 605,
+    "callsWithout": 602,
+    "deltaCalls": 3,
+    "deltaTris": 2000,
+    "samplesOn": [
+      605,
+      605,
+      605
+    ],
+    "samplesOff": [
+      603,
+      602,
+      602
+    ],
+    "programs": 53
+  },
+  {
+    "label": "approaching the dock, ~130 m off the seawall (near detail)",
+    "dist": 188.3,
+    "rootVisible": true,
+    "near": true,
+    "far": false,
+    "lights": false,
+    "callsWithTown": 614,
+    "callsWithout": 566,
+    "deltaCalls": 48,
+    "deltaTris": 28000,
+    "samplesOn": [
+      614,
+      614,
+      614
+    ],
+    "samplesOff": [
+      566,
+      566,
+      567
+    ],
+    "programs": 58
+  },
+  {
+    "label": "in the street, day",
+    "dist": 0,
+    "rootVisible": true,
+    "near": true,
+    "far": false,
+    "lights": false,
+    "callsWithTown": 266,
+    "callsWithout": 90,
+    "deltaCalls": 176,
+    "deltaTris": 67000,
+    "samplesOn": [
+      266,
+      266,
+      266
+    ],
+    "samplesOff": [
+      90,
+      90,
+      90
+    ],
+    "programs": 58
+  },
+  {
+    "label": "inside the bar, day (the interior lamp is the only real light)",
+    "dist": 0,
+    "rootVisible": true,
+    "near": true,
+    "far": false,
+    "lights": true,
+    "callsWithTown": 162,
+    "callsWithout": 87,
+    "deltaCalls": 75,
+    "deltaTris": 44000,
+    "samplesOn": [
+      162,
+      162,
+      162
+    ],
+    "samplesOff": [
+      87,
+      87,
+      87
+    ],
+    "programs": 86
+  },
+  {
+    "label": "in the street, sunset (four real lights)",
+    "dist": 0,
+    "rootVisible": true,
+    "near": true,
+    "far": false,
+    "lights": true,
+    "callsWithTown": 267,
+    "callsWithout": 109,
+    "deltaCalls": 158,
+    "deltaTris": 62000,
+    "samplesOn": [
+      267,
+      267,
+      267
+    ],
+    "samplesOff": [
+      109,
+      109,
+      109
+    ],
+    "programs": 137
+  },
+  {
+    "label": "offshore again at sunset: the lights must be gone",
+    "dist": 2378.9,
+    "rootVisible": false,
+    "near": false,
+    "far": false,
+    "lights": false,
+    "callsWithTown": 1287,
+    "callsWithout": 1273,
+    "deltaCalls": 14,
+    "deltaTris": -4000,
+    "samplesOn": [
+      1226,
+      1287,
+      1322
+    ],
+    "samplesOff": [
+      1245,
+      1308,
+      1273
+    ],
+    "programs": 158
+  }
+]

@@ -1,116 +1,116 @@
 [
   {
     "label": "offshore, 2.3 km out",
-    "dist": 2397.2,
+    "dist": 2393.3,
     "rootVisible": false,
     "near": false,
     "far": false,
     "lights": false,
-    "callsWithTown": 1411,
-    "callsWithout": 1436,
-    "deltaCalls": -25,
-    "deltaTris": -5000,
+    "callsWithTown": 1288,
+    "callsWithout": 1327,
+    "deltaCalls": -39,
+    "deltaTris": -17000,
     "samplesOn": [
-      1411,
-      1475,
-      1389
+      1288,
+      1353,
+      1244
     ],
     "samplesOff": [
-      1436,
-      1509,
-      1430
+      1327,
+      1390,
+      1263
     ],
     "programs": 47
   },
   {
     "label": "west of the bridge, 2 km away",
-    "dist": 1941.1,
+    "dist": 1925.6,
     "rootVisible": false,
     "near": false,
     "far": false,
     "lights": false,
-    "callsWithTown": 617,
-    "callsWithout": 618,
-    "deltaCalls": -1,
-    "deltaTris": 66000,
+    "callsWithTown": 537,
+    "callsWithout": 537,
+    "deltaCalls": 0,
+    "deltaTris": -36000,
     "samplesOn": [
-      638,
-      617,
-      606
+      537,
+      538,
+      526
     ],
     "samplesOff": [
-      618,
-      605,
-      619
+      537,
+      538,
+      526
     ],
     "programs": 47
   },
   {
     "label": "Hawk Channel, 1 km out (far silhouette: 2 draw calls)",
-    "dist": 1039.3,
+    "dist": 1050.9,
     "rootVisible": true,
     "near": false,
     "far": true,
     "lights": false,
-    "callsWithTown": 1620,
-    "callsWithout": 1621,
-    "deltaCalls": -1,
-    "deltaTris": 1000,
+    "callsWithTown": 1597,
+    "callsWithout": 1571,
+    "deltaCalls": 26,
+    "deltaTris": 6000,
     "samplesOn": [
-      2195,
-      1618,
-      1620
+      2029,
+      1506,
+      1597
     ],
     "samplesOff": [
-      1728,
-      1617,
-      1621
+      1571,
+      1504,
+      1594
     ],
     "programs": 53
   },
   {
     "label": "harbour mouth, ~350 m (far silhouette)",
-    "dist": 325.1,
+    "dist": 393.1,
     "rootVisible": true,
     "near": false,
     "far": true,
     "lights": false,
-    "callsWithTown": 724,
-    "callsWithout": 722,
-    "deltaCalls": 2,
+    "callsWithTown": 552,
+    "callsWithout": 545,
+    "deltaCalls": 7,
     "deltaTris": 1000,
     "samplesOn": [
-      715,
-      725,
-      724
+      614,
+      537,
+      552
     ],
     "samplesOff": [
-      722,
-      721,
-      722
+      534,
+      545,
+      549
     ],
     "programs": 53
   },
   {
     "label": "approaching the dock, ~130 m off the seawall (near detail)",
-    "dist": 189.2,
+    "dist": 191.2,
     "rootVisible": true,
     "near": true,
     "far": false,
     "lights": false,
-    "callsWithTown": 718,
-    "callsWithout": 670,
+    "callsWithTown": 559,
+    "callsWithout": 511,
     "deltaCalls": 48,
-    "deltaTris": 26000,
+    "deltaTris": 30000,
     "samplesOn": [
-      718,
-      718,
-      718
+      559,
+      558,
+      560
     ],
     "samplesOff": [
-      671,
-      669,
-      670
+      510,
+      511,
+      512
     ],
     "programs": 58
   },
@@ -121,19 +121,19 @@
     "near": true,
     "far": false,
     "lights": false,
-    "callsWithTown": 341,
-    "callsWithout": 167,
-    "deltaCalls": 174,
-    "deltaTris": 67000,
+    "callsWithTown": 265,
+    "callsWithout": 89,
+    "deltaCalls": 176,
+    "deltaTris": 68000,
     "samplesOn": [
-      339,
-      341,
-      341
+      263,
+      265,
+      265
     ],
     "samplesOff": [
-      167,
-      167,
-      167
+      89,
+      89,
+      89
     ],
     "programs": 58
   },
@@ -144,21 +144,90 @@
     "near": true,
     "far": false,
     "lights": true,
-    "callsWithTown": 239,
-    "callsWithout": 164,
+    "callsWithTown": 161,
+    "callsWithout": 86,
     "deltaCalls": 75,
-    "deltaTris": 43000,
+    "deltaTris": 44000,
     "samplesOn": [
-      239,
-      239,
-      239
+      161,
+      161,
+      161
     ],
     "samplesOff": [
-      164,
-      164,
-      164
+      86,
+      86,
+      86
     ],
     "programs": 86
+  },
+  {
+    "label": "inside the dive shop, day",
+    "dist": 0,
+    "rootVisible": true,
+    "near": true,
+    "far": false,
+    "lights": true,
+    "callsWithTown": 115,
+    "callsWithout": 85,
+    "deltaCalls": 30,
+    "deltaTris": 38000,
+    "samplesOn": [
+      115,
+      115,
+      115
+    ],
+    "samplesOff": [
+      85,
+      85,
+      85
+    ],
+    "programs": 87
+  },
+  {
+    "label": "inside the motel lobby, day",
+    "dist": 0,
+    "rootVisible": true,
+    "near": true,
+    "far": false,
+    "lights": true,
+    "callsWithTown": 116,
+    "callsWithout": 86,
+    "deltaCalls": 30,
+    "deltaTris": 37000,
+    "samplesOn": [
+      116,
+      116,
+      116
+    ],
+    "samplesOff": [
+      86,
+      86,
+      86
+    ],
+    "programs": 87
+  },
+  {
+    "label": "on the sidewalk with two doors in range (day)",
+    "dist": 0,
+    "rootVisible": true,
+    "near": true,
+    "far": false,
+    "lights": false,
+    "callsWithTown": 229,
+    "callsWithout": 92,
+    "deltaCalls": 137,
+    "deltaTris": 67000,
+    "samplesOn": [
+      229,
+      229,
+      229
+    ],
+    "samplesOff": [
+      92,
+      92,
+      92
+    ],
+    "programs": 87
   },
   {
     "label": "in the street, sunset (four real lights)",
@@ -167,43 +236,43 @@
     "near": true,
     "far": false,
     "lights": true,
-    "callsWithTown": 343,
-    "callsWithout": 167,
+    "callsWithTown": 270,
+    "callsWithout": 94,
     "deltaCalls": 176,
     "deltaTris": 67000,
     "samplesOn": [
-      343,
-      343,
-      343
+      270,
+      270,
+      270
     ],
     "samplesOff": [
-      167,
-      167,
-      167
+      94,
+      94,
+      94
     ],
     "programs": 137
   },
   {
     "label": "offshore again at sunset: the lights must be gone",
-    "dist": 2309.4,
+    "dist": 2027.9,
     "rootVisible": false,
     "near": false,
     "far": false,
     "lights": false,
-    "callsWithTown": 1345,
-    "callsWithout": 1362,
-    "deltaCalls": -17,
-    "deltaTris": -7000,
+    "callsWithTown": 884,
+    "callsWithout": 790,
+    "deltaCalls": 94,
+    "deltaTris": -337000,
     "samplesOn": [
-      844,
-      1345,
-      1375
+      884,
+      365,
+      998
     ],
     "samplesOff": [
-      1362,
-      1360,
-      1390
+      769,
+      790,
+      1174
     ],
-    "programs": 157
+    "programs": 158
   }
 ]
