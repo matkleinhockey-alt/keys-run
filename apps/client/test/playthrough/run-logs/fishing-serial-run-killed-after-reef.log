@@ -1,0 +1,52 @@
+[hawk] sim 1.9s  boot {"bootWallSec":70.5,"boatsOffered":8}
+[hawk] sim 2.1s  arrive {"zone":"Hawk Channel"}
+[hawk] sim 15.4s  bite {"waitSimSec":12.2}
+[hawk] sim 24.2s  catch {"species":"Lane Snapper","lb":3.9,"pts":66,"fightSimSec":8.05,"cycleSimSec":21.85}
+[hawk] sim 39s  bite {"waitSimSec":12.7}
+[hawk] sim 49.2s  catch {"species":"Florida Pompano","lb":5.2,"pts":114,"fightSimSec":9.45,"cycleSimSec":23.75}
+[hawk] sim 61.4s  bite {"waitSimSec":10.1}
+[hawk] sim 69.7s  catch {"species":"Lane Snapper","lb":1,"pts":17,"fightSimSec":7.6,"cycleSimSec":19.3}
+[hawk] sim 82.3s  bite {"waitSimSec":10.75}
+[hawk] sim 84.8s  fight-lost {"reason":"mangrove","fightSimSec":2.1,"sizeHint":"Fish on"}
+[reef] sim 1s  boot {"bootWallSec":66.9,"boatsOffered":8}
+[reef] sim 1.4s  arrive {"zone":"Reef"}
+[reef] sim 9.6s  bite {"waitSimSec":7.2}
+[reef] sim 20.8s  catch {"species":"Black Grouper","lb":28.6,"pts":229,"fightSimSec":10.45,"cycleSimSec":19.2}
+[reef] sim 30.9s  bite {"waitSimSec":8.5}
+[reef] sim 39.7s  catch {"species":"Hogfish","lb":16.5,"pts":248,"fightSimSec":8.25,"cycleSimSec":18.25}
+SESSION FAILED page.goto: Target page, context or browser has been closed
+    at Session.boot (/Users/matthewklein/keys-run/.claude/worktrees/agent-ae16f81c85df97ce5/apps/client/test/playthrough.mjs:132:21)
+    at fishingSession (/Users/matthewklein/keys-run/.claude/worktrees/agent-ae16f81c85df97ce5/apps/client/test/playthrough.mjs:287:15) {
+  log: []
+}
+SESSION FAILED browser.newPage: Target page, context or browser has been closed
+    at Session.open (/Users/matthewklein/keys-run/.claude/worktrees/agent-ae16f81c85df97ce5/apps/client/test/playthrough.mjs:99:36)
+    at fishingSession (/Users/matthewklein/keys-run/.claude/worktrees/agent-ae16f81c85df97ce5/apps/client/test/playthrough.mjs:273:48)
+    at /Users/matthewklein/keys-run/.claude/worktrees/agent-ae16f81c85df97ce5/apps/client/test/playthrough.mjs:636:56 {
+  log: []
+}
+
+KEYS RUN PLAYTHROUGH  (2026-10-22T00:21:03.003Z)  total wall 60.6 min; every duration below is SIMULATED seconds
+sim-seconds per wall-second by session: {"hawk":0.03}
+
+-- Rod fishing (real keyboard, bang-bang reel) --
+casts 4 -> bites 4 (100%), mean bite wait 11.44s, mean reaction 0.24s of 1.4s budget
+fights 4: landed 3, lost 1 (win 75%)  reasons {"mangrove":1}  missed strikes 0
+mean fight 8.37s, mean full cast->card cycle 21.63s => 2.77 catches per simulated minute of fishing
+species landed (2): {"Lane Snapper":2,"Florida Pompano":1}; points/catch mean 65.67 range 17,114
+  Hawk Channel: landed [Lane Snapper 3.9lb, Florida Pompano 5.2lb, Lane Snapper 1lb] lost 1  mean bite wait 11.44s
+  Reef: landed [] lost 0  mean bite wait nulls
+  Gulf Stream: landed [] lost 0  mean bite wait nulls
+
+-- Time between anything new (per session, simulated) --
+hawk: 2 new things in 84.8s; longest stretch with nothing new 35.6s
+
+page errors: 346
+[hawk] Failed to load resource: net::ERR_CONNECTION_REFUSED
+[hawk] Failed to load resource: net::ERR_CONNECTION_REFUSED
+[hawk] Failed to load resource: net::ERR_CONNECTION_REFUSED
+[hawk] Failed to load resource: net::ERR_CONNECTION_REFUSED
+[hawk] Failed to load resource: net::ERR_CONNECTION_REFUSED
+[hawk] Failed to load resource: net::ERR_CONNECTION_REFUSED
+[hawk] Failed to load resource: net::ERR_CONNECTION_REFUSED
+[hawk] Failed to load resource: net::ERR_CONNECTION_REFUSED

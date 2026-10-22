@@ -1,0 +1,846 @@
+{
+  "note": "simulated seconds, never wall clock",
+  "spawn": {
+    "x": -1150,
+    "z": 320.87
+  },
+  "firstZone": {
+    "Flats": {
+      "dz": 0,
+      "distFromSpawn": 305,
+      "depth": 0.3
+    },
+    "Hawk Channel": {
+      "dz": 205,
+      "distFromSpawn": 100,
+      "depth": 3.8
+    },
+    "Reef": {
+      "dz": 1255,
+      "distFromSpawn": 949.9999999999999,
+      "depth": 7.6
+    },
+    "Offshore": {
+      "dz": 1650,
+      "distFromSpawn": 1345,
+      "depth": 45.4
+    }
+  },
+  "boatSpeeds": [
+    {
+      "id": "robalo",
+      "topKnots": 52,
+      "topMs": 36.1,
+      "cooler": 150,
+      "draft": 0.6,
+      "secToReefBestCase": 26.3,
+      "secToGulfStreamBestCase": 37.2
+    },
+    {
+      "id": "grady",
+      "topKnots": 58,
+      "topMs": 40.3,
+      "cooler": 350,
+      "draft": 0.72,
+      "secToReefBestCase": 23.6,
+      "secToGulfStreamBestCase": 33.4
+    },
+    {
+      "id": "freeman",
+      "topKnots": 69,
+      "topMs": 47.9,
+      "cooler": 800,
+      "draft": 0.82,
+      "secToReefBestCase": 19.8,
+      "secToGulfStreamBestCase": 28.1
+    },
+    {
+      "id": "midnight",
+      "topKnots": 70,
+      "topMs": 48.6,
+      "cooler": 400,
+      "draft": 0.9,
+      "secToReefBestCase": 19.5,
+      "secToGulfStreamBestCase": 27.7
+    },
+    {
+      "id": "mti",
+      "topKnots": 76,
+      "topMs": 52.8,
+      "cooler": 300,
+      "draft": 1.15,
+      "secToReefBestCase": 18,
+      "secToGulfStreamBestCase": 25.5
+    },
+    {
+      "id": "yellowfin",
+      "topKnots": 66,
+      "topMs": 45.8,
+      "cooler": 520,
+      "draft": 0.76,
+      "secToReefBestCase": 20.7,
+      "secToGulfStreamBestCase": 29.3
+    },
+    {
+      "id": "contender",
+      "topKnots": 61,
+      "topMs": 42.4,
+      "cooler": 420,
+      "draft": 0.68,
+      "secToReefBestCase": 22.4,
+      "secToGulfStreamBestCase": 31.8
+    },
+    {
+      "id": "nortech",
+      "topKnots": 82,
+      "topMs": 56.9,
+      "cooler": 180,
+      "draft": 1.05,
+      "secToReefBestCase": 16.7,
+      "secToGulfStreamBestCase": 23.6
+    }
+  ],
+  "zoneStats": {
+    "Flats": {
+      "bobber": {
+        "x": -1150,
+        "z": 66,
+        "zoneAt": "Flats",
+        "depth": 0.3
+      },
+      "distinctSpecies": 8,
+      "effectiveSpecies": 6.76,
+      "top5": [
+        "bonefish 30.1%",
+        "barracuda 17.7%",
+        "ladyfish 12.3%",
+        "permit 12%",
+        "palometa 10.2%"
+      ],
+      "avgWeightLb": 24,
+      "avgPointsPerCatch": 249,
+      "exclusive": [
+        "bonefish",
+        "permit",
+        "lemonshark",
+        "blacktip",
+        "palometa"
+      ]
+    },
+    "Hawk Channel": {
+      "bobber": {
+        "x": -1150,
+        "z": 241,
+        "zoneAt": "Hawk Channel",
+        "depth": 5.6
+      },
+      "distinctSpecies": 15,
+      "effectiveSpecies": 13.6,
+      "top5": [
+        "mangrove 13.8%",
+        "yellowtail 10.2%",
+        "bluerunner 10%",
+        "lanesnapper 8.3%",
+        "spanishmack 8.3%"
+      ],
+      "avgWeightLb": 7.8,
+      "avgPointsPerCatch": 83,
+      "exclusive": [
+        "mangrove",
+        "pompano",
+        "lookdown"
+      ]
+    },
+    "Reef": {
+      "bobber": {
+        "x": -1150,
+        "z": 1371,
+        "zoneAt": "Reef",
+        "depth": 6.2
+      },
+      "distinctSpecies": 17,
+      "effectiveSpecies": 15.64,
+      "top5": [
+        "yellowtail 13.3%",
+        "hogfish 7.5%",
+        "mutton 7.3%",
+        "schoolmaster 7%",
+        "vermilion 6.8%"
+      ],
+      "avgWeightLb": 12.2,
+      "avgPointsPerCatch": 109,
+      "exclusive": [
+        "hogfish",
+        "grouper",
+        "lionfish",
+        "goliath",
+        "schoolmaster",
+        "vermilion"
+      ]
+    },
+    "Offshore": {
+      "bobber": {
+        "x": -1150,
+        "z": 2066,
+        "zoneAt": "Offshore",
+        "depth": 77.8
+      },
+      "distinctSpecies": 16,
+      "effectiveSpecies": 11.3,
+      "top5": [
+        "mahi 20.5%",
+        "blackfin 12.9%",
+        "skipjack 10.3%",
+        "wahoo 10.3%",
+        "sailfish 9.3%"
+      ],
+      "avgWeightLb": 95.4,
+      "avgPointsPerCatch": 612,
+      "exclusive": [
+        "mahi",
+        "blackfin",
+        "wahoo",
+        "sailfish",
+        "marlin",
+        "blackmarlin",
+        "swordfish",
+        "yellowfin",
+        "albacore",
+        "bluefin",
+        "amberjack",
+        "hammerhead",
+        "skipjack",
+        "bigeye"
+      ]
+    }
+  },
+  "speciesReachableByRod": 48,
+  "totalSpecies": 49,
+  "fightByDrag": {
+    "1": {
+      "n": 1200,
+      "winPct": 99.9,
+      "snappedPct": 0,
+      "slackPct": 0,
+      "spooledPct": 0,
+      "mangrovePct": 0.1,
+      "timeoutPct": 0,
+      "avgFightSecWhenLanded": 11.4
+    },
+    "2": {
+      "n": 1200,
+      "winPct": 100,
+      "snappedPct": 0,
+      "slackPct": 0,
+      "spooledPct": 0,
+      "mangrovePct": 0,
+      "timeoutPct": 0,
+      "avgFightSecWhenLanded": 9.8
+    },
+    "3": {
+      "n": 1200,
+      "winPct": 100,
+      "snappedPct": 0,
+      "slackPct": 0,
+      "spooledPct": 0,
+      "mangrovePct": 0,
+      "timeoutPct": 0,
+      "avgFightSecWhenLanded": 9.1
+    },
+    "4": {
+      "n": 1200,
+      "winPct": 100,
+      "snappedPct": 0,
+      "slackPct": 0,
+      "spooledPct": 0,
+      "mangrovePct": 0,
+      "timeoutPct": 0,
+      "avgFightSecWhenLanded": 7.8
+    },
+    "5": {
+      "n": 1200,
+      "winPct": 100,
+      "snappedPct": 0,
+      "slackPct": 0,
+      "spooledPct": 0,
+      "mangrovePct": 0,
+      "timeoutPct": 0,
+      "avgFightSecWhenLanded": 6.7
+    }
+  },
+  "fightByPolicy": {
+    "bangbang": {
+      "landedPct": 100
+    },
+    "sloppy": {
+      "landedPct": 99.3,
+      "snappedPct": 0.7
+    },
+    "slow": {
+      "landedPct": 96.2,
+      "snappedPct": 3.8
+    },
+    "timid": {
+      "landedPct": 100
+    },
+    "hold": {
+      "snappedPct": 100
+    }
+  },
+  "fightBySpecies": {
+    "bonefish": {
+      "winPct": 100,
+      "avgSec": 7.4,
+      "losses": {},
+      "str": 0.65,
+      "maxLb": 12,
+      "mult": 30
+    },
+    "permit": {
+      "winPct": 100,
+      "avgSec": 9.3,
+      "losses": {},
+      "str": 0.85,
+      "maxLb": 40,
+      "mult": 28
+    },
+    "tarpon": {
+      "winPct": 100,
+      "avgSec": 12,
+      "losses": {},
+      "str": 1.05,
+      "maxLb": 160,
+      "mult": 10
+    },
+    "barracuda": {
+      "winPct": 100,
+      "avgSec": 8.4,
+      "losses": {},
+      "str": 0.7,
+      "maxLb": 45,
+      "mult": 6
+    },
+    "snook": {
+      "winPct": 100,
+      "avgSec": 6.9,
+      "losses": {},
+      "str": 0.6,
+      "maxLb": 30,
+      "mult": 12
+    },
+    "redfish": {
+      "winPct": 100,
+      "avgSec": 6.6,
+      "losses": {},
+      "str": 0.55,
+      "maxLb": 28,
+      "mult": 10
+    },
+    "trout": {
+      "winPct": 100,
+      "avgSec": 4.8,
+      "losses": {},
+      "str": 0.3,
+      "maxLb": 8,
+      "mult": 12
+    },
+    "mangrove": {
+      "winPct": 100,
+      "avgSec": 5.1,
+      "losses": {},
+      "str": 0.35,
+      "maxLb": 12,
+      "mult": 14
+    },
+    "yellowtail": {
+      "winPct": 100,
+      "avgSec": 4.9,
+      "losses": {},
+      "str": 0.3,
+      "maxLb": 7,
+      "mult": 16
+    },
+    "mutton": {
+      "winPct": 100,
+      "avgSec": 6.5,
+      "losses": {},
+      "str": 0.5,
+      "maxLb": 22,
+      "mult": 12
+    },
+    "hogfish": {
+      "winPct": 100,
+      "avgSec": 5.7,
+      "losses": {},
+      "str": 0.4,
+      "maxLb": 20,
+      "mult": 15
+    },
+    "grouper": {
+      "winPct": 100,
+      "avgSec": 10.2,
+      "losses": {},
+      "str": 0.95,
+      "maxLb": 80,
+      "mult": 8
+    },
+    "mahi": {
+      "winPct": 100,
+      "avgSec": 9.4,
+      "losses": {},
+      "str": 0.8,
+      "maxLb": 55,
+      "mult": 9
+    },
+    "blackfin": {
+      "winPct": 100,
+      "avgSec": 9.5,
+      "losses": {},
+      "str": 0.85,
+      "maxLb": 40,
+      "mult": 9
+    },
+    "wahoo": {
+      "winPct": 100,
+      "avgSec": 10.4,
+      "losses": {},
+      "str": 1,
+      "maxLb": 90,
+      "mult": 8
+    },
+    "sailfish": {
+      "winPct": 100,
+      "avgSec": 17.7,
+      "losses": {},
+      "str": 1.1,
+      "maxLb": 100,
+      "mult": 12
+    },
+    "yellowfin": {
+      "winPct": 100,
+      "avgSec": 12.4,
+      "losses": {},
+      "str": 1.15,
+      "maxLb": 220,
+      "mult": 8
+    },
+    "bluefin": {
+      "winPct": 100,
+      "avgSec": 17.8,
+      "losses": {},
+      "str": 1.55,
+      "maxLb": 900,
+      "mult": 5
+    },
+    "albacore": {
+      "winPct": 100,
+      "avgSec": 9.3,
+      "losses": {},
+      "str": 0.85,
+      "maxLb": 60,
+      "mult": 10
+    },
+    "cobia": {
+      "winPct": 100,
+      "avgSec": 10.7,
+      "losses": {},
+      "str": 1,
+      "maxLb": 90,
+      "mult": 9
+    },
+    "amberjack": {
+      "winPct": 100,
+      "avgSec": 12.4,
+      "losses": {},
+      "str": 1.15,
+      "maxLb": 120,
+      "mult": 7
+    },
+    "kingfish": {
+      "winPct": 100,
+      "avgSec": 9.8,
+      "losses": {},
+      "str": 0.9,
+      "maxLb": 60,
+      "mult": 9
+    },
+    "cero": {
+      "winPct": 100,
+      "avgSec": 6.1,
+      "losses": {},
+      "str": 0.5,
+      "maxLb": 12,
+      "mult": 14
+    },
+    "jackcrevalle": {
+      "winPct": 100,
+      "avgSec": 9.1,
+      "losses": {},
+      "str": 0.85,
+      "maxLb": 35,
+      "mult": 8
+    },
+    "ladyfish": {
+      "winPct": 100,
+      "avgSec": 5.3,
+      "losses": {},
+      "str": 0.35,
+      "maxLb": 4,
+      "mult": 20
+    },
+    "sheepshead": {
+      "winPct": 100,
+      "avgSec": 5.8,
+      "losses": {},
+      "str": 0.45,
+      "maxLb": 12,
+      "mult": 14
+    },
+    "pompano": {
+      "winPct": 100,
+      "avgSec": 5.3,
+      "losses": {},
+      "str": 0.4,
+      "maxLb": 6,
+      "mult": 22
+    },
+    "tripletail": {
+      "winPct": 100,
+      "avgSec": 7.1,
+      "losses": {},
+      "str": 0.6,
+      "maxLb": 30,
+      "mult": 14
+    },
+    "lionfish": {
+      "winPct": 100,
+      "avgSec": 4.3,
+      "losses": {},
+      "str": 0.2,
+      "maxLb": 3,
+      "mult": 60
+    },
+    "goliath": {
+      "winPct": 100,
+      "avgSec": 15.8,
+      "losses": {},
+      "str": 1.4,
+      "maxLb": 500,
+      "mult": 4
+    },
+    "graytrigger": {
+      "winPct": 100,
+      "avgSec": 5.8,
+      "losses": {},
+      "str": 0.45,
+      "maxLb": 10,
+      "mult": 15
+    },
+    "blacktip": {
+      "winPct": 100,
+      "avgSec": 12.1,
+      "losses": {},
+      "str": 1.05,
+      "maxLb": 150,
+      "mult": 5
+    },
+    "bullshark": {
+      "winPct": 100,
+      "avgSec": 14.8,
+      "losses": {},
+      "str": 1.35,
+      "maxLb": 350,
+      "mult": 4
+    },
+    "lemonshark": {
+      "winPct": 100,
+      "avgSec": 12.5,
+      "losses": {},
+      "str": 1.15,
+      "maxLb": 250,
+      "mult": 4
+    },
+    "hammerhead": {
+      "winPct": 100,
+      "avgSec": 17.5,
+      "losses": {},
+      "str": 1.5,
+      "maxLb": 700,
+      "mult": 3
+    },
+    "marlin": {
+      "winPct": 100,
+      "avgSec": 28.2,
+      "losses": {},
+      "str": 1.45,
+      "maxLb": 800,
+      "mult": 5
+    },
+    "swordfish": {
+      "winPct": 100,
+      "avgSec": 14,
+      "losses": {},
+      "str": 1.3,
+      "maxLb": 400,
+      "mult": 6
+    },
+    "blackmarlin": {
+      "winPct": 100,
+      "avgSec": 33.1,
+      "losses": {},
+      "str": 1.55,
+      "maxLb": 900,
+      "mult": 5
+    },
+    "bluerunner": {
+      "winPct": 100,
+      "avgSec": 6.1,
+      "losses": {},
+      "str": 0.5,
+      "maxLb": 8,
+      "mult": 16
+    },
+    "schoolmaster": {
+      "winPct": 100,
+      "avgSec": 5.6,
+      "losses": {},
+      "str": 0.4,
+      "maxLb": 8,
+      "mult": 15
+    },
+    "lanesnapper": {
+      "winPct": 100,
+      "avgSec": 4.8,
+      "losses": {},
+      "str": 0.3,
+      "maxLb": 6,
+      "mult": 17
+    },
+    "vermilion": {
+      "winPct": 100,
+      "avgSec": 5.2,
+      "losses": {},
+      "str": 0.35,
+      "maxLb": 7,
+      "mult": 16
+    },
+    "lookdown": {
+      "winPct": 100,
+      "avgSec": 5,
+      "losses": {},
+      "str": 0.35,
+      "maxLb": 4,
+      "mult": 20
+    },
+    "palometa": {
+      "winPct": 100,
+      "avgSec": 5.4,
+      "losses": {},
+      "str": 0.4,
+      "maxLb": 3,
+      "mult": 22
+    },
+    "spanishmack": {
+      "winPct": 100,
+      "avgSec": 6.3,
+      "losses": {},
+      "str": 0.55,
+      "maxLb": 9,
+      "mult": 14
+    },
+    "bigeye": {
+      "winPct": 100,
+      "avgSec": 12.7,
+      "losses": {},
+      "str": 1.2,
+      "maxLb": 300,
+      "mult": 7
+    },
+    "skipjack": {
+      "winPct": 100,
+      "avgSec": 8.6,
+      "losses": {},
+      "str": 0.8,
+      "maxLb": 30,
+      "mult": 11
+    },
+    "gag": {
+      "winPct": 100,
+      "avgSec": 9.5,
+      "losses": {},
+      "str": 0.9,
+      "maxLb": 45,
+      "mult": 7
+    },
+    "redgrouper": {
+      "winPct": 100,
+      "avgSec": 9,
+      "losses": {},
+      "str": 0.85,
+      "maxLb": 30,
+      "mult": 7
+    }
+  },
+  "bestDragHistogram": {
+    "1": 49
+  },
+  "bestDragPerSpecies": {
+    "bonefish": 1,
+    "permit": 1,
+    "tarpon": 1,
+    "barracuda": 1,
+    "snook": 1,
+    "redfish": 1,
+    "trout": 1,
+    "mangrove": 1,
+    "yellowtail": 1,
+    "mutton": 1,
+    "hogfish": 1,
+    "grouper": 1,
+    "mahi": 1,
+    "blackfin": 1,
+    "wahoo": 1,
+    "sailfish": 1,
+    "yellowfin": 1,
+    "bluefin": 1,
+    "albacore": 1,
+    "cobia": 1,
+    "amberjack": 1,
+    "kingfish": 1,
+    "cero": 1,
+    "jackcrevalle": 1,
+    "ladyfish": 1,
+    "sheepshead": 1,
+    "pompano": 1,
+    "tripletail": 1,
+    "lionfish": 1,
+    "goliath": 1,
+    "graytrigger": 1,
+    "blacktip": 1,
+    "bullshark": 1,
+    "lemonshark": 1,
+    "hammerhead": 1,
+    "marlin": 1,
+    "swordfish": 1,
+    "blackmarlin": 1,
+    "bluerunner": 1,
+    "schoolmaster": 1,
+    "lanesnapper": 1,
+    "vermilion": 1,
+    "lookdown": 1,
+    "palometa": 1,
+    "spanishmack": 1,
+    "bigeye": 1,
+    "skipjack": 1,
+    "gag": 1,
+    "redgrouper": 1
+  },
+  "sessions": {
+    "Hawk Channel": {
+      "simMinutes": 30,
+      "casts": 83.2,
+      "catches": 83,
+      "catchesPerMin": 2.77,
+      "firstCatchSec": 22.1,
+      "score": 8867.4,
+      "speciesSeen": 14.7,
+      "speciesInZoneTable": 15,
+      "noveltyEvents": 16.1,
+      "lastNoveltyAtSec": 1319.8,
+      "longestGapSec": 678.7,
+      "medianGapSec": 39.8
+    },
+    "Reef": {
+      "simMinutes": 30,
+      "casts": 82.3,
+      "catches": 82.3,
+      "catchesPerMin": 2.74,
+      "firstCatchSec": 22.4,
+      "score": 11366,
+      "speciesSeen": 16.4,
+      "speciesInZoneTable": 17,
+      "noveltyEvents": 17.7,
+      "lastNoveltyAtSec": 1424.7,
+      "longestGapSec": 661.6,
+      "medianGapSec": 34.6
+    },
+    "Offshore": {
+      "simMinutes": 30,
+      "casts": 63.8,
+      "catches": 63.8,
+      "catchesPerMin": 2.13,
+      "firstCatchSec": 29.5,
+      "score": 47431.4,
+      "speciesSeen": 13.5,
+      "speciesInZoneTable": 16,
+      "noveltyEvents": 14.6,
+      "lastNoveltyAtSec": 1435.5,
+      "longestGapSec": 560.9,
+      "medianGapSec": 59.3
+    }
+  },
+  "discovery": {
+    "Hawk Channel": {
+      "speciesInTable": 15,
+      "medianCatchesTo50pct": 11,
+      "to80pct": 25,
+      "to95pct": 67
+    },
+    "Reef": {
+      "speciesInTable": 17,
+      "medianCatchesTo50pct": 13,
+      "to80pct": 31,
+      "to95pct": 94
+    },
+    "Offshore": {
+      "speciesInTable": 16,
+      "medianCatchesTo50pct": 13,
+      "to80pct": 45,
+      "to95pct": 174
+    }
+  },
+  "economy": {
+    "releaseBonusPct": 25,
+    "weighInPointsPerLb": 6,
+    "pointsPerCatchP50": 98,
+    "pointsPerCatchP90": 595,
+    "pointsPerCatchMax": 4500,
+    "speciesWithMeatPrice": 28,
+    "speciesNoSale": 12,
+    "coolerCaps": {
+      "robalo": 150,
+      "grady": 350,
+      "freeman": 800,
+      "midnight": 400,
+      "mti": 300,
+      "yellowfin": 520,
+      "contender": 420,
+      "nortech": 180
+    }
+  },
+  "dive": {
+    "drifting_0": {
+      "2m": 75,
+      "5m": 60,
+      "10m": 45,
+      "20m": 30,
+      "30m": 22.5
+    },
+    "hunting_0.45": {
+      "2m": 48.7,
+      "5m": 39,
+      "10m": 29.2,
+      "20m": 19.5,
+      "30m": 14.6
+    },
+    "sprinting_1": {
+      "2m": 34.1,
+      "5m": 27.3,
+      "10m": 20.5,
+      "20m": 13.6,
+      "30m": 10.2
+    },
+    "surfaceRefillSec": 3,
+    "unit": "seconds of air from full at constant depth/exertion"
+  }
+}
