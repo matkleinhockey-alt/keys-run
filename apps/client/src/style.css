@@ -39,6 +39,11 @@ button:focus-visible{outline:3px solid var(--sun);outline-offset:2px}
 .thr i{display:block;height:100%;width:0;background:var(--sun);transition:width .1s linear}
 #gauges .trimrow{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12px;color:var(--muted)}
 #gauges .trimrow.on{color:var(--sun);font-weight:700}
+/* Cruise control's lamp. Hidden entirely until latched — see index.html. */
+#gauges .cruiselamp{display:none;align-items:center;gap:7px;margin-top:7px;font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--sun)}
+#gauges .cruiselamp.on{display:flex}
+#gauges .cruiselamp i{width:8px;height:8px;border-radius:50%;background:var(--sun);box-shadow:0 0 7px var(--sun);animation:cruisePulse 2.2s ease-in-out infinite}
+@keyframes cruisePulse{0%,100%{opacity:1}50%{opacity:.45}}
 .trimbar{position:relative;flex:1;height:8px;border-radius:4px;background:linear-gradient(90deg,rgba(127,227,212,.25),rgba(255,255,255,.12) 45%,rgba(242,193,78,.3) 80%,rgba(228,87,46,.45))}
 .trimbar i{position:absolute;top:-3px;width:4px;height:14px;border-radius:2px;background:var(--ink);left:20%}
 #gTrimV{min-width:34px;text-align:right;color:var(--ink)}

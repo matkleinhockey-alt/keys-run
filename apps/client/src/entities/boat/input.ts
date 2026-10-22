@@ -11,8 +11,21 @@
  */
 import type { BoatInput, BoatState } from '@keysrun/shared/sim/boat';
 
-export function createBoatInput(): BoatInput {
-  return { fwd: false, back: false, left: false, right: false, trimUp: false, trimDn: false };
+/**
+ * `BoatInput` plus the one thing that is an input but not a key: cruise control.
+ *
+ * It lives here rather than on the shared `BoatInput` because `stepBoat` has no business knowing
+ * about it — to the sim a cruising boat is simply a boat with the throttle held, which is exactly
+ * what this produces. Keeping it client-side also means a future server never has to trust a
+ * client's claim to be cruising.
+ */
+export interface BoatInputState extends BoatInput {
+  /** Throttle latched on. `fwd` is held true while this is set, whatever the keyboard is doing. */
+  cruise: boolean;
+}
+
+export function createBoatInput(): BoatInputState {
+  return { fwd: false, back: false, left: false, right: false, trimUp: false, trimDn: false, cruise: false };
 }
 
 /** A mutable box so input handlers can replace the live `BoatState` for discrete toggles (gear,
@@ -30,13 +43,29 @@ export interface InputCallbacks {
   zoomChart(k: number): void;
   toggleBigChart(): void;
   resetCamZoom(): void;
+  /** Cruise control was switched on or off — for the toast and the HUD light. */
+  setCruise(on: boolean): void;
 }
 
 const KEYMAP: Record<string, keyof Pick<BoatInput, 'fwd' | 'back' | 'left' | 'right'>> = {
   KeyW: 'fwd', ArrowUp: 'fwd', KeyS: 'back', ArrowDown: 'back', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right',
 };
 
-export function bindBoatInput(input: BoatInput, box: BoatStateBox, cb: InputCallbacks): () => void {
+export function bindBoatInput(input: BoatInputState, box: BoatStateBox, cb: InputCallbacks): () => void {
+  /**
+   * Is the throttle key physically down? Tracked separately from `input.fwd`, because `fwd` is
+   * the OR of this and the cruise latch and the two have to be able to disagree.
+   *
+   * Without it, dropping cruise could only ever set `fwd` — and the astern cancel below cleared
+   * the latch while leaving `fwd` true, so the boat accelerated to its top speed and stayed
+   * there with nothing held and the lamp off. Measured: 33.7 -> 36.5 -> 38.6 m/s after the
+   * "brake".
+   */
+  let fwdHeld = false;
+  /** Throttle open = the key is down OR cruise is latched. Everything that touches `fwd` goes
+   * through this, so releasing W cannot silently cancel a cruise the player set deliberately,
+   * and dropping cruise cannot silently leave the throttle open. */
+  const applyThrottle = (): void => { input.fwd = fwdHeld || input.cruise; };
   const onKeyDown = (e: KeyboardEvent) => {
     const start = document.getElementById('start');
     if (start && !start.classList.contains('hidden')) return;
@@ -48,12 +77,26 @@ export function bindBoatInput(input: BoatInput, box: BoatStateBox, cb: InputCall
     if (e.code === 'BracketLeft') { cb.zoomChart(0.7); return; }
     if (e.code === 'BracketRight') { cb.zoomChart(1 / 0.7); return; }
     if (e.code === 'KeyT') { cb.toggleTrim(); return; }
+    if (e.code === 'Digit6' || e.code === 'Numpad6') {
+      input.cruise = !input.cruise;
+      applyThrottle();
+      cb.setCruise(input.cruise);
+      return;
+    }
     if (box.state.trimMode && (e.code === 'ArrowUp' || e.code === 'ArrowDown')) {
       e.preventDefault();
       if (e.code === 'ArrowUp') input.trimUp = true; else input.trimDn = true;
       return;
     }
-    if (KEYMAP[e.code]) { input[KEYMAP[e.code]] = true; e.preventDefault(); }
+    if (KEYMAP[e.code]) {
+      const k = KEYMAP[e.code];
+      // Astern is the brake, the way it is in a car: if you reach for reverse you have stopped
+      // wanting to cruise, and leaving it latched would fight you the moment you let go.
+      if (k === 'back' && input.cruise) { input.cruise = false; cb.setCruise(false); }
+      if (k === 'fwd') fwdHeld = true; else input[k] = true;
+      applyThrottle();
+      e.preventDefault();
+    }
     if (e.code === 'KeyH') cb.setSea(1);
     if (e.code === 'KeyM') cb.toggleBigChart();
     if (e.code === 'KeyC') cb.resetCamZoom();
@@ -61,10 +104,18 @@ export function bindBoatInput(input: BoatInput, box: BoatStateBox, cb: InputCall
   const onKeyUp = (e: KeyboardEvent) => {
     if (e.code === 'ArrowUp') input.trimUp = false;
     if (e.code === 'ArrowDown') input.trimDn = false;
-    if (KEYMAP[e.code]) input[KEYMAP[e.code]] = false;
+    if (KEYMAP[e.code]) {
+      const k = KEYMAP[e.code];
+      if (k === 'fwd') fwdHeld = false; else input[k] = false;
+      applyThrottle();
+    }
   };
   const onBlur = () => {
-    input.fwd = input.back = input.left = input.right = input.trimUp = input.trimDn = false;
+    input.back = input.left = input.right = input.trimUp = input.trimDn = false;
+    // Cruise survives a lost focus. Alt-tabbing is not a reason to come back to a stopped boat,
+    // and the physical keys are all released here anyway.
+    fwdHeld = false;
+    applyThrottle();
   };
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', onKeyUp);

@@ -594,7 +594,7 @@ export function initWorld(wrap: HTMLElement): World {
     // Charging counts as a cast in flight even though `state` is still 'idle' while the key is
     // held: ashore the keyup is suspended (above), so a charge left running stays running, the
     // cast meter sits half-full behind the town HUD, and the first Space back aboard releases it.
-    prepare: () => { if (FishF.charging || (FishF.state !== 'idle' && FishF.state !== 'caught')) fishing.reelIn(); },
+    prepare: () => { dropCruise(); if (FishF.charging || (FishF.state !== 'idle' && FishF.state !== 'caught')) fishing.reelIn(); },
     toast, shop: econ.shop, gameRunning: () => game.running, casino,
     // F underwater opens treasure, not the dock (entities/land/index.ts's `diving` dep).
     diving: () => diver.mode === 'diver',
@@ -659,7 +659,7 @@ export function initWorld(wrap: HTMLElement): World {
       : raceMode.isActive() ? 'Finish the race first.' : null),
     // Also abort a cast that is still CHARGING (state is 'idle' while the key is held): leaving it would
     // release a real cast on the Space keyup that arrives after the pistol is out. reelIn clears it.
-    prepare: () => { if (FishF.charging || (FishF.state !== 'idle' && FishF.state !== 'caught')) fishing.reelIn(); },
+    prepare: () => { dropCruise(); if (FishF.charging || (FishF.state !== 'idle' && FishF.state !== 'caught')) fishing.reelIn(); },
     toast, gear: econ.gear, fishWorld, life, audio: audio.engine, particles,
     // Caelen is down. Nobody aboard liked him.
     onCaelenDown() {
@@ -714,6 +714,7 @@ export function initWorld(wrap: HTMLElement): World {
       if (tooDrunkToDive(buffs.mods)) { toast('Caelen: "You can barely stand. Sit down, loser."'); return; }
       // ...including a charge still building (state is 'idle' while Space is held), which
       // underwater is the ascend key and would otherwise release a cast on the way down.
+      dropCruise();
       if (FishF.charging || (FishF.state !== 'idle' && FishF.state !== 'caught')) fishing.reelIn();
       diver.enterWater(stateBox.state.x, stateBox.state.z, stateBox.state.h);
       setDiveUI(true);
@@ -734,10 +735,24 @@ export function initWorld(wrap: HTMLElement): World {
     treasure.tryOpen();
   });
 
+  /**
+   * Drop cruise control, silently. Called wherever the player stops being the person at the
+   * helm — over the side, ashore, pistol out, back at the marina, or into trim mode. Coming back
+   * aboard to a boat that is already under way, because you latched the throttle four minutes ago
+   * before diving, is the kind of surprise that ends with you on a sandbar.
+   */
+  function dropCruise(): void {
+    if (!input.cruise) return;
+    input.cruise = false;
+    input.fwd = false;
+    document.getElementById('cruiseLamp')?.classList.remove('on');
+  }
+
   bindBoatInput(input, stateBox, {
     toggleTrim() {
       if (FishF.state === 'fight') { fishing.setDrag(FishF.drag + (shiftHeld ? -1 : 1)); return; }
       stateBox.state = { ...stateBox.state, trimMode: !stateBox.state.trimMode };
+      dropCruise();
       input.fwd = false; input.back = false;
       toast(stateBox.state.trimMode ? 'Trim mode on — ▲ trims up, ▼ trims down. W/S still change throttle. T to exit.' : 'Trim mode off.');
     },
@@ -770,6 +785,12 @@ export function initWorld(wrap: HTMLElement): World {
     },
     zoomChart(k) { electronics.zoom(k); },
     toggleBigChart() { document.getElementById('mapbox')?.classList.toggle('big'); },
+    setCruise(on) {
+      toast(on
+        ? 'Cruise control on (6) — throttle stays open. S or 6 to drop it.'
+        : 'Cruise control off.');
+      document.getElementById('cruiseLamp')?.classList.toggle('on', on);
+    },
     resetCamZoom() { camState.zoom = camState.zoom > 1.4 ? 1 : 1.9; },
   });
 
@@ -837,6 +858,7 @@ export function initWorld(wrap: HTMLElement): World {
   document.getElementById('btnMarina')?.addEventListener('click', () => {
     game.running = false;
     input.fwd = input.back = input.left = input.right = false;
+    dropCruise();
     if (diver.mode === 'diver') { diver.exitToBoat(); setDiveUI(false); }
     land.exitToBoat();
     handgun.exitToBoat();
