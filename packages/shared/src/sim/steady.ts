@@ -86,13 +86,16 @@ export const BUFF_LABELS: Readonly<Record<string, string>> = {
   'diner.mahi': 'Mahi sandwich',
   'diner.pie': 'Key lime pie',
   'bar.wings': 'Hot wings',
+  'diner.breakfast': "Fisherman's breakfast",
   'icecream.cone': 'Ice cream',
   'conv.snacks': 'Snacks',
   'bar.shot': 'Key lime shot',
   'liquor.sixer': 'Six-pack',
+  'bar.beer': 'Cold beer',
 };
 
-export const isDrink = (key: string): boolean => key === 'bar.shot' || key === 'liquor.sixer';
+export const isDrink = (key: string): boolean =>
+  key === 'bar.shot' || key === 'liquor.sixer' || key === 'bar.beer';
 
 /** Which timed buffs are live at `nowS`, soonest-to-expire first, with whole seconds remaining. */
 export function liveBuffs(buffs: Readonly<Record<string, number>>, nowS: number): Array<{ key: string; left: number }> {

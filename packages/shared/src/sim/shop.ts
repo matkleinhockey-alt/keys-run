@@ -102,12 +102,17 @@ export function buy(inv: Inventory, venueId: VenueId, itemId: string, cash: numb
   }
   if (cash < it.price) return { ok: false, reason: 'cannot-afford', inventory: inv, cost: 0 };
 
+  // A pony bottle is live only while you hold an air fill (sim/dive-gear.ts), so a bottle bought
+  // on its own is $4,500 of nothing until you notice a $12 item two rows down. That is a trap, not
+  // a decision — it ships full.
+  const freebies: Record<string, number> = key === 'dive.tank' ? { 'dive.fill': 1 } : {};
+
   const next: Inventory = {
     gear: kind === 'gear' ? [...inv.gear, key] : inv.gear,
     cosmetics: kind === 'cosmetic' ? [...inv.cosmetics, key] : inv.cosmetics,
     consumables: kind === 'consumable'
       ? { ...inv.consumables, [key]: (inv.consumables[key] ?? 0) + unitsPer(key) }
-      : inv.consumables,
+      : applyFreebies(inv.consumables, freebies),
     buffs: kind === 'buff'
       ? { ...inv.buffs, [key]: nowS + (BUFF_SECONDS[key] ?? 300) }
       : inv.buffs,
@@ -115,6 +120,16 @@ export function buy(inv: Inventory, venueId: VenueId, itemId: string, cash: numb
     wearing: kind === 'cosmetic' ? { ...inv.wearing, [slotOf(key)]: key } : inv.wearing,
   };
   return { ok: true, inventory: next, cost: it.price };
+}
+
+function applyFreebies(
+  have: Readonly<Record<string, number>>, add: Record<string, number>,
+): Readonly<Record<string, number>> {
+  const keys = Object.keys(add);
+  if (keys.length === 0) return have;
+  const out = { ...have };
+  for (const k of keys) out[k] = (out[k] ?? 0) + add[k];
+  return out;
 }
 
 /** How many units one purchase of a consumable adds. Bait comes by the dozen; a bag of ice is one. */

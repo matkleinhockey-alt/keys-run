@@ -123,6 +123,12 @@ describe('the dive shop is the reason to go to town', () => {
     expect(modifiersFor(emptyInventory(), 0)).toEqual(NO_MODIFIERS);
   });
 
+  it('a pony bottle comes with a fill, so it is never $4,500 of nothing', () => {
+    // The bottle is live only while you hold a fill. Selling one without is a trap: the most
+    // expensive item in town silently does nothing until you spot a $12 item two rows down.
+    expect(countOf(own(['dive', 'tank-pony']), 'dive.fill')).toBeGreaterThan(0);
+  });
+
   it('gear is permanent — it survives a buff sweep', () => {
     const inv = pruneBuffs(own(['dive', 'tank-pony']), 1e9);
     expect(has(inv, 'dive.tank')).toBe(true);
