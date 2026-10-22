@@ -6,12 +6,14 @@
  * the page stays untouched. Everything is appended inside `#hud` so it inherits the "hidden until
  * the game starts" behaviour, and every element has a stable id for the Playwright harness.
  *
- * The venue panel is the hook for the economy: it lists each venue's `sells` straight from
- * `@keysrun/shared/content/venues`, greyed out and tagged "stock arriving" while every item is
- * `status: 'planned'`. When an item goes `'live'` the same row gains a Buy button here; nothing
- * about the venues needs to change.
+ * The venue panel lists each venue's `sells` straight from `@keysrun/shared/content/venues` and
+ * sells it through the `ShopPort` (ui/gear.ts, backed by game/economy/system.ts). Every row shows
+ * its price, what it does in words (derived from the shared modifier bag, so it cannot disagree
+ * with the gear screen), and its state for you: owned / carrying N / running. A refusal — can't
+ * afford, already own — is shown in the footer in words rather than silently ignored.
  */
 import { VENUES, type Venue } from '@keysrun/shared/content/venues';
+import { describeItem, fmtClock, rowsText, type ShopPort } from '../../ui/gear.js';
 import './land.css';
 
 function $(id: string): HTMLElement | null { return document.getElementById(id); }
@@ -38,7 +40,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, id: string | null, cl
 }
 
 /** Builds (once) and returns the handles. Idempotent: a second call returns the same DOM. */
-export function createLandHud(touch: boolean): LandHudHandles {
+export function createLandHud(touch: boolean, shop: ShopPort): LandHudHandles {
   const host = $('hud') ?? document.body;
   if (!$('landHud')) {
     const hud = el('div', 'landHud', 'hidden');
@@ -67,7 +69,7 @@ export function createLandHud(touch: boolean): LandHudHandles {
     p.innerHTML = html;
     p.classList.remove('hidden');
     onClose = cb;
-    p.querySelector('button')?.addEventListener('click', close);
+    p.querySelector('#landPanelClose')?.addEventListener('click', close);
   };
 
   return {
@@ -88,10 +90,49 @@ export function createLandHud(touch: boolean): LandHudHandles {
     openVenue(id, visit, cb) {
       const v = VENUES[id];
       const say = v.greeting[visit % v.greeting.length];
-      const shelf = v.sells.length
-        ? `<ul class="shelf">${v.sells.map((s) => `<li><b>${esc(s.name)}</b><small>${esc(s.blurb)}</small><span class="px">$${s.price}<i>${s.status === 'planned' ? 'stock arriving' : 'in stock'}</i></span></li>`).join('')}</ul>`
-        : '<p class="blurb">Nothing on the shelves for you yet.</p>';
-      open(`<h2>${esc(v.name)}</h2><div class="vtag">${esc(v.tagline)}</div><p class="say">“${esc(say)}”</p><p class="blurb">${esc(v.blurb)}</p>${shelf}<div class="foot"><span>Nothing is for sale yet — the till opens when the economy does.</span><button type="button" id="landPanelClose">Back outside</button></div>`, cb);
+      let msg = '', bad = false;
+      const render = (): void => {
+        const p = $('landPanel'); if (!p) return;
+        const keep = p.scrollTop;
+        const inv = shop.inventory(), now = shop.clock(), cash = shop.cash();
+        const row = (s: (typeof v.sells)[number]): string => {
+          const { kind, key } = s.effect;
+          const owned = (kind === 'gear' && inv.gear.includes(key)) || (kind === 'cosmetic' && inv.cosmetics.includes(key));
+          const carried = inv.consumables[key] ?? 0;
+          const left = (inv.buffs[key] ?? 0) - now;
+          const fx = rowsText(describeItem(s));
+          const note = owned ? 'Owned' : left > 0 ? `Running ${fmtClock(left)}` : carried > 0 ? `Carrying ${carried}` : s.price > cash ? `Need $${Math.ceil(s.price - cash).toLocaleString('en-US')} more` : '';
+          const live = s.status === 'live';
+          const label = !live ? 'Soon' : owned ? 'Owned' : 'Buy';
+          return `<li class="${owned ? 'own' : ''}"><b>${esc(s.name)}</b><small>${esc(s.blurb)}</small>${fx ? `<em>${esc(fx)}</em>` : ''}`
+            + `<span class="px">$${s.price.toLocaleString('en-US')}<i>${esc(note)}</i><button type="button" class="buy${live && !owned && s.price > cash ? ' poor' : ''}" data-item="${esc(s.id)}"${live && !owned ? '' : ' disabled'}>${label}</button></span></li>`;
+        };
+        const shelf = v.sells.length
+          ? `<ul class="shelf">${v.sells.map(row).join('')}</ul>`
+          : '<p class="blurb">Nothing on the shelves for you yet.</p>';
+        p.innerHTML = `<h2>${esc(v.name)}</h2><div class="vtag">${esc(v.tagline)}</div><p class="say">\u201c${esc(say)}\u201d</p><p class="blurb">${esc(v.blurb)}</p>${shelf}`
+          + `<div class="foot"><span id="shopMsg" class="${bad ? 'bad' : ''}">${esc(msg)}</span><b class="wallet">Cash $${Math.round(cash).toLocaleString('en-US')}</b><button type="button" id="landPanelClose">Back outside</button></div>`;
+        p.scrollTop = keep;
+      };
+      open('', cb);
+      render();
+      const p = $('landPanel')!;
+      // One delegated listener: render() replaces the whole subtree on every purchase, so
+      // per-button handlers would be rebuilt (and leaked) each time. `open` already installed the
+      // close handler on the first button, which at that moment did not exist — hence the
+      // explicit #landPanelClose lookup via delegation below instead.
+      p.onclick = (e) => {
+        const t = e.target as HTMLElement;
+        if (t.closest('#landPanelClose')) { close(); return; }
+        const b = t.closest<HTMLButtonElement>('button.buy');
+        if (!b || b.disabled) return;
+        const r = shop.buy(id, b.dataset.item ?? '');
+        msg = r.message; bad = !r.ok;
+        render();
+      };
+      const unsub = shop.subscribe(render);
+      const prev = onClose;
+      onClose = () => { unsub(); p.onclick = null; prev?.(); };
     },
     openPlaque(title, text, cb) {
       open(`<h2>${esc(title)}</h2><p class="blurb" style="margin-top:12px">${esc(text)}</p><div class="foot"><span></span><button type="button" id="landPanelClose">Carry on</button></div>`, cb);

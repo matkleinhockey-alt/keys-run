@@ -21,6 +21,12 @@ import {
   sanitizeEconomy, stepBuy, stepCatch, stepSelect, nextBoat,
   type DeckWealth, type EconomyState, type Payout,
 } from '@keysrun/shared/sim/economy';
+import { VENUES, type VenueId } from '@keysrun/shared/content/venues';
+import {
+  buy as shopBuy, modifiersFor, pruneBuffs, useOne,
+  type BuyFailure, type Inventory, type Modifiers,
+} from '@keysrun/shared/sim/shop';
+import { loadInventory, saveInventory } from './inventory.js';
 import { toast } from '../../ui/toast.js';
 import type { BoatModel } from '../../entities/boat/model.js';
 import type { BoatMarket } from '../../ui/start.js';
@@ -59,6 +65,93 @@ export function createEconomySystem(deps: EconomyDeps) {
   let state = load();
   let lastTier = deckWealth(netWorth(state), 10).tier;
   const listeners = new Set<() => void>();
+
+  // ---- inventory (rules: shared sim/shop.ts; persistence: ./inventory.ts) -----------------------
+  const stored = loadInventory();
+  let inventory: Inventory = stored.inventory;
+  /** Simulated seconds since the first ever session; the clock every buff expiry is stamped on.
+   * Advanced only by `tick`, so a paused or backgrounded game does not burn your coffee. */
+  let clockS = stored.clockS;
+  let lastClockSave = clockS;
+  const invListeners = new Set<() => void>();
+  /** `modifiersFor` allocates a bag; the fight sim and the diver may ask every frame. Keyed on the
+   * inventory reference, which only changes on a purchase, a spend or an expiry — `tick` prunes
+   * before anyone reads, so the cache can never serve a buff that has run out. */
+  let modsInv: Inventory | null = null;
+  let mods: Modifiers = modifiersFor(inventory, clockS);
+
+  function commitInv(next: Inventory): void {
+    inventory = next;
+    saveInventory({ inventory, clockS });
+    lastClockSave = clockS;
+    invListeners.forEach((f) => f());
+  }
+
+  /** Once per fixed step, from world.ts. Expires buffs and, while any are running, re-saves the
+   * clock every ~5 s so a reload mid-buff resumes within seconds of where it was. */
+  function tick(dt: number): void {
+    clockS += dt;
+    const pruned = pruneBuffs(inventory, clockS);
+    if (pruned !== inventory) {
+      const all = Object.values(VENUES).flatMap((v) => v.sells);
+      for (const k of Object.keys(inventory.buffs)) {
+        if (k in pruned.buffs) continue;
+        const it = all.find((s) => s.effect.key === k);
+        if (it) toast(`${it.name} has worn off.`);
+      }
+      commitInv(pruned);
+    } else if (Object.keys(inventory.buffs).length && clockS - lastClockSave > 5) {
+      saveInventory({ inventory, clockS });
+      lastClockSave = clockS;
+    }
+  }
+
+  /** ★ THE SHARED SEAM. Every system that wants to know what the player's gear and buffs change
+   * reads this and only this — never the inventory, never an item id. Multipliers are 1 = no
+   * change, additive fields 0 = no change, so ignoring a field is always safe. Cheap to call per
+   * frame (cached); the returned object is shared, so treat it as read-only. */
+  function modifiers(): Modifiers {
+    if (modsInv !== inventory) { mods = modifiersFor(inventory, clockS); modsInv = inventory; }
+    return mods;
+  }
+
+  const FAIL_TEXT: Record<BuyFailure, string> = {
+    'not-for-sale': 'That is not for sale yet.',
+    'cannot-afford': 'You cannot afford that.',
+    'already-owned': 'You already own that.',
+    'no-such-item': 'They do not stock that.',
+  };
+
+  /** Buys one item: `shopBuy` validates against the wallet and returns the new inventory + cost,
+   * this debits the wallet and applies both. Never throws. `message` is player-facing either way. */
+  function buyItem(venueId: VenueId, itemId: string): { ok: boolean; message: string } {
+    try {
+      const it = VENUES[venueId]?.sells.find((s) => s.id === itemId);
+      const r = shopBuy(inventory, venueId, itemId, state.cash, clockS);
+      if (!r.ok) {
+        const reason = r.reason ?? 'no-such-item';
+        return { ok: false, message: reason === 'cannot-afford' && it ? `You need ${usd(it.price - state.cash)} more for the ${it.name}.` : FAIL_TEXT[reason] };
+      }
+      // Wallet first, inventory second: if the second ever threw you would be out money rather
+      // than holding free gear, the failure a player forgives. Both are sync writes in practice.
+      commit({ ...state, cash: state.cash - r.cost });
+      commitInv(r.inventory);
+      const msg = `Bought ${it?.name ?? itemId} for ${usd(r.cost)}.`;
+      toast(msg);
+      return { ok: true, message: msg };
+    } catch (e) {
+      console.error('economy buyItem', e);
+      return { ok: false, message: 'The till jammed. Try again.' };
+    }
+  }
+
+  /** Spends one carried unit (a cast of bait, a shaft). True if there was one to spend. */
+  function useConsumable(key: string): boolean {
+    const next = useOne(inventory, key);
+    if (next === inventory) return false;
+    commitInv(next);
+    return true;
+  }
 
   function hullById(id: string): Boat { return BOATS.find((b) => b.id === id) ?? BOATS[1]; }
 
@@ -131,7 +224,7 @@ export function createEconomySystem(deps: EconomyDeps) {
 
   paintHud();
 
-  return {
+  const api = {
     get state() { return state; },
     /** The hull to start in: the last one the player selected (always owned). */
     startingBoat(): Boat { return hullById(state.boat); },
@@ -139,9 +232,47 @@ export function createEconomySystem(deps: EconomyDeps) {
     syncDeck,
     payForCatch,
     market,
+    modifiers,
+    /** Consume one carried unit of an `effect.key` (e.g. 'bait.shrimp'); false when none is left. */
+    useConsumable,
+    /** Advance the inventory clock (simulated seconds) and expire buffs. world.ts, once per fixed step. */
+    tick,
+    /** What the shop panel and gear screen need — game systems read `modifiers()` instead. */
+    shop: {
+      cash: (): number => state.cash,
+      inventory: (): Inventory => inventory,
+      clock: (): number => clockS,
+      buy: buyItem,
+      subscribe(f: () => void): () => void {
+        invListeners.add(f); listeners.add(f); // wallet changes (a catch pays out) matter to the panel too
+        return () => { invListeners.delete(f); listeners.delete(f); };
+      },
+    },
+    /** Dev/test: replace the inventory wholesale, and fast-forward the buff clock. */
+    debugSetInventory(inv: Inventory): void { commitInv(inv); },
+    debugAdvanceClock(s: number): void { tick(s); },
     /** Dev/test: a legal wallet for a screenshot script. Not reachable from normal play. */
     debugSet(over: Partial<EconomyState>): void { commit(sanitizeEconomy({ ...state, ...over })); syncDeck(); },
   };
+
+  // DEV/VERIFICATION HOOK ONLY, same spirit as __fishDebug: earning $900 for a pony bottle by hand
+  // is not a test. Nothing in normal play calls it. `buy` goes through the real `buyItem`, so
+  // wallet, refusals, persistence and the panel all behave exactly as for a player.
+  (window as unknown as { __shopDebug?: unknown }).__shopDebug = {
+    grant(n: number) { commit({ ...state, cash: Math.max(0, state.cash + n) }); return state.cash; },
+    /** Buy by item id (e.g. 'dive-tank') from whichever venue stocks it. */
+    buy(itemId: string) {
+      const v = Object.values(VENUES).find((x) => x.sells.some((s) => s.id === itemId));
+      return v ? buyItem(v.id, itemId) : { ok: false, message: 'no such item id' };
+    },
+    /** Fast-forward the buff clock by simulated seconds. */
+    advance(s: number) { tick(s); return clockS; },
+    modifiers: () => ({ ...modifiers() }),
+    state: () => ({ cash: state.cash, clockS, inventory }),
+    reset() { commit({ ...state, cash: 0 }); commitInv({ gear: [], consumables: {}, buffs: {}, cosmetics: [], wearing: {} }); },
+    ids: () => Object.values(VENUES).flatMap((v) => v.sells.map((s) => `${v.id}/${s.id} $${s.price}`)),
+  };
+  return api;
 }
 
 export type EconomySystem = ReturnType<typeof createEconomySystem>;
