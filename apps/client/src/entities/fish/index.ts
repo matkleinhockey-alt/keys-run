@@ -130,16 +130,6 @@ interface DormantEntry {
   since: number;
 }
 
-/** Deterministic string -> [0,1) (FNV-1a) — same family of hash `game/world.ts`'s now-removed
- * per-school stand-in used, kept local here rather than shared: it is five lines and the only two
- * places that ever needed "stable string -> unit float" are this file (per-fish weight) and that
- * one (which now just calls `spearTargetsNear` below), so a shared module would be pure ceremony. */
-function hashUnit(id: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < id.length; i++) { h ^= id.charCodeAt(i); h = Math.imul(h, 16777619); }
-  return (h >>> 0) / 4294967295;
-}
-
 /** How far outside a fish's own species-length a school's members can realistically sit (legacy
  * `spread`'s widest value is 10 for the biggest offshore pods, plus ~half the longest catchable
  * body — swordfish/blackmarlin ~3.6 m); used only to pre-cull whole schools by centroid distance
@@ -481,7 +471,7 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
         // also stable across sessions; roamer ids are a per-process counter (spawn.ts's
         // `roamCounter`), stable only within one running client, same pre-existing limitation the
         // old per-school stand-in had.
-        weight: S.min + (S.max - S.min) * hashUnit(id),
+        weight: S.min + (S.max - S.min) * m.sizeU,
         ax: cap.ax, ay: cap.ay, az: cap.az,
         bx: cap.bx, by: cap.by, bz: cap.bz,
         radius: cap.radius,

@@ -40,7 +40,20 @@ export const TACKLE: readonly Tackle[] = [
   { id: 'braid130', name: '130 lb big-game rig', lineLb: 130, leaderLb: 150, reelMs: 4.6, spool: 0.9 },
 ];
 
-export const STARTER_TACKLE = 'mono30';
+/**
+ * What the player starts with.
+ *
+ * Was `mono30`, which hooks big fish and then loses them: measured over 2,500 hookups per zone
+ * with an attentive angler, only 11% of 100 lb+ fish offshore were landed (3.8% in Hawk Channel,
+ * 9.3% on the weedline), and the dominant loss was a pulled hook — the one failure the player can
+ * do least about. "The rod hooks monsters you never see aboard" is not the same feature as
+ * "bigger fish on the rod", and it is the one that shipped.
+ *
+ * The ladder above this still matters — braid80 roughly doubles trophy conversion again — but it
+ * is not purchasable yet (no tackle shop is wired), so the starting rung is the *only* rung in
+ * practice and has to be able to land the fish the tables now produce.
+ */
+export const STARTER_TACKLE = 'braid50';
 
 export const TACKLE_PRICE: Readonly<Record<string, number>> = {
   mono12: 0, mono30: 0, braid50: 2_500, braid80: 12_000, braid130: 45_000,

@@ -29,7 +29,7 @@ const { SPECIES } = await imp('content/species');
 const { landH, zoneAt } = await imp('world/depth');
 const { chainZ } = await imp('world/chain');
 const { chooseFish, fightParamsFor, startFight, stepFight } = await imp('sim/fight');
-const { tackleById } = await import('@keysrun/shared/content/tackle');
+const { tackleById, STARTER_TACKLE } = await import('@keysrun/shared/content/tackle');
 
 const rng = xoshiro128ss(0xb16f15);
 const SPAWN = { x: -1150, z: chainZ(-1150) + 305 };
@@ -98,7 +98,10 @@ for (const site of SITES) {
   zoneOut.hookedTrophyPct = r1(100 * trophyHooked.length / N);
   zoneOut.hookedOver100lbPct = r1(100 * huge.length / N);
   zoneOut.hookedTop = Object.entries(rolls.reduce((m, f) => (m[f.key] = (m[f.key] ?? 0) + 1, m), {})).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k, c]) => `${k} ${r1(100 * c / N)}%`);
-  for (const tkId of ['mono30', 'braid80']) {
+  // Whatever the player actually starts on, plus a high rung for contrast. Reading the
+  // starter from the content table rather than hardcoding it means moving the starting rung
+  // shows up here instead of silently reporting the old one.
+  for (const tkId of [STARTER_TACKLE, 'braid80']) {
     const tk = tackleById(tkId);
     const landed = [], lostTrophy = {}; let landedTrophy = 0, landedHuge = 0, win = 0;
     for (const f of rolls) {

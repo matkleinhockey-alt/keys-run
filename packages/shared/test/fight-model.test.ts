@@ -61,8 +61,17 @@ function midFight(params: FightParams, over: Partial<FightState> = {}): FightSta
 }
 
 describe('the fight is a contest, not a formality', () => {
+  // These assert that SOMETHING contests the player's gear, which means naming a fish that is
+  // actually a contest for the rung under test. Better tackle is supposed to trivialise the fish
+  // below it and move the fight up the size scale, and it measurably does: hold-the-reel-down
+  // beats a wahoo 68% of the time on mono30 and 100% on braid50, while against a tarpon in the
+  // top 40% of its range it wins 0% on both. Pinning these to one species made them read as
+  // "skill stopped mattering" the moment the starting rung moved, when what had happened is that
+  // the contest moved to bigger fish.
   it('holding the reel down loses to a strong fish and to a trophy', () => {
-    expect(rate('yellowfin', 3, 60, 11, holdDown, STARTER_TACKLE, 0.3, 1).win).toBeLessThan(0.2);
+    expect(rate('yellowfin', 3, 60, 11, holdDown, 'mono30', 0.3, 1).win).toBeLessThan(0.2);
+    // ...and on the rung the player actually starts on, against a fish that rung has to work for.
+    expect(rate('tarpon', 3, 60, 11, holdDown, STARTER_TACKLE, 0.6, 1).win).toBeLessThan(0.2);
   });
 
   it('an attentive player lands almost every ordinary fish on starter tackle', () => {
@@ -70,9 +79,15 @@ describe('the fight is a contest, not a formality', () => {
   });
 
   it('skill is rewarded: attentive beats mashing on a fish that actually pulls', () => {
-    const a = rate('wahoo', 3, 80, 13, angler).win;
-    const h = rate('wahoo', 3, 80, 13, holdDown).win;
+    // Light tackle: a wahoo is the contest.
+    const a = rate('wahoo', 3, 80, 13, angler, 'mono30').win;
+    const h = rate('wahoo', 3, 80, 13, holdDown, 'mono30').win;
     expect(a).toBeGreaterThan(h + 0.25);
+    // Starter tackle: a wahoo no longer is, so the gap has to show on a bigger fish or the rung
+    // has quietly become a formality.
+    const aT = rate('tarpon', 3, 80, 14, angler, STARTER_TACKLE, 0.6, 1).win;
+    const hT = rate('tarpon', 3, 80, 14, holdDown, STARTER_TACKLE, 0.6, 1).win;
+    expect(aT).toBeGreaterThan(hT + 0.2);
   });
 
   it('a trophy on light tackle is a genuine event: neither a lock nor impossible with the right rig', () => {
@@ -153,7 +168,9 @@ describe('drag is a decision', () => {
 
 describe('failure modes an angler would recognise', () => {
   it('horsing: cranking a green running fish loads the line far more than cranking a tired one', () => {
-    const p = fightParamsFor('wahoo', 50, 3);
+    // Pinned to mono30: this measures a mechanic against a line rating, and tension is normalised
+    // to that rating, so the margin shrinks on heavier line without the mechanic changing.
+    const p = fightParamsFor('wahoo', 50, 3, tackleById('mono30'));
     const green = midFight(p, { running: true, pull: p.str, stam: 1, tension: 0.1 });
     const tired = midFight(p, { running: true, pull: p.str, stam: 0.15, tension: 0.1 });
     const g = stepFight(green, { reeling: true }, p, BOAT, mulberry32(2), 0.4).tension;

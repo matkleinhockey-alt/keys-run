@@ -75,6 +75,21 @@ export type SchoolEvent =
  * up once by `state.type` — kept out of `SchoolState` itself so the state stays plain/small, in
  * the spirit of the server-replication note in docs/ARCHITECTURE.md's netcode section:
  * "immutable descriptors ... sent once at spawn, never in snapshots"). */
+/** How far a school will notice a motionless diver, metres. */
+const CURIOUS_RANGE = 30;
+/**
+ * Diver speed (m/s) at which curiosity is gone. The diver is carried by the current even when not
+ * kicking, so this cannot be a hair-trigger: a first attempt faded curiosity linearly to zero at
+ * 0.5 m/s, and the measured drift of 0.3 m/s alone cut the effect to a sixth, leaving fish at
+ * 10 m again. Full strength up to CURIOUS_FULL_SPEED, gone by here.
+ */
+const CURIOUS_MAX_SPEED = 0.75;
+/** Below this the diver is holding station as far as a fish is concerned — drift included. */
+const CURIOUS_FULL_SPEED = 0.35;
+/** Hardest the patch leans toward a diver, 0..1 of the way there. Under 1 on purpose: a school
+ * that fully adopted the diver as its anchor would follow them around the reef. */
+const CURIOUS_PULL = 0.85;
+
 export function stepSchool(state: SchoolState, V: CreatureVis, ctx: SchoolCtx): SchoolEvent[] {
   const { t, dt, threats } = ctx;
   const events: SchoolEvent[] = [];
@@ -143,7 +158,26 @@ export function stepSchool(state: SchoolState, V: CreatureVis, ctx: SchoolCtx): 
   // slight tangential lead that stops a school charging straight through the middle reverses on a
   // ~90 s cycle, so no school can settle into a fixed carousel even out at the boundary.
   if (g.anchor && g.flee <= 0 && !bowRiding) {
-    const ax = g.cx - g.anchor.x, az = g.cz - g.anchor.z, d0 = Math.hypot(ax, az) || 1;
+    // A diver hanging still is worth a look. Reef fish genuinely close on a motionless diver —
+    // it is why you hold station and wait rather than chase — and without it the near-field layer
+    // leaves you watching shapes at 9-10 m, which is the wrong end of an 11 m speargun.
+    //
+    // Modelled as the patch leaning toward the diver rather than the fish steering at them: the
+    // school keeps milling over its own ground, that ground just shifts. So nothing charges you,
+    // and the moment you fin hard the flee check above takes over and they are gone. Capped by
+    // CURIOUS_PULL so a school never abandons its patch outright, and it fades with distance.
+    let anx = g.anchor.x, anz = g.anchor.z;
+    const curious = threats.find((th) => th.kind === 'diver' && th.speed <= CURIOUS_MAX_SPEED);
+    if (curious) {
+      const dd = Math.hypot(curious.x - g.cx, curious.z - g.cz);
+      if (dd < CURIOUS_RANGE) {
+        const calm = clamp((CURIOUS_MAX_SPEED - curious.speed) / (CURIOUS_MAX_SPEED - CURIOUS_FULL_SPEED), 0, 1);
+        const k = CURIOUS_PULL * (1 - dd / CURIOUS_RANGE) * calm;
+        anx += (curious.x - anx) * k;
+        anz += (curious.z - anz) * k;
+      }
+    }
+    const ax = g.cx - anx, az = g.cz - anz, d0 = Math.hypot(ax, az) || 1;
     const R = g.anchor.r || 10;
     // <0 inside the patch, 0 at the edge, >0 outside. The -0.15 starts the pull just inside the
     // boundary so a school eases round instead of overshooting and visibly snapping back.

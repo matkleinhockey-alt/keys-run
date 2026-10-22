@@ -24,6 +24,15 @@ export interface FishMember {
   swimPhase: number;
   /** Per-member size multiplier (legacy `s`). */
   scale: number;
+  /**
+   * Where this fish sits in its species' weight range, 0..1 — and the single number both its
+   * rendered size and its catchable weight come from.
+   *
+   * These used to be independent hashes, so the fish you could see was the biggest one and the
+   * fish you speared was a different draw entirely: picking a target by eye did nothing. Keeping
+   * one value means what looks like the big one IS the big one.
+   */
+  sizeU: number;
   act: string | null;
   actPhase: number;
   actTimer: number;

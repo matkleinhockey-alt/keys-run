@@ -162,9 +162,16 @@ function buildMembers(seed: number, cx: number, cz: number, V: CreatureVis, coun
     const r = Math.sqrt(hashCell(seed, cx, cz, SALT.MEMBER_R + i)) * V.spread;
     const oy = -1 + 2 * hashCell(seed, cx, cz, SALT.MEMBER_OY + i);
     const swimPhase = hashCell(seed, cx, cz, SALT.MEMBER_PHASE + i) * Math.PI * 2;
-    const baseScale = VSC * (0.8 + 0.35 * hashCell(seed, cx, cz, SALT.MEMBER_SCALE + i));
+    // Size fraction within the species' weight range — see FishMember.sizeU. Rendered length
+    // follows weight by the cube root, as a real fish does: a fish twice the weight is only ~1.26x
+    // as long. Mapping it any other way either makes a heavy fish look absurd or makes the
+    // difference invisible, and the point here is that the difference be *readable* at a glance
+    // without being a cartoon. Across a species with a 4x weight spread (tarpon, 40-160 lb) that
+    // is a 1.59x length difference, which is plainly visible alongside its schoolmates.
+    const sizeU = hashCell(seed, cx, cz, SALT.MEMBER_SCALE + i);
+    const baseScale = VSC * Math.cbrt(0.55 + 1.35 * sizeU);
     members.push({
-      ox: Math.cos(ang) * r, oz: Math.sin(ang) * r, oy, swimPhase,
+      ox: Math.cos(ang) * r, oz: Math.sin(ang) * r, oy, swimPhase, sizeU,
       scale: memberScale(baseScale, V, originX, originZ),
       act: null, actPhase: 0, actTimer: 1 + 7 * hashCell(seed, cx, cz, SALT.MEMBER_PHASE + 500 + i),
       splashed: false, splashed2: false, breaching: false,
