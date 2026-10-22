@@ -29,8 +29,9 @@
  */
 import * as THREE from 'three';
 import type { BoatState } from '@keysrun/shared/sim/boat';
-import { DECK_TOP, PAD, PAD_Y, SURFACES, TOWN_FRAME, toLocal, COLLIDERS, groundAt } from '@keysrun/shared/world/town';
+import { DECK_TOP, PAD, PAD_Y, SURFACES, TOWN_FRAME, LOTS, toLocal, toWorld, COLLIDERS, groundAt } from '@keysrun/shared/world/town';
 import { VENUES } from '@keysrun/shared/content/venues';
+import { CASINO_LOT } from '@keysrun/shared/world/casino';
 import type { LightMatEntry } from '../../core/time-of-day.js';
 import type { BoatModel } from '../boat/model.js';
 import type { CamState, FpState } from '../camera.js';
@@ -70,6 +71,8 @@ export interface LandDeps {
   /** The wallet + inventory the venue panel buys through (game/economy/system.ts `shop`). */
   shop: ShopPort;
   gameRunning(): boolean;
+  /** The casino's slot machines (game/casino): opened instead of the shelf panel when the interaction is in the casino. */
+  casino?: { open(id: string, done: () => void): void; close(): void; ambience(dt: number, level: number): void };
 }
 
 export interface LandSystem {
@@ -132,7 +135,7 @@ export function createLandSystem(deps: LandDeps): LandSystem {
   }
 
   // ---------------------------------------------------------------- actions (land verbs)
-  function closePanel(): void { hud.closePanel(); }
+  function closePanel(): void { hud.closePanel(); deps.casino?.close(); }
   function interact(): void {
     if (ctl.mode !== 'land' || !ctl.state) return;
     if (panel === 'open') { closePanel(); return; }
@@ -141,7 +144,9 @@ export function createLandSystem(deps: LandDeps): LandSystem {
     const i = hit.interact;
     panel = 'open';
     ctl.buttons.fwd = ctl.buttons.back = ctl.buttons.left = ctl.buttons.right = ctl.buttons.sprint = false;
-    if (i.kind === 'venue' && i.venue) {
+    if (i.venue === 'casino' && deps.casino) {
+      deps.casino.open(i.id, () => { panel = 'none'; });
+    } else if (i.kind === 'venue' && i.venue) {
       const n = visits.get(i.venue) ?? 0; visits.set(i.venue, n + 1);
       hud.openVenue(i.venue, n, () => { panel = 'none'; });
     } else {
@@ -233,7 +238,7 @@ export function createLandSystem(deps: LandDeps): LandSystem {
   // ---------------------------------------------------------------- place names
   function placeFor(x: number, z: number): { place: string; sub: string } {
     const inside = town.insideLot(x, z);
-    if (inside) return { place: VENUES[inside === 'diner' ? 'diner' : 'bar'].name, sub: 'Boot Key Harbor City' };
+    if (inside) return { place: VENUES[LOTS.find((l) => l.id === inside)?.venue ?? 'bar'].name, sub: 'Boot Key Harbor City' };
     const g = groundAt(x, z);
     if (g !== null && g < PAD_Y - 0.05) return { place: ctl.mooring?.marina ?? 'Marina', sub: 'Dock' };
     const [u, v] = toLocal(TOWN_FRAME, x, z);
@@ -246,6 +251,16 @@ export function createLandSystem(deps: LandDeps): LandSystem {
       if (u >= s.u0 && u <= s.u1 && v >= s.v0 && v <= s.v1) return { place: names[s.id] ?? 'Boot Key Harbor City', sub: 'Boot Key Harbor City' };
     }
     return { place: 'Boot Key Harbor City', sub: 'Marathon, Florida Keys' };
+  }
+
+  // ---------------------------------------------------------------- the casino's room tone
+  const [casinoDoorX, casinoDoorZ] = toWorld(TOWN_FRAME, CASINO_LOT.door, CASINO_LOT.v0);
+  /** 1 on the floor, 0 outside; a muffled 0.3 fading out over the 12 m in front of the door, so you hear it before you see inside. */
+  function casinoLevel(): number {
+    if (ctl.mode !== 'land') return 0;
+    if (town.insideLot(camera.position.x, camera.position.z) === 'casino') return 1;
+    const d = Math.hypot(camera.position.x - casinoDoorX, camera.position.z - casinoDoorZ);
+    return d < 12 ? 0.3 * (1 - d / 12) : 0;
   }
 
   // ---------------------------------------------------------------- per-frame
@@ -311,6 +326,7 @@ export function createLandSystem(deps: LandDeps): LandSystem {
     nearest: () => ctl.state && town.nearestInteract(ctl.state.x, ctl.state.z),
     ensureBuilt: () => town.ensureBuilt(),
     hideTown: (hidden: boolean) => town.debugHide(hidden),
+    hideInterior: (id: string, hidden: boolean) => town.debugHideInterior(id, hidden),
     camera: () => ({ near: camera.near, far: camera.far, fov: +camera.fov.toFixed(2), x: +camera.position.x.toFixed(1), y: +camera.position.y.toFixed(1), z: +camera.position.z.toFixed(1) }),
     boatCam: () => ({ yaw: +deps.camState.yaw.toFixed(3), pitchOff: +deps.camState.pitchOff.toFixed(3), zoom: deps.camState.zoom, dYaw: +deps.fpState.dYaw.toFixed(3), dPitch: +deps.fpState.dPitch.toFixed(3), view: deps.fpState.view, pref: deps.fpState.pref }),
     pad: PAD,
@@ -346,6 +362,7 @@ export function createLandSystem(deps: LandDeps): LandSystem {
 
     update(dt, t) {
       town.update(dt, t, camera.position);
+      if (deps.casino) deps.casino.ambience(dt, casinoLevel());
       updateDockPrompt();
       if (ctl.mode === 'land') { updateBodyAndRope(); updateHud(); }
     },

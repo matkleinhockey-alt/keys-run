@@ -28,6 +28,7 @@ import { GeoBatch } from './batch.js';
 import { createKit, type TownKit } from './kit.js';
 import { paintFacade, paintHero, LOOKS, type HeroKind } from './paint.js';
 import { palm, lamp, bench, trashCan, car, marlinStatue, Zf } from './props.js';
+import { casinoExterior } from './casino-exterior.js';
 import type { LightMatEntry } from '../../core/time-of-day.js';
 
 export interface LightSource { x: number; y: number; z: number; color: number; kind: 'lamp' | 'neon'; lot?: string }
@@ -71,6 +72,7 @@ const HERO: Partial<Record<Lot['style'], { kind: HeroKind; size: number; w?: num
   tackle: { kind: 'marlin', size: 6.2 },
   diner: { kind: 'dinerRoof', size: 3.4, w: 9.5 },
   bar: { kind: 'beer', size: 3.6 },
+  casino: { kind: 'casinoMarlin', size: 8.5 },
 };
 
 export function* buildTown(lightMats: LightMatEntry[], todK: () => number): Generator<void, TownBuild> {
@@ -242,6 +244,8 @@ export function* buildTown(lightMats: LightMatEntry[], todK: () => number): Gene
       for (const dx of [-1.9, 1.9]) glow.halo(door + dx, PAD_Y + 2.7, fz + 0.5, 1.4, 0xff3fa4);
       glow.pool(door, PAD_Y + 0.06, fz + 3.0, 5, 0xff3fa4);
       spotlights(lot);
+    } else if (lot.style === 'casino') {
+      casinoExterior(lot, { solid, glow, kit, near, track, mats });
     } else if (lot.style === 'tackle') {
       // crab traps, buoys and a rod rack: the front of a Keys bait shop
       for (let i = 0; i < 3; i++) solid.span(-56.2 + (i % 2) * 0.6, -54 + (i % 2) * 0.6, PAD_Y + i * 0.55, PAD_Y + 0.5 + i * 0.55, Zf(42.9), Zf(41.5), 0x6b5a3a);

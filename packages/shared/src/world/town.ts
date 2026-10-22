@@ -30,6 +30,7 @@
  */
 import { MARINAS, type Marina } from './depth.js';
 import type { VenueId } from '../content/venues.js';
+import { CASINO_LOT, CASINO_BOXES, CASINO_INTERACTS } from './casino.js';
 
 export interface Rect { x0: number; x1: number; z0: number; z1: number }
 
@@ -115,7 +116,7 @@ export const SURFACES: readonly Surface[] = [
 /** Wall paint / sign family the client painter keys off. */
 export type LotStyle =
   | 'diner' | 'tackle' | 'guns' | 'liquor' | 'bar' | 'club' | 'gifts'
-  | 'pawn' | 'laundromat' | 'icecream' | 'motel' | 'convenience' | 'dive';
+  | 'pawn' | 'laundromat' | 'icecream' | 'motel' | 'convenience' | 'dive' | 'casino';
 
 export interface Lot {
   id: string;
@@ -156,6 +157,8 @@ export const LOTS: readonly Lot[] = [
   { id: 'motel', venue: 'motel', style: 'motel', u0: 8, u1: 60, v0: 100, v1: 124, h: 7.6, door: 20, enterable: false },
   { id: 'icecream', venue: 'icecream', style: 'icecream', u0: 60, u1: 80, v0: 100, v1: 118, h: 4.0, door: 70, enterable: false },
   { id: 'stopngo', venue: 'convenience', style: 'convenience', u0: 80, u1: 100, v0: 100, v1: 122, h: 4.4, door: 90, enterable: false },
+  // The Gaff & Gill Casino, in the back lot at the top of Palm Avenue (world/casino.ts says why there).
+  CASINO_LOT,
 ];
 
 export function lotRect(f: Frame, l: Lot): Rect { return worldRect(f, l.u0, l.u1, l.v0, l.v1); }
@@ -246,8 +249,8 @@ export const CARS: readonly Car[] = [
   ...[-84, -66, -48, -30, 30, 48, 66, 84].map((u, i): Car => ({
     id: `bk-${i}`, u, v: 134, rot: Math.PI / 2, kind: (['sedan', 'pickup', 'suv', 'sedan'] as const)[i % 4], color: col(i + 2),
   })),
-  { id: 'trailer-1', u: -12, v: 150, rot: Math.PI / 2, kind: 'pickup', color: col(1), trailer: true },
-  { id: 'trailer-2', u: 14, v: 150, rot: Math.PI / 2, kind: 'pickup', color: col(4), trailer: true },
+  { id: 'trailer-1', u: -60, v: 150, rot: Math.PI / 2, kind: 'pickup', color: col(1), trailer: true },
+  { id: 'trailer-2', u: 60, v: 150, rot: Math.PI / 2, kind: 'pickup', color: col(4), trailer: true },
 ];
 
 /** World-AABB footprint of a car (4.8 x 2.0, or 12.8 long with a boat trailer), after rotation. */
@@ -289,6 +292,8 @@ export const INTERIOR_BOXES: readonly InteriorBox[] = [
   { id: 'club-booth-owner', lot: 'club', u0: 62, u1: 66.4, v0: 58, v1: 64 },
   { id: 'club-booth-1', lot: 'club', u0: 62, u1: 66.4, v0: 50, v1: 55 },
   { id: 'club-dj', lot: 'club', u0: 61, u1: 66, v0: 66, v1: 70 },
+  // The casino floor: banks of cabinets, the cage, a table, a fountain (world/casino.ts).
+  ...CASINO_BOXES,
 ];
 
 export interface Interact {
@@ -317,6 +322,8 @@ export const INTERACTS: readonly Interact[] = [
   { id: 'counter-diner', kind: 'venue', venue: 'diner', u: -21.5, v: 58.8, r: 2.6, prompt: 'F  Sit at the counter' },
   // The club is served from the owner's booth: you walk in past the rope and sit down.
   { id: 'booth-club', kind: 'venue', venue: 'club', u: 60.2, v: 61, r: 2.8, prompt: 'F  Take the owner\'s booth' },
+  // The casino: one point per free cabinet, plus the change booth (world/casino.ts).
+  ...CASINO_INTERACTS,
   { id: 'marlin', kind: 'plaque', u: 16, v: 22.2, r: 2.4, prompt: 'F  Read the plaque',
     text: 'BLUE MARLIN, 612 LB. Boated 1957 off Sombrero Reef. The plaque says "released" because the town got embarrassed.' },
 ];

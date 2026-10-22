@@ -125,6 +125,18 @@
     "./sim/services": {
       "types": "./dist/sim/services.d.ts",
       "default": "./dist/sim/services.js"
+    },
+    "./sim/slots": {
+      "types": "./dist/sim/slots.d.ts",
+      "default": "./dist/sim/slots.js"
+    },
+    "./sim/reels": {
+      "types": "./dist/sim/reels.d.ts",
+      "default": "./dist/sim/reels.js"
+    },
+    "./world/casino": {
+      "types": "./dist/world/casino.d.ts",
+      "default": "./dist/world/casino.js"
     }
   },
   "scripts": {

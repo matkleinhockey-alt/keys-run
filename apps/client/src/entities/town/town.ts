@@ -66,6 +66,8 @@ export interface Town {
   stats(): TownStats;
   /** VERIFICATION-ONLY: force the whole town out of the render so a harness can measure its cost as a delta. */
   debugHide(hidden: boolean): void;
+  /** VERIFICATION-ONLY: force one walk-in interior out of the render (a per-room delta for the perf harness). */
+  debugHideInterior(id: string, hidden: boolean): void;
   dispose(): void;
 }
 
@@ -73,6 +75,8 @@ export interface TownStats {
   built: boolean; building: boolean; stagesDone: number; rootVisible: boolean;
   nearVisible: boolean; farVisible: boolean; peopleVisible: boolean;
   interiorsBuilt: string[]; interiorsVisible: string[];
+  /** Milliseconds each interior took to build (the one-off cost of walking within INTERIOR_BUILD_RANGE of it). */
+  interiorBuildMs: Record<string, number>;
   lightsActive: boolean; lights: ReturnType<LightPool['debug']>;
   distance: number;
   triangles: number;
@@ -97,6 +101,8 @@ export function createTown(deps: TownDeps): Town {
   const camLocal = new THREE.Vector3();
   let inside: string | null = null;
   let forceHidden = false;
+  const hiddenInteriors = new Set<string>();
+  const buildMs: Record<string, number> = {};
 
   const world: Array<{ i: Interact; x: number; z: number }> = INTERACTS.map((i) => { const [x, z] = toWorld(TOWN_FRAME, i.u, i.v); return { i, x, z }; });
   const lotRects = LOTS.filter((l) => l.enterable).map((l) => ({ id: l.id, l }));
@@ -173,9 +179,10 @@ export function createTown(deps: TownDeps): Town {
           if (d < INTERIOR_BUILD_RANGE) ensureInterior(l.id);
           const it = interiors.get(l.id);
           if (it) {
-            it.group.visible = d < INTERIOR_RANGE;
+            it.group.visible = d < INTERIOR_RANGE && !hiddenInteriors.has(l.id);
             if (it.group.visible) {
               for (const p of it.people) p.human.update(t, 0);
+              it.animate?.(t, camLocal);
             }
           }
         }
@@ -210,13 +217,14 @@ export function createTown(deps: TownDeps): Town {
       return {
         built: !!build, building: !!gen && !build, stagesDone: stages, rootVisible: root.visible,
         nearVisible: !!build?.near.visible, farVisible: !!build?.far.visible, peopleVisible: !!people?.group.visible,
-        interiorsBuilt: [...interiors.keys()], interiorsVisible: [...interiors].filter(([, i]) => i.group.visible).map(([k]) => k),
+        interiorsBuilt: [...interiors.keys()], interiorsVisible: [...interiors].filter(([, i]) => i.group.visible).map(([k]) => k), interiorBuildMs: { ...buildMs },
         lightsActive: !!pool?.active, lights: pool ? pool.debug() : [],
         distance: +distance.toFixed(1), triangles: build?.triangleCount ?? 0,
       };
     },
 
     debugHide(hidden): void { forceHidden = hidden; },
+    debugHideInterior(id, hidden): void { if (hidden) hiddenInteriors.add(id); else hiddenInteriors.delete(id); },
 
     dispose(): void {
       pool?.dispose(); people?.dispose();
@@ -236,7 +244,9 @@ export function createTown(deps: TownDeps): Town {
   function ensureInterior(id: string): void {
     if (interiors.has(id) || !build) return;
     const lot = LOTS.find((l) => l.id === id)!;
+    const t0 = performance.now();
     const it = buildInterior(lot, build.kit);
+    buildMs[id] = +(performance.now() - t0).toFixed(1);
     interiors.set(id, it);
     interiorHolder.add(it.group);
     sources.push(...it.lights);

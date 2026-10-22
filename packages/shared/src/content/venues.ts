@@ -25,7 +25,7 @@
 
 export type VenueId =
   | 'tackle' | 'guns' | 'bar' | 'club' | 'diner'
-  | 'dive' | 'liquor' | 'gifts' | 'pawn' | 'laundromat' | 'icecream' | 'motel' | 'convenience';
+  | 'dive' | 'liquor' | 'gifts' | 'pawn' | 'laundromat' | 'icecream' | 'motel' | 'convenience' | 'casino';
 
 export type EffectKind = 'gear' | 'consumable' | 'buff' | 'cosmetic' | 'sink' | 'service';
 
@@ -162,6 +162,21 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       item('bottle', 'Bottle service', 'A very expensive way to feel important.', 2_500, 'sink', 'club.bottle'),
       item('tip', 'Tip jar', 'The band and the staff still get paid. Tip them.', 10, 'sink', 'club.tip'),
     ],
+    enterable: true,
+  },
+  casino: {
+    id: 'casino', name: 'Gaff & Gill Casino', tagline: 'Slots · Tarpon · Free coffee, tipped',
+    greeting: [
+      'Welcome to the Gaff & Gill. The house always wins. The house is also a fish.',
+      'Reels on the left, cashiers on the right, the exit is wherever you left your boat.',
+      'Feeling lucky? The marlin is. It has been on that reel for years and has never once been caught.',
+      'Odds are printed on every machine. Nobody reads them. Please read them.',
+    ],
+    blurb: 'Carpet the colour of a reef flat, neon the colour of a marlin, and thirty slot machines that all pay the same 90.5 cents on the dollar. Bets run $5 to $100. It is a place to spend money, not to make it: the fish do that.',
+    // Nothing on the shelves on purpose: the casino sells chances, not items, and a shelf entry
+    // that took your money and did nothing is the failure test/shop.test.ts exists to stop. The
+    // machines settle through game/casino/ (sim/slots.ts), never through sim/shop.ts.
+    sells: [],
     enterable: true,
   },
   diner: {

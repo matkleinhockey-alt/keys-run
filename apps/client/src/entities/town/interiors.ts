@@ -20,6 +20,7 @@ import { floorTexture } from './paint.js';
 import { makePerson, type Person } from './people.js';
 import { Zf } from './props.js';
 import type { LightSource } from './build.js';
+import { buildCasinoInterior } from './casino-interior.js';
 
 export const INTERIOR_BUILD_RANGE = 140;
 export const INTERIOR_RANGE = 95;
@@ -29,6 +30,8 @@ export interface Interior {
   group: THREE.Group;
   people: Person[];
   lights: LightSource[];
+  /** Optional per-frame hook while the room is drawn: `cam` is the camera in the town's local frame (x = u, z = -v). */
+  animate?(t: number, cam: THREE.Vector3): void;
   dispose(): void;
 }
 
@@ -36,6 +39,7 @@ export interface Interior {
 const isBarLift = (lot: Lot): number => (lot.id === 'bar' ? 2.5 : 1.6);
 
 export function buildInterior(lot: Lot, kit: TownKit): Interior {
+  if (lot.id === 'casino') return buildCasinoInterior(lot, kit); // its own file: a neon room that must not touch this one's lights
   const group = new THREE.Group();
   group.name = `interior-${lot.id}`;
   const solid = new GeoBatch(false, isBarLift(lot)), glow = new GeoBatch(true);
