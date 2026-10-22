@@ -200,7 +200,9 @@ export function* buildTown(lightMats: LightMatEntry[], todK: () => number): Gene
     gl.position.set(cx, PAD_Y + lot.h / 2, Zf(lot.v0) + 0.06);
 
     // awning: stripes sloping out over the sidewalk
-    if (look.awning && !lot.enterable) {
+    // (Every lot is walk-in now, so this used to mean "no awning anywhere". The awning hangs at 2.95 m, above the
+    // door gap, so it never blocked a doorway; only the bar and the diner, which draw their own, are left out.)
+    if (look.awning && lot.style !== 'bar' && lot.style !== 'diner') {
       const [c1, c2] = look.awning, y = PAD_Y + 2.95;
       const n = Math.floor((W - 1) / 0.9);
       for (let i = 0; i < n; i++) solid.box(lot.u0 + 0.5 + 0.45 + i * 0.9, y, Zf(lot.v0) + 0.85, 0.9, 0.06, 1.7, i % 2 ? c2 : c1, { rx: 0.26 });
