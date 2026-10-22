@@ -62,6 +62,7 @@ import { F as FishF, lineOut as fishingLineOut } from './fishing/state.js';
 import { createCatchFlow } from './catch/catch-flow.js';
 import { createEconomySystem } from './economy/system.js';
 import { createGearScreen } from '../ui/gear.js';
+import { createServicesSystem } from './services/index.js';
 import { bindCatchInput } from './catch/input.js';
 
 import { updateHUD } from '../ui/hud.js';
@@ -244,6 +245,10 @@ export function initWorld(wrap: HTMLElement): World {
 
   const econ = createEconomySystem({ getModel: () => model, onGuestsChanged: () => shadows.applyToSubtree(model.group) });
   let boatSpec: Boat = econ.startingBoat(); // the last hull you owned and picked; a new wallet is the Grady "Actively Sinking"
+  // Town services (motel, cabaret, lotto, laundromat). The shop UI calls services.canBuy(key) before charging
+  // and services.onPurchased(key) after; the inventory port is the one line to fill in (see game/services).
+  const services = createServicesSystem({ tod, economy: econ, toast, boatName: () => boatSpec.name });
+  (window as unknown as { __servicesDebug?: unknown }).__servicesDebug = services; // DEV/VERIFICATION ONLY
   let model: BoatModel = makeBoat(boatSpec, { wealth: econ.wealthFor(boatSpec.len), lightMats: tod.lightMats, todK: tod.getK(), mfdTex: electronics.mfdTex, gpsTex: electronics.gpsTex, sonTex: electronics.sonTex });
   scene.add(model.group);
 
@@ -297,6 +302,9 @@ export function initWorld(wrap: HTMLElement): World {
     mfdTex: electronics.mfdTex, gpsTex: electronics.gpsTex, sonTex: electronics.sonTex,
     particles, bpm: audio.music.bpm, hypeCallout: audio.music.hypeCallout, sayCaelenLine: audio.sayCaelenLine,
     dogBark: () => audio.engine.bark(),
+    // The pirates read your wallet and cooler to pick their lines (entities/life/pirates.ts). Late-bound:
+    // `catchFlow` is built below, and they only ask once they have sailed up to you.
+    pirateLoot: () => ({ cash: econ.state.cash, coolerLb: catchFlow.cooler.coolerLb(), coolerCount: catchFlow.cooler.cooler.length, boatId: boatSpec.id, boat: `${boatSpec.brand} ${boatSpec.name}` }),
   });
   installWorldLife(life.legacySnapshot());
   document.getElementById('btnSound')?.addEventListener('click', () => { audio.init(); audio.toggleMute(); });
@@ -317,6 +325,11 @@ export function initWorld(wrap: HTMLElement): World {
   };
   document.getElementById('btnRace')?.addEventListener('click', () => raceMode.toggle());
   document.getElementById('btnBuddy')?.addEventListener('click', () => life.toggleBuddy());
+  // ONE listener only. A second `addEventListener` for this same button was added further down
+  // on the belief that it had none — addEventListener stacks rather than replaces, so every click
+  // toggled sunset twice and landed back where it started. The button looked dead; the handler
+  // was running fine, exactly twice. (`O` on the keyboard worked, which is what made it look like
+  // a touch-only problem.)
   document.getElementById('btnSun')?.addEventListener('click', () => tod.toggleSunset());
   const camFwd = new THREE.Vector3();
   function reelAudioState(): ReelAudioState | undefined {
@@ -614,11 +627,6 @@ export function initWorld(wrap: HTMLElement): World {
   }
   document.getElementById('btnDive')?.addEventListener('click', toggleDive);
   window.addEventListener('keydown', (e) => { if (e.code === 'KeyJ') toggleDive(); });
-
-  // #btnSun was rendered and styled but never given a click handler — only the `O` key reached
-  // toggleSunset(), so the button looked interactive and did nothing (and is the only way to
-  // reach sunset on touch, where there is no keyboard at all).
-  document.getElementById('btnSun')?.addEventListener('click', () => tod.toggleSunset());
 
   bindBoatInput(input, stateBox, {
     toggleTrim() {
@@ -1073,7 +1081,7 @@ export function initWorld(wrap: HTMLElement): World {
         running: game.running,
       },
       sw, ch, reel: reelAudioState(), buddy: remoteEngines.buddy, traffic: remoteEngines.traffic, racers: remoteEngines.racers,
-      gullSites: life.gullSites(), parties: life.partySites(),
+      gullSites: life.gullSites(), parties: life.partySites(), pirates: life.pirateSite(),
     }, speakerSink);
     if (btnMusicEl) btnMusicEl.textContent = audio.music.label();
 

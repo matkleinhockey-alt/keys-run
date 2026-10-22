@@ -235,19 +235,27 @@ export function createEconomySystem(deps: EconomyDeps) {
     modifiers,
     /** Consume one carried unit of an `effect.key` (e.g. 'bait.shrimp'); false when none is left. */
     useConsumable,
+    /** Replace the whole inventory — the buff runtime's setter, which adopts and expires buffs in
+     * `Inventory.buffs`. Goes through `commitInv` so it persists like any other change. */
+    setInventory: (next: Inventory): void => { commitInv(next); },
     /**
      * The `GearPort` the pure sims take (shared/sim/gear.ts): the rod, reel, bait, leader, ice and
      * spear-shaft code reads the inventory and commits spends through this rather than importing
      * the client's economy. One object, so wiring a system up is passing `gear` into its deps.
      */
-    /** Replace the whole inventory — the buff runtime's setter, which adopts and expires buffs in
-     * `Inventory.buffs`. Goes through `commitInv` so it persists like any other change. */
-    setInventory: (next: Inventory): void => { commitInv(next); },
     gear: {
       inventory: (): Inventory => inventory,
       commit: (next: Inventory): void => { commitInv(next); },
       mods: (): Modifiers => modifiers(),
     },
+    /** Money in that is not a fish: lotto winnings (game/services). Same persistence path as
+     * everything else, so a win survives a reload. Ignores non-positive/non-finite amounts. */
+    credit(n: number): void {
+      if (!Number.isFinite(n) || n <= 0) return;
+      commit(sanitizeEconomy({ ...state, cash: state.cash + Math.floor(n) }));
+    },
+    /** Make sure the wallet is on disk now (the motel promises "progress saved"). */
+    flush(): void { save(state); },
     /** Advance the inventory clock (simulated seconds) and expire buffs. world.ts, once per fixed step. */
     tick,
     /** What the shop panel and gear screen need — game systems read `modifiers()` instead. */

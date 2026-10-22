@@ -24,6 +24,7 @@
 import * as THREE from 'three';
 import { clamp } from '../../core/math.js';
 import type { BeatSource } from './beat.js';
+import { applySeaLegs, createSeaLegsRig, createSeaLegsState, type SeaLegsRig, type SeaLegsState } from './sea-legs.js';
 
 export type CrewBehavior = 'dancing' | 'hanging-on' | 'idle';
 
@@ -42,8 +43,8 @@ export interface CrewMotionInput {
 
 export interface AnimatedFigure {
   /** The SkeletonUtils-cloned figure's root — already positioned at its placement slot by
-   * index.ts's spawnFigure. This module only ever touches its `.rotation` (the lean overlay);
-   * position/scale are the placement's, untouched here. */
+   * index.ts's spawnFigure. This module sets its `.rotation` (the lean overlay); sea-legs.ts
+   * lowers its `.position.y` while the knees are bent. Scale is the placement's, untouched. */
   object: THREE.Object3D;
   mixer: THREE.AnimationMixer;
   action: THREE.AnimationAction;
@@ -52,10 +53,14 @@ export interface AnimatedFigure {
   restRotY: number;
   /** Smoothed 0..1 "how much is the dance actually playing" — see this module's header. */
   drive: number;
+  /** The body's response to the deck moving under it — see sea-legs.ts. */
+  seaLegs: SeaLegsRig;
+  seaLegsState: SeaLegsState;
 }
 
+/** Call after `object` is at its slot position — sea-legs.ts keeps its feet on that deck height. */
 export function createAnimatedFigure(object: THREE.Object3D, mixer: THREE.AnimationMixer, action: THREE.AnimationAction, restRotY: number): AnimatedFigure {
-  return { object, mixer, action, restRotY, drive: 0 };
+  return { object, mixer, action, restRotY, drive: 0, seaLegs: createSeaLegsRig(object), seaLegsState: createSeaLegsState() };
 }
 
 // Same "fast" threshold entities/life/deck-party.ts (feat/audio-life) uses for its own party —
@@ -100,4 +105,9 @@ export function updateFigure(f: AnimatedFigure, simTime: number, dt: number, mot
     lean = Math.sin((2 * Math.PI * simTime) / IDLE_SWAY_PERIOD_S) * IDLE_SWAY_AMPLITUDE_RAD * (1 - f.drive);
   }
   f.object.rotation.set(0, f.restRotY, lean, 'YXZ');
+
+  // Whatever the clip is doing, the deck is still moving under it: balance, knees and the soft
+  // secondary motion go on top (sea-legs.ts). The clip drives the arms hard mid-dance, so the
+  // arms' share of that eases off as the dance comes in.
+  applySeaLegs(f.seaLegs, f.seaLegsState, f.restRotY, dt, 1 - 0.6 * f.drive);
 }

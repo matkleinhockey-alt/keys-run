@@ -133,6 +133,13 @@ export interface BoatModel {
    * (legacy still builds 3-5 on every hull; kept as-is for fidelity). Animated by
    * `entities/life/deck-party.ts`'s `updateParty`. */
   party: PartyMember[];
+  /**
+   * Fly (or, with `null`, strike) the player's cosmetic stern flag. Built lazily: a boat that never
+   * flew one has no extra mesh, no extra draw call and no extra per-frame work (the flag joins
+   * `flags`, which visuals.ts already animates, only while it is up). The model takes ownership of the
+   * texture and disposes it when the flag is replaced or struck.
+   */
+  setCosmeticFlag(tex: THREE.Texture | null): void;
   /** Grow or shrink `party` in place (economy: the dock fills up as the player gets rich, live,
    * without rebuilding the hull mid-cast). New guests join mid-loop at an even spacing. */
   setPartySize(n: number): void;
@@ -689,6 +696,42 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
     flags.push(fl);
   }
 
+  // The player's cosmetic flag: mirrored to the opposite quarter from the stock stern flag so the
+  // two never share a pole, on its own pole, built the first time one is flown.
+  let cosGroup: THREE.Group | null = null, cosFlag: Flag | null = null;
+  const setCosmeticFlag = (tex: THREE.Texture | null): void => {
+    if (cosFlag) {
+      const i = flags.indexOf(cosFlag);
+      if (i >= 0) flags.splice(i, 1);
+      cosFlag.mesh.geometry.dispose();
+      const mat = cosFlag.mesh.material as THREE.MeshStandardMaterial;
+      mat.map?.dispose(); mat.dispose();
+      cosFlag.mesh.parent?.removeFromParent(); // the flag's own pivot group, not just the cloth
+      cosFlag = null;
+    }
+    if (!tex) { if (cosGroup) cosGroup.visible = false; return; }
+    if (!cosGroup) {
+      const fs = hullStation(H, L, B, 0.03), px = -(fs.bs - cap * 0.6), pz2 = fs.z - 0.15, py = fs.ys + 0.02;
+      const top = V3(px - 0.1, py + 2.3, pz2 + 0.55);
+      cosGroup = new THREE.Group();
+      cosGroup.add(beamBetween(V3(px, py, pz2), top, 0.022, M(0xd9dde2, { metalness: 0.8, roughness: 0.2, flatShading: false })));
+      const ball = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), M(0xd8b84a, { metalness: 0.8, roughness: 0.2 }));
+      ball.position.set(top.x, top.y + 0.04, top.z);
+      cosGroup.add(ball);
+      cosGroup.userData.top = top;
+      g.add(cosGroup);
+    }
+    const top = cosGroup.userData.top as THREE.Vector3;
+    cosFlag = makeFlag(tex, 1.05, 0.66);
+    const fg = new THREE.Group();
+    fg.position.set(top.x, top.y - 0.36, top.z);
+    fg.rotation.y = -Math.PI / 2;
+    fg.add(cosFlag.mesh);
+    cosGroup.add(fg);
+    cosGroup.visible = true;
+    flags.push(cosFlag);
+  };
+
   // boat name lettered on the transom and both sides of the stern. The canvas draw + texture
   // only depends on S.nickname (constant per boat id), so it's cached per boat id rather than
   // re-rasterized (a real 2D canvas font-render) for every instance of the same boat.
@@ -783,7 +826,7 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
     wheel: helmWheel, tower, outboards, lights, flags,
     cabin, cabinLight, cabinLight2,
     rodPivot, rodTip: tip, stations, station: 0, captain, crew,
-    party, setPartySize, pole, shower, leds, uwLights, speakerPos: V3(0, topY - 0.3, tz),
+    party, setPartySize, setCosmeticFlag, pole, shower, leds, uwLights, speakerPos: V3(0, topY - 0.3, tz),
   };
 }
 

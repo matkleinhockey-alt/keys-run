@@ -142,20 +142,20 @@ export const WALL_T = 0.4;
 export const LOTS: readonly Lot[] = [
   // Row 1, west of Palm Avenue, from the avenue outward
   { id: 'diner', venue: 'diner', style: 'diner', u0: -32, u1: -8, v0: 46, v1: 70, h: 4.4, door: -20, enterable: true },
-  { id: 'tackle', venue: 'tackle', style: 'tackle', u0: -62, u1: -32, v0: 46, v1: 72, h: 5.2, door: -47, enterable: false },
-  { id: 'guns', venue: 'guns', style: 'guns', u0: -86, u1: -62, v0: 46, v1: 70, h: 4.6, door: -74, enterable: false },
-  { id: 'liquor', venue: 'liquor', style: 'liquor', u0: -100, u1: -86, v0: 46, v1: 66, h: 4.2, door: -93, enterable: false },
+  { id: 'tackle', venue: 'tackle', style: 'tackle', u0: -62, u1: -32, v0: 46, v1: 72, h: 5.2, door: -47, enterable: true },
+  { id: 'guns', venue: 'guns', style: 'guns', u0: -86, u1: -62, v0: 46, v1: 70, h: 4.6, door: -74, enterable: true },
+  { id: 'liquor', venue: 'liquor', style: 'liquor', u0: -100, u1: -86, v0: 46, v1: 66, h: 4.2, door: -93, enterable: true },
   // Row 1, east
   { id: 'bar', venue: 'bar', style: 'bar', u0: 8, u1: 34, v0: 46, v1: 70, h: 4.8, door: 21, enterable: true },
-  { id: 'club', venue: 'club', style: 'club', u0: 34, u1: 68, v0: 46, v1: 72, h: 6.6, door: 44, enterable: false },
-  { id: 'gifts', venue: 'gifts', style: 'gifts', u0: 68, u1: 100, v0: 46, v1: 68, h: 4.4, door: 84, enterable: false },
+  { id: 'club', venue: 'club', style: 'club', u0: 34, u1: 68, v0: 46, v1: 72, h: 6.6, door: 44, enterable: true },
+  { id: 'gifts', venue: 'gifts', style: 'gifts', u0: 68, u1: 100, v0: 46, v1: 68, h: 4.4, door: 84, enterable: true },
   // Row 2
-  { id: 'pawn', venue: 'pawn', style: 'pawn', u0: -100, u1: -70, v0: 100, v1: 122, h: 4.6, door: -85, enterable: false },
-  { id: 'laundromat', venue: 'laundromat', style: 'laundromat', u0: -70, u1: -44, v0: 100, v1: 120, h: 4.2, door: -57, enterable: false },
-  { id: 'dive', venue: 'dive', style: 'dive', u0: -30, u1: -8, v0: 100, v1: 120, h: 4.4, door: -19, enterable: false },
-  { id: 'motel', venue: 'motel', style: 'motel', u0: 8, u1: 60, v0: 100, v1: 124, h: 7.6, door: 20, enterable: false },
-  { id: 'icecream', venue: 'icecream', style: 'icecream', u0: 60, u1: 80, v0: 100, v1: 118, h: 4.0, door: 70, enterable: false },
-  { id: 'stopngo', venue: 'convenience', style: 'convenience', u0: 80, u1: 100, v0: 100, v1: 122, h: 4.4, door: 90, enterable: false },
+  { id: 'pawn', venue: 'pawn', style: 'pawn', u0: -100, u1: -70, v0: 100, v1: 122, h: 4.6, door: -85, enterable: true },
+  { id: 'laundromat', venue: 'laundromat', style: 'laundromat', u0: -70, u1: -44, v0: 100, v1: 120, h: 4.2, door: -57, enterable: true },
+  { id: 'dive', venue: 'dive', style: 'dive', u0: -30, u1: -8, v0: 100, v1: 120, h: 4.4, door: -19, enterable: true },
+  { id: 'motel', venue: 'motel', style: 'motel', u0: 8, u1: 60, v0: 100, v1: 124, h: 7.6, door: 20, enterable: true },
+  { id: 'icecream', venue: 'icecream', style: 'icecream', u0: 60, u1: 80, v0: 100, v1: 118, h: 4.0, door: 70, enterable: true },
+  { id: 'stopngo', venue: 'convenience', style: 'convenience', u0: 80, u1: 100, v0: 100, v1: 122, h: 4.4, door: 90, enterable: true },
 ];
 
 export function lotRect(f: Frame, l: Lot): Rect { return worldRect(f, l.u0, l.u1, l.v0, l.v1); }
@@ -267,7 +267,37 @@ export function carRect(f: Frame, c: Car): Rect {
 
 export interface InteriorBox { id: string; lot: string; u0: number; u1: number; v0: number; v1: number }
 
-/** Furniture you walk around inside the two enterable buildings. */
+/**
+ * Furniture you walk around inside the enterable buildings: the bar and the diner (absolute
+ * coordinates, as first laid out) and then every shop, written in the SHOP's own frame by `ib`.
+ *
+ * Shop frame: `a` is metres along the frontage from the lot's west wall (`u0`), `b` is metres inland
+ * from its front wall (`v0`). The door is at `a = door - u0`. Wall thickness is 0.4, so a box that
+ * should stand against a wall starts at 0.4. Each shop follows one plan, which is what makes
+ * thirteen of them affordable to design AND to test:
+ *
+ *   - the first 8 m inland of the door, a 2 m wide strip centred on it, is left empty (the entrance
+ *     hall: the doorway has to lead somewhere, and `town.test.ts` asserts it);
+ *   - a COUNTER runs across the shop with the shopkeeper behind it and the shelf wall behind them,
+ *     so what you see as you step in is the stock;
+ *   - racks, tables and cases stand in the customer half, off the side walls where they are deep
+ *     enough to matter and against them where they are not.
+ *
+ * Only what a customer can walk into is a box. Things on the keeper's side of the counter, and wall
+ * dressing less than 0.4 m deep (a body is 0.32 radius, so it can't be pushed visibly into those),
+ * are drawn by the client and have no footprint.
+ */
+const ib = (lot: string, id: string, a0: number, a1: number, b0: number, b1: number): InteriorBox => {
+  const l = LOTS.find((x) => x.id === lot)!;
+  // Clamp to the inner wall faces with the SAME arithmetic the tests use, so a counter that runs wall to
+  // wall is not rejected by a float ulp (-30 + 21.6 !== -8 - 0.4 in IEEE doubles).
+  return {
+    id, lot,
+    u0: Math.max(l.u0 + WALL_T, l.u0 + a0), u1: Math.min(l.u1 - WALL_T, l.u0 + a1),
+    v0: Math.max(l.v0 + WALL_T, l.v0 + b0), v1: Math.min(l.v1 - WALL_T, l.v0 + b1),
+  };
+};
+
 export const INTERIOR_BOXES: readonly InteriorBox[] = [
   // The Rusty Anchor: the bar runs along the back, booths against the east wall, a pool table.
   { id: 'bar-counter', lot: 'bar', u0: 11, u1: 31, v0: 60.4, v1: 62.4 },
@@ -280,6 +310,79 @@ export const INTERIOR_BOXES: readonly InteriorBox[] = [
   { id: 'diner-booth-w2', lot: 'diner', u0: -31.6, u1: -28.4, v0: 55.5, v1: 59.5 },
   { id: 'diner-booth-e1', lot: 'diner', u0: -11.6, u1: -8.4, v0: 50, v1: 54 },
   { id: 'diner-booth-e2', lot: 'diner', u0: -11.6, u1: -8.4, v0: 55.5, v1: 59.5 },
+  // Pink Flamingo Cabaret: a stage along the back wall, the owner's booth on the east side where
+  // it can see the whole room, a bar on the west, and the DJ tucked in the back corner. The door
+  // is at u=44, so the whole front-left quarter stays clear as the entrance hall the walker and
+  // test/town.test.ts both require.
+  { id: 'club-stage', lot: 'club', u0: 42, u1: 60, v0: 64, v1: 70 },
+  { id: 'club-bar', lot: 'club', u0: 36, u1: 40, v0: 56, v1: 68 },
+  // The service counter just inside the door. The long bar above runs along the west WALL, i.e.
+  // down v, so it cannot be the SHOP_COUNTERS counter — that convention assumes a counter spanning
+  // `a` with the customer at v0-1.1 and the keeper at v1+1.3.
+  { id: 'club-counter', lot: 'club', u0: 48, u1: 60, v0: 52, v1: 53.6 },
+  { id: 'club-booth-owner', lot: 'club', u0: 62, u1: 66.4, v0: 58, v1: 64 },
+  { id: 'club-booth-1', lot: 'club', u0: 62, u1: 66.4, v0: 50, v1: 55 },
+  { id: 'club-dj', lot: 'club', u0: 61, u1: 66, v0: 66, v1: 70 },
+
+  // --- Scuba Steve's Dive & Spear (22 x 20, door at a = 11): suits west, tanks east, masks and fins in the middle
+  ib('dive', 'dive-counter', 0.4, 21.6, 11.5, 13.1),
+  ib('dive', 'dive-suits', 0.4, 1.6, 3.5, 10),
+  ib('dive', 'dive-tanks', 20.4, 21.6, 3.5, 10),
+  ib('dive', 'dive-masks', 3.5, 7.5, 5.5, 7.5),
+  ib('dive', 'dive-fins', 14.5, 18.5, 5.5, 7.5),
+  // --- Hook, Line & Sinker (30 x 26, door at a = 15): rods west, bait tank east, tackle aisles, ice freezer
+  ib('tackle', 'tackle-counter', 0.4, 29.6, 16, 17.6),
+  ib('tackle', 'tackle-rods', 0.4, 1.6, 3, 14),
+  ib('tackle', 'tackle-bait', 27.4, 29.6, 3, 9),
+  ib('tackle', 'tackle-aisle-1', 4, 12, 9, 10.2),
+  ib('tackle', 'tackle-aisle-2', 18, 26, 9, 10.2),
+  ib('tackle', 'tackle-freezer', 24, 29.6, 12.5, 14.5),
+  // --- Deadeye Guns & Ammo (24 x 24, door at a = 12): spearguns west, caged long guns east, ammo wall
+  ib('guns', 'guns-counter', 0.4, 23.6, 14, 15.6),
+  ib('guns', 'guns-spears', 0.4, 1.6, 3, 11),
+  ib('guns', 'guns-cage', 22.4, 23.6, 3, 11),
+  ib('guns', 'guns-ammo', 8, 16, 8.6, 9.8),
+  // --- Cheap Beer & Lotto (14 x 20, door at a = 7): wine west, beer cooler east, register
+  ib('liquor', 'liquor-counter', 0.4, 13.6, 12, 13.6),
+  ib('liquor', 'liquor-wine', 0.4, 1.6, 3, 10),
+  ib('liquor', 'liquor-cooler', 12.4, 13.6, 3, 10),
+  // --- Conch Republic Gifts (32 x 22, door at a = 16): shirt racks, shell table, hot sauce wall
+  ib('gifts', 'gifts-counter', 0.4, 31.6, 14, 15.6),
+  ib('gifts', 'gifts-shirts-1', 3, 8, 5, 6.4),
+  ib('gifts', 'gifts-shirts-2', 24, 29, 5, 6.4),
+  ib('gifts', 'gifts-shells', 12, 20, 9.5, 11.5),
+  ib('gifts', 'gifts-hotsauce', 30.4, 31.6, 3, 11),
+  ib('gifts', 'gifts-shirt-wall', 0.4, 1.6, 3, 11),
+  // --- Keys Pawn & Loan (30 x 22, door at a = 15): guitar wall, jewellery cases, tool shelf, caged counter
+  ib('pawn', 'pawn-counter', 0.4, 29.6, 12, 13.8),
+  ib('pawn', 'pawn-guitars', 0.4, 1.4, 3, 10),
+  ib('pawn', 'pawn-case-1', 5, 11, 8.6, 10),
+  ib('pawn', 'pawn-case-2', 19, 25, 8.6, 10),
+  ib('pawn', 'pawn-tools', 28.2, 29.6, 3, 11),
+  // --- Suds & Sun Coin Laundry (26 x 20, door at a = 13): washers on the walls, folding table, desk
+  ib('laundromat', 'laundry-desk', 4, 22, 14, 15.6),
+  ib('laundromat', 'laundry-washers-w', 0.4, 1.8, 3, 12),
+  ib('laundromat', 'laundry-washers-e', 24.2, 25.6, 3, 12),
+  ib('laundromat', 'laundry-folding', 16, 22, 8.6, 10.2),
+  ib('laundromat', 'laundry-vending', 3, 6, 8.6, 9.6),
+  ib('laundromat', 'laundry-dryers', 0.4, 25.6, 18.8, 19.6),
+  // --- Cone Zone (20 x 18, door at a = 10): the freezer counter, two cafe tables
+  ib('icecream', 'ice-counter', 0.4, 19.6, 10, 11.6),
+  ib('icecream', 'ice-table-1', 1.2, 4.2, 3, 5.6),
+  ib('icecream', 'ice-table-2', 15.8, 18.8, 3, 5.6),
+  // --- Sunset Motor Lodge (52 x 24, door at a = 12): a long front desk, sofas, vending, the stairs
+  ib('motel', 'motel-desk', 2, 22, 10, 11.6),
+  ib('motel', 'motel-sofa-1', 25, 29.5, 4, 6.5),
+  ib('motel', 'motel-sofa-2', 33, 37.5, 4, 6.5),
+  ib('motel', 'motel-vending', 49, 51.6, 4, 6.4),
+  ib('motel', 'motel-stairs', 42, 51.6, 14, 23.6),
+  ib('motel', 'motel-keys', 3, 21, 13.6, 13.9),
+  // --- Stop-N-Go (20 x 22, door at a = 10): coolers west, snack wall east, two gondolas, register
+  ib('stopngo', 'conv-counter', 0.4, 19.6, 15, 16.6),
+  ib('stopngo', 'conv-cooler', 0.4, 1.8, 3, 13),
+  ib('stopngo', 'conv-snacks', 18.2, 19.6, 3, 13),
+  ib('stopngo', 'conv-aisle-1', 2.8, 8, 8.6, 9.8),
+  ib('stopngo', 'conv-aisle-2', 12, 17.2, 8.6, 9.8),
 ];
 
 export interface Interact {
@@ -294,15 +397,45 @@ export interface Interact {
   prompt: string;
 }
 
+/**
+ * Where you stand to deal with each shopkeeper: a metre in front of the counter, `a` metres along the
+ * frontage (the shopkeeper stands at the same `a`, behind it). One per shop; the bar and the diner keep
+ * their own, listed below. Keeping them as data next to `INTERIOR_BOXES` means the reachability test
+ * walks the real walker from the doorstep to every one of them.
+ */
+export const SHOP_COUNTERS: ReadonlyArray<{ lot: string; counter: string; a: number; prompt: string }> = [
+  { lot: 'dive', counter: 'dive-counter', a: 11, prompt: 'F  Talk to Steve at the counter' },
+  { lot: 'tackle', counter: 'tackle-counter', a: 15, prompt: 'F  Ask about tackle' },
+  { lot: 'guns', counter: 'guns-counter', a: 12, prompt: 'F  Step up to the counter' },
+  { lot: 'liquor', counter: 'liquor-counter', a: 7, prompt: 'F  Pay at the register' },
+  { lot: 'gifts', counter: 'gifts-counter', a: 16, prompt: 'F  Ring up at the till' },
+  { lot: 'pawn', counter: 'pawn-counter', a: 15, prompt: 'F  Talk to the pawnbroker' },
+  { lot: 'laundromat', counter: 'laundry-desk', a: 13, prompt: 'F  Ask the attendant' },
+  { lot: 'icecream', counter: 'ice-counter', a: 10, prompt: 'F  Order a cone' },
+  { lot: 'motel', counter: 'motel-desk', a: 12, prompt: 'F  Ring the front desk' },
+  { lot: 'stopngo', counter: 'conv-counter', a: 10, prompt: 'F  Pay at the register' },
+  // You own the Pink Flamingo, so nothing here charges you — the counter is where the staff are.
+  { lot: 'club', counter: 'club-counter', a: 20, prompt: 'F  Lean on the bar' },
+];
+
 /** A person standing at `door` on the sidewalk is ~1 m off the wall; reach covers the whole frontage step. */
 export const INTERACTS: readonly Interact[] = [
+  // Buildings that are still solid get a door prompt (the doorman at the cabaret, the counter at the gun shop);
+  // every walk-in building is served from the counter INSIDE it instead (see SHOP_COUNTERS below).
   ...LOTS.filter((l) => !l.enterable).map((l): Interact => ({
     id: `door-${l.id}`, kind: 'venue', venue: l.venue, u: l.door, v: l.v0 - 0.9, r: 2.6,
     prompt: l.venue === 'club' ? 'F  Talk to the doorman' : l.venue === 'guns' ? 'F  Step up to the counter' : 'F  Go to the door',
   })),
-  // The walk-in bar and diner are served from the counter, not the door
+  // The walk-in venues are served from inside, not the door. Dropping out of the generated list
+  // above is why `enterable` has to come with an interior interaction point: the club went
+  // enterable and its only way to interact vanished with it, which test/town.test.ts caught by
+  // asserting every interaction point is somewhere a person can actually stand.
   { id: 'counter-bar', kind: 'venue', venue: 'bar', u: 21, v: 59.3, r: 2.6, prompt: 'F  Order at the bar' },
   { id: 'counter-diner', kind: 'venue', venue: 'diner', u: -21.5, v: 58.8, r: 2.6, prompt: 'F  Sit at the counter' },
+  ...SHOP_COUNTERS.map((c): Interact => {
+    const l = LOTS.find((x) => x.id === c.lot)!, b = INTERIOR_BOXES.find((x) => x.id === c.counter)!;
+    return { id: `counter-${l.venue}`, kind: 'venue', venue: l.venue, u: l.u0 + c.a, v: b.v0 - 1.1, r: 2.6, prompt: c.prompt };
+  }),
   { id: 'marlin', kind: 'plaque', u: 16, v: 22.2, r: 2.4, prompt: 'F  Read the plaque',
     text: 'BLUE MARLIN, 612 LB. Boated 1957 off Sombrero Reef. The plaque says "released" because the town got embarrassed.' },
 ];
@@ -315,7 +448,14 @@ export const INTERACTS: readonly Interact[] = [
 // functions of time, so the test can prove they stay on the sidewalks. What is left here are the figures that
 // stand at a fixed spot, and the interior staff.
 
-export type NpcLook = 'tourist' | 'angler' | 'local' | 'woman' | 'bouncer' | 'bartender' | 'cook' | 'patron';
+export type NpcLook =
+  | 'tourist' | 'angler' | 'local' | 'woman' | 'bouncer' | 'bartender' | 'cook' | 'patron'
+  // Pink Flamingo staff. 'dancer' is a performer on the stage, dressed the same way the boat's
+  // own pole dancer and deck party already are (entities/boat/model.ts) — this game's register,
+  // not a different one.
+  | 'dancer' | 'mc' | 'dj'
+  // behind the counter of the other shops: the person you are buying from
+  | 'divemaster' | 'baitman' | 'gunsmith' | 'clerk' | 'pawnbroker' | 'scooper' | 'innkeeper' | 'attendant';
 export interface Npc {
   id: string;
   look: NpcLook;
@@ -323,6 +463,15 @@ export interface Npc {
   at?: { u: number; v: number; yaw: number };
   /** The interior group (by lot id) this person lives in, drawn only when it is. */
   inside?: string;
+  /**
+   * Stands ON a piece of interior furniture rather than beside it — an `INTERIOR_BOXES` id.
+   *
+   * Needed because a collider is a solid box: "inside the stage" and "on top of the stage" are
+   * the same rectangle from above, and the placement test rightly refuses anyone standing inside
+   * furniture. Naming the box makes the difference explicit, and the test still checks the person
+   * is on that box and nothing else.
+   */
+  onBox?: string;
 }
 
 export const NPCS: readonly Npc[] = [
@@ -335,7 +484,29 @@ export const NPCS: readonly Npc[] = [
   { id: 'i-patron-1', look: 'patron', inside: 'bar', at: { u: 17, v: 58.6, yaw: Math.PI / 2 } },
   { id: 'i-patron-2', look: 'woman', inside: 'bar', at: { u: 26, v: 58.6, yaw: Math.PI / 2 } },
   { id: 'i-cook', look: 'cook', inside: 'diner', at: { u: -21.5, v: 63.6, yaw: -Math.PI / 2 } },
+  // The Pink Flamingo, which you own. Two performers on the poles (INTERIOR_BOXES 'club-stage'
+  // spans u 42..60, v 64..70, poles at u 47 and 55), an MC at the stage edge, a bartender behind
+  // the west bar, a DJ in the back corner and a few punters at the tables. Facing yaw PI/2 is
+  // inland, so the stage acts face the room at -PI/2.
+  { onBox: 'club-stage', id: 'i-dancer-1', look: 'dancer', inside: 'club', at: { u: 47, v: 66.6, yaw: -Math.PI / 2 } },
+  { onBox: 'club-stage', id: 'i-dancer-2', look: 'dancer', inside: 'club', at: { u: 55, v: 66.6, yaw: -Math.PI / 2 } },
+  { id: 'i-mc', look: 'mc', inside: 'club', at: { u: 51, v: 62.6, yaw: -Math.PI / 2 } },
+  { onBox: 'club-dj', id: 'i-dj', look: 'dj', inside: 'club', at: { u: 63.5, v: 67.6, yaw: Math.PI } },
+  { id: 'i-club-1', look: 'patron', inside: 'club', at: { u: 46, v: 57, yaw: -Math.PI / 2 } },
+  { id: 'i-club-2', look: 'woman', inside: 'club', at: { u: 49.5, v: 56.4, yaw: -Math.PI / 2 } },
+  { id: 'i-club-3', look: 'local', inside: 'club', at: { u: 56, v: 57.4, yaw: -Math.PI / 2 } },
+  { id: 'i-club-4', look: 'tourist', inside: 'club', at: { u: 41, v: 53, yaw: -Math.PI / 2 } },
   { id: 'i-patron-3', look: 'patron', inside: 'diner', at: { u: -25, v: 57.6, yaw: Math.PI / 2 } },
+  // Shopkeepers: one per shop, 1.3 m behind the counter at the same `a` as the interaction point, facing the
+  // door (yaw -PI/2). Built from the SHOP_COUNTERS rows so a person cannot drift away from their counter.
+  ...SHOP_COUNTERS.map((c): Npc => {
+    const l = LOTS.find((x) => x.id === c.lot)!, b = INTERIOR_BOXES.find((x) => x.id === c.counter)!;
+    const look = ({ dive: 'divemaster', tackle: 'baitman', guns: 'gunsmith', liquor: 'clerk', gifts: 'clerk', pawn: 'pawnbroker', laundromat: 'attendant', icecream: 'scooper', motel: 'innkeeper', stopngo: 'clerk', club: 'bartender' } as Record<string, NpcLook>)[c.lot];
+    return { id: `i-keeper-${c.lot}`, look, inside: c.lot, at: { u: l.u0 + c.a, v: b.v1 + 1.3, yaw: -Math.PI / 2 } };
+  }),
+  // A few regulars so the busiest rooms are not staffed by one person
+  { id: 'i-patron-tackle', look: 'angler', inside: 'tackle', at: { u: -41, v: 58, yaw: Math.PI / 2 } },
+  { id: 'i-patron-motel', look: 'tourist', inside: 'motel', at: { u: 39, v: 108, yaw: Math.PI / 2 } },
 ];
 
 // ---------------------------------------------------------------------------------------------

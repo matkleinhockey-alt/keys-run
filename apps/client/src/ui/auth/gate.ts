@@ -59,7 +59,8 @@ function buildGateUI(resolve: (r: GateResult) => void): void {
   overlay.className = 'krAuthGate';
   overlay.innerHTML = `
     <div class="krAuthCard">
-      <h1 class="krAuthTitle">Keys<span>Run</span></h1>
+      <h1 class="krAuthTitle">Keys<span>Slop</span></h1>
+      <p class="krAuthMotto">People want slop</p>
       <p class="krAuthSub">Log in for the shared world, a real leaderboard, and your records — or skip it and fish solo.</p>
       <div class="krAuthTabs" role="tablist">
         <button type="button" data-tab="login" aria-pressed="true">Log in</button>

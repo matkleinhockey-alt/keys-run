@@ -522,11 +522,42 @@ export function plankTexture(): THREE.CanvasTexture {
   return t;
 }
 
-/** Interior floor patterns, keyed by the building. */
-export function floorTexture(kind: 'checker' | 'boards'): THREE.CanvasTexture {
+/** The floors an interior can have. One texture per KIND, shared by every room that uses it (interiors.ts). */
+export type FloorKind = 'checker' | 'boards' | 'tile' | 'concrete' | 'carpet' | 'lino';
+
+/**
+ * Interior floor patterns. 256 px, tiling. The first two are the bar's and the diner's, unchanged; the
+ * rest were added with the other ten rooms and are deliberately the cheapest thing that reads as
+ * its material from standing height: a flat base, a grid or a speckle, nothing photographic.
+ */
+export function floorTexture(kind: FloorKind): THREE.CanvasTexture {
   const { c, g } = makeCanvas(256, 256);
+  // Deterministic speckle (no Math.random: a rebuilt room must look identical to the one it replaces)
+  const speck = (n: number, a: string, b: string): void => {
+    for (let i = 0; i < n; i++) {
+      const x = (i * 97 + (i * i) % 53) % 256, y = (i * 61 + (i * 7) % 29) % 256;
+      g.fillStyle = i % 2 ? a : b; g.fillRect(x, y, 2, 2);
+    }
+  };
   if (kind === 'checker') {
     for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) { g.fillStyle = (i + j) % 2 ? '#22262c' : '#e9e6dc'; g.fillRect(i * 32, j * 32, 32, 32); }
+  } else if (kind === 'tile') {
+    // pale blue-and-white 2x2 squares with grout: dive shop, ice cream, anywhere that gets wet
+    g.fillStyle = '#f1f5f6'; g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) if ((i + j) % 2) { g.fillStyle = '#b9dbe6'; g.fillRect(i * 32, j * 32, 32, 32); }
+    g.fillStyle = 'rgba(70,90,100,0.35)'; for (let i = 0; i < 8; i++) { g.fillRect(i * 32, 0, 1, 256); g.fillRect(0, i * 32, 256, 1); }
+  } else if (kind === 'concrete') {
+    g.fillStyle = '#8b8d8f'; g.fillRect(0, 0, 256, 256);
+    speck(420, '#7a7c7e', '#9a9c9e');
+    g.fillStyle = 'rgba(40,40,44,0.35)'; g.fillRect(0, 127, 256, 2); g.fillRect(127, 0, 2, 256);
+  } else if (kind === 'carpet') {
+    g.fillStyle = '#6b2f33'; g.fillRect(0, 0, 256, 256);
+    speck(900, '#7c3b3f', '#5a272b');
+    g.fillStyle = 'rgba(214,170,90,0.55)'; g.fillRect(0, 0, 256, 8); g.fillRect(0, 248, 256, 8);
+  } else if (kind === 'lino') {
+    g.fillStyle = '#e9e4d2'; g.fillRect(0, 0, 256, 256);
+    speck(260, '#d9d3bd', '#f4f0e2');
+    g.fillStyle = 'rgba(120,115,95,0.35)'; for (let i = 0; i < 4; i++) { g.fillRect(i * 64, 0, 1, 256); g.fillRect(0, i * 64, 256, 1); }
   } else {
     g.fillStyle = '#6b4a2b'; g.fillRect(0, 0, 256, 256);
     for (let i = 0; i < 8; i++) {

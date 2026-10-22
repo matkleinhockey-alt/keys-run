@@ -139,6 +139,9 @@ button:focus-visible{outline:3px solid var(--sun);outline-offset:2px}
 .startcard{width:min(980px,100%);margin:auto}
 .wordmark{font-family:var(--display);font-weight:900;font-size:clamp(72px,14vw,168px);line-height:.82;letter-spacing:-2px;margin:0;color:var(--ink)}
 .wordmark span{display:block;color:transparent;-webkit-text-stroke:2px var(--flats)}
+/* Sits under the wordmark as a strapline: small, wide-tracked and in the flats teal so it reads
+   as a tagline rather than a second heading competing with the 168px logo above it. */
+.motto{font-family:var(--display);font-weight:700;font-size:clamp(13px,1.6vw,19px);letter-spacing:.14em;text-transform:uppercase;color:var(--flats);margin:6px 0 0;opacity:.92}
 .lede{font-size:17px;line-height:1.5;color:var(--muted);max-width:60ch;margin:18px 0 24px}
 .boats{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
 .bcard{text-align:left;background:var(--panel);border:1.5px solid var(--panel-edge);border-radius:16px;padding:14px 16px 16px;color:var(--ink)}

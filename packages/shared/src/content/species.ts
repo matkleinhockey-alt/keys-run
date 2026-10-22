@@ -71,6 +71,12 @@ export const SPECIES: Record<string, SpeciesDef> = {
 export const ZONE_TABLE: Record<string, Array<[string, number]>> = {
   'Creek':[['snook',5],['redfish',3],['tarpon',2],['mangrove',3],['jackcrevalle',2],['ladyfish',2]],
   'Oil Rig':[['amberjack',6],['blackfin',3],['cobia',3],['grouper',1.5],['gag',1.2],['barracuda',2],['kingfish',2.5],['mahi',1.5],['wahoo',1.5],['yellowfin',1.2],['sailfish',.4],['goliath',.5],['bullshark',.35]],
+  // Steel on the bottom: where the big structure-holders live. Weights are tuned for the hotspot
+  // rule in pickSpecies (entries under 2.5 get x2.5 when a cast is on a spot, and a wreck is one),
+  // so the big residents sit at or above 2.5 and the small ones (mutton, shark) are kept low
+  // enough that the boost does not turn them into the bulk of the catch. Weights roll heavy too:
+  // see `wreckSizeT` in sim/fight.ts. Measured against Reef/Oil Rig by test/playthrough-weights.mjs.
+  'Wreck':[['amberjack',6],['grouper',3.6],['cobia',3.2],['gag',2.6],['goliath',2.6],['barracuda',2.5],['jackcrevalle',2.5],['kingfish',2.5],['bullshark',.9],['mutton',.5],['blacktip',.3]],
   'Weedline':[['mahi',8],['tripletail',3],['blackfin',2],['graytrigger',2],['wahoo',2],['sailfish',1.6],['jackcrevalle',1.5],['yellowfin',.7],['marlin',.3]],
   'Flats':[['bonefish',5],['permit',2],['barracuda',3],['tarpon',1],['ladyfish',2],['lemonshark',.8],['blacktip',1],['palometa',1.5]],
   'Backcountry':[['snook',4],['redfish',4],['trout',5],['tarpon',2],['ladyfish',3],['jackcrevalle',2],['tripletail',.8],['bullshark',.6]],

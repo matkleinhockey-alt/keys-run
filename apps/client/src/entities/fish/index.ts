@@ -21,7 +21,9 @@ import {
   chunkOf, chunkKey, residentsForChunk, instantiateResident,
   tryRoamCell, instantiateRoamer, ROAM_CELL, ROAM_MIN_R, ROAM_MAX_R, ROAM_TARGET, DORMANT_TTL_S,
   nearFieldForCell, instantiateNearField, nearCellOf, nearKey, NEAR_CELL, NEAR_RADIUS,
+  wreckSchoolsFor, instantiateWreckSchool,
 } from './spawn.js';
+import { wrecksFor, WRECK_RESIDENTS } from '@keysrun/shared/world/wrecks';
 import { swimClock } from './swim-clock.js';
 import { fishCapsule } from './hitbox.js';
 import type { SchoolState, Threat } from './types.js';
@@ -32,6 +34,11 @@ import { WORLD_SEED } from '../../state/constants.js';
 const _UP = new THREE.Vector3(0, 1, 0);
 
 const RESIDENT_RADIUS = 220;
+/** A wreck's schools are live while the focus is within this of the hull's edge, metres. Past the
+ * ~30 m best-case visibility with room to spare, so they are already milling when you arrive, and
+ * well inside RESIDENT_RADIUS's cost - a wreck is at most 6 schools of 1-7 fish. Retire at x1.3 so
+ * a boat idling on the boundary does not rebuild them every throttle tick. */
+const WRECK_RADIUS = 160;
 const SPAWN_THROTTLE_S = 0.4; // legacy `popT` cadence (index.html:2542)
 const ROAM_RETIRE_R = ROAM_MAX_R + 40; // legacy's `POP_R+40` free radius
 
@@ -153,6 +160,9 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
   // The dense 18 m-cell layer inside NEAR_RADIUS — see spawn.ts's "near-field layer" header for
   // why the resident/roamer layers alone left a diver standing in empty water.
   const nearField = new Map<string, SchoolState>();
+  // Schools holding on shipwrecks (spawn.ts's wreck layer) - built when the focus nears a wreck,
+  // dropped when it leaves. Pure per wreck, so a rebuild is the same fish.
+  const wreckSchools = new Map<string, SchoolState[]>(); // wreck id -> its schools
   const roamers = new Map<string, SchoolState>(); // id -> active roamer
   const dormant = new Map<string, DormantEntry>(); // id -> frozen roamer
 
@@ -215,6 +225,18 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
     // Recomputing a cell is pure and cheap (spawn.ts), so a departed cell is simply dropped —
     // nothing to preserve, and walking back onto it rebuilds exactly the same school.
     for (const key of nearField.keys()) if (!wanted.has(key)) nearField.delete(key);
+  }
+
+  function updateWrecks(focus: { x: number; z: number }): void {
+    for (const w of wrecksFor(seed)) {
+      const d = Math.hypot(w.x - focus.x, w.z - focus.z) - w.len / 2 - w.gap;
+      const live = wreckSchools.has(w.id);
+      if (!live && d < WRECK_RADIUS) {
+        wreckSchools.set(w.id, wreckSchoolsFor(seed, w, WRECK_RESIDENTS).map((spec, i) => instantiateWreckSchool(spec, w, i)));
+      } else if (live && d > WRECK_RADIUS * 1.3) {
+        wreckSchools.delete(w.id);
+      }
+    }
   }
 
   function manageRoamers(focus: { x: number; z: number }, t: number): void {
@@ -299,6 +321,7 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
       throttle = SPAWN_THROTTLE_S;
       updateResidents(focus);
       updateNearField(focus);
+      updateWrecks(focus);
       manageRoamers(focus, t);
     }
 
@@ -333,6 +356,7 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
     };
     for (const state of residents.values()) runSchool(state);
     for (const state of nearField.values()) runSchool(state);
+    for (const list of wreckSchools.values()) for (const state of list) runSchool(state);
     for (const state of roamers.values()) runSchool(state);
 
     let draws = 0, triangles = 0;
@@ -346,7 +370,9 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
     }
     spoutSystem.update(dt);
 
-    stats.schools = residents.size + nearField.size + roamers.size;
+    let wreckN = 0;
+    for (const list of wreckSchools.values()) wreckN += list.length;
+    stats.schools = residents.size + nearField.size + wreckN + roamers.size;
     stats.fish = fishCount;
     stats.draws = draws;
     stats.drawnFish = renderStats.submitted;
@@ -378,6 +404,7 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
     const out: Array<{ id: string; type: string; cx: number; cz: number; heading: number; count: number; resident: boolean; flee: number }> = [];
     for (const s of residents.values()) out.push({ id: s.id, type: s.type, cx: s.cx, cz: s.cz, heading: s.heading, count: s.members.length, resident: true, flee: s.flee });
     for (const s of nearField.values()) out.push({ id: s.id, type: s.type, cx: s.cx, cz: s.cz, heading: s.heading, count: s.members.length, resident: true, flee: s.flee });
+    for (const list of wreckSchools.values()) for (const s of list) out.push({ id: s.id, type: s.type, cx: s.cx, cz: s.cz, heading: s.heading, count: s.members.length, resident: true, flee: s.flee });
     for (const s of roamers.values()) out.push({ id: s.id, type: s.type, cx: s.cx, cz: s.cz, heading: s.heading, count: s.members.length, resident: false, flee: s.flee });
     return out;
   }
@@ -498,6 +525,13 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
       const dx = state.cx - x, dz = state.cz - z;
       if (dx * dx + dz * dz > schoolR2) continue;
       pushSchoolTargets(state, x, y, z, radius, out);
+    }
+    for (const list of wreckSchools.values()) {
+      for (const state of list) {
+        const dx = state.cx - x, dz = state.cz - z;
+        if (dx * dx + dz * dz > schoolR2) continue;
+        pushSchoolTargets(state, x, y, z, radius, out);
+      }
     }
     for (const state of roamers.values()) {
       const dx = state.cx - x, dz = state.cz - z;

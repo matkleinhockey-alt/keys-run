@@ -107,7 +107,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       item('ice-bag', 'Bag of ice', 'Keeps the cooler honest.', 4, 'consumable', 'cooler.ice'),
       item('leader-fluoro', '80 lb fluorocarbon leader', 'Fewer bite-offs on toothy fish.', 22, 'consumable', 'leader.fluoro'),
     ],
-    enterable: false,
+    enterable: true,
   },
   guns: {
     id: 'guns', name: 'Deadeye Guns & Ammo', tagline: 'Firearms · Ammunition · Spearguns · Pawn',
@@ -127,7 +127,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       item('spear-reel', 'Reel-line conversion', 'A fish on the spear runs less far before you can haul.', 1_400, 'gear', 'spear.reel'),
       item('flare', 'Marine flare kit', 'Required by the Coast Guard, loved by everyone else.', 38, 'consumable', 'safety.flare'),
     ],
-    enterable: false,
+    enterable: true,
   },
   bar: {
     id: 'bar', name: 'The Rusty Anchor', tagline: 'Cold beer · Hot wings · No shirt, no problem',
@@ -147,21 +147,22 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
     enterable: true,
   },
   club: {
-    id: 'club', name: 'Pink Flamingo Cabaret', tagline: 'Live entertainment · Cocktails · Girls girls girls',
+    id: 'club', name: 'Pink Flamingo Cabaret', tagline: 'Live entertainment · Cocktails · Under new management',
     greeting: [
-      'Cover is twenty. Flip-flops are fine. Opinions about the show are not.',
-      'Private event tonight, fisherman. Come back when the boat is paid off.',
-      'VIP is full. Everything is full. Walk it off.',
+      'Evening, boss. Rope is down, booth is yours, nobody charges you a nickel.',
+      'Boss is in! Hey — somebody get the good glasses.',
+      'Your club, your rules. Try not to tell the band how to play.',
     ],
-    blurb: 'Magenta neon, a velvet rope and a bouncer the size of a bait freezer. You can not get in yet; what you can do is admire the sign and be turned away with some style.',
+    blurb: 'Magenta neon, a velvet rope and a bouncer the size of a bait freezer. You own the place, which is why the rope comes down and the tab does not exist. The house still takes everyone else\'s money; yours is already in the till.',
     sells: [
-      // SINKS: PRICE 20 -> 50 (the rope is closed anyway; this only sets the price of being turned away with style).
-      item('cover', 'Cover charge', 'Pay to get past the rope.', 50, 'sink', 'club.cover'),
-      // SINKS: PRICE 250 -> 2,500. 'Very expensive' has to be true: ~2/3 of a first-session haul, the biggest discretionary sink in town.
+      // Cover and bottle are COMPED for the owner (sim/club.ts): they stay listed because the club
+      // still charges everyone else, and the panel shows them at $0 with "on the house" rather
+      // than hiding them — a shelf that silently empties reads as broken, not as a perk.
+      item('cover', 'Cover charge', 'Pay to get past the rope. Not you.', 50, 'sink', 'club.cover'),
       item('bottle', 'Bottle service', 'A very expensive way to feel important.', 2_500, 'sink', 'club.bottle'),
-      item('tip', 'Tip jar', 'Money out of the economy, for the cabaret.', 10, 'sink', 'club.tip'),
+      item('tip', 'Tip jar', 'The band and the staff still get paid. Tip them.', 10, 'sink', 'club.tip'),
     ],
-    enterable: false,
+    enterable: true,
   },
   diner: {
     id: 'diner', name: 'Salty Dog Diner', tagline: 'Breakfast all day · Fresh catch · Pie',
@@ -198,7 +199,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       item('tank-pony', 'Slung pony bottle and reg', 'The big one: more than twice as long on the bottom.', 4_500, 'gear', 'dive.tank'),
       item('fill', 'Air fill', 'Tops the bottle back up. Steve will do it while you wait.', 12, 'consumable', 'dive.fill'),
     ],
-    enterable: false,
+    enterable: true,
   },
   liquor: {
     id: 'liquor', name: 'Cheap Beer & Lotto', tagline: 'Wine · Spirits · Scratch-offs',
@@ -208,7 +209,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       item('sixer', 'Six-pack for the cooler', 'The deck party notices.', 9, 'buff', 'liquor.sixer'),
       item('scratch', 'Scratch-off ticket', 'A tiny chance at a big number.', 5, 'sink', 'liquor.scratch'),
     ],
-    enterable: false,
+    enterable: true,
   },
   gifts: {
     id: 'gifts', name: 'Conch Republic Gifts', tagline: 'T-shirts · Shells · Hot sauce',
@@ -217,45 +218,64 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
     sells: [
       item('shirt-hawaiian', 'Loud Hawaiian shirt', 'Changes what you wear ashore.', 35, 'cosmetic', 'cosmetic.shirt.hawaiian'),
       item('cap-conch', 'Conch Republic cap', 'Shade for the head.', 18, 'cosmetic', 'cosmetic.cap.conch'),
+      item('shirt-breton', 'Breton stripe tee', 'Looks like you own a sailboat. You do not.', 28, 'cosmetic', 'cosmetic.shirt.breton'),
+      item('shirt-sunset', 'Sunset fade tee', 'Tie-dyed in the exact colours of the 7 p.m. sky.', 30, 'cosmetic', 'cosmetic.shirt.sunset'),
+      item('shirt-luigi', 'Green polo', 'For the deckhand who is always second.', 25, 'cosmetic', 'cosmetic.shirt.luigi'),
+      item('cap-bucket', 'Khaki bucket hat', 'Brim all the way round. Sunscreen is for other people.', 16, 'cosmetic', 'cosmetic.cap.bucket'),
+      item('cap-luigi', 'Green cap', 'An L is on it. For Luigi. Probably.', 20, 'cosmetic', 'cosmetic.cap.luigi'),
+      item('glasses-aviator', 'Gold aviators', 'Make every fish look like a mistake.', 22, 'cosmetic', 'cosmetic.glasses.aviator'),
+      item('glasses-round', 'Round shades', 'Very 1967. Very Key West.', 15, 'cosmetic', 'cosmetic.glasses.round'),
+      item('glasses-neon', 'Neon wraparounds', 'Visible from space, and from the other marina.', 12, 'cosmetic', 'cosmetic.glasses.neon'),
+      item('flag-conch', 'Conch Republic flag', 'Flies from your stern. Seceded in 1982, as a joke.', 25, 'cosmetic', 'cosmetic.flag.conch'),
+      item('flag-fishon', '"Fish On" pennant', 'Red and white, for when it is, and when it is not.', 14, 'cosmetic', 'cosmetic.flag.fishon'),
+      item('flag-loser', 'White flag', 'The seagull has a point. Fly it first.', 9, 'cosmetic', 'cosmetic.flag.loser'),
     ],
-    enterable: false,
+    enterable: true,
   },
   pawn: {
     id: 'pawn', name: 'Keys Pawn & Loan', tagline: 'We buy gold · We buy tackle · No questions',
     greeting: ['Whatever it is, it is worth less than you think.'],
     blurb: 'Used rods, used reels, used regrets. Sell back gear you have outgrown.',
     sells: [item('used-rod', 'Used spinning rod', 'Cheap and cheerful.', 40, 'gear', 'rod.used')],
-    enterable: false,
+    enterable: true,
   },
   laundromat: {
     id: 'laundromat', name: 'Suds & Sun Coin Laundry', tagline: 'Wash · Dry · Fold',
     greeting: ['Quarters in the machine by the door.'],
-    blurb: 'Nothing here but the warm, sweet smell of fabric softener. A place to wash the fish out of your shorts.',
-    sells: [],
-    enterable: false,
+    blurb: 'The warm, sweet smell of fabric softener. A place to wash the fish out of your shorts, and the bar out of your shirt.',
+    sells: [
+      item('wash', 'Wash & dry', 'Takes the bar out of your shirt. And you.', 8, 'service', 'laundromat.wash'),
+      item('sock', 'Lost-and-found sock', 'A mystery sock. Eight to collect. Nothing happens.', 3, 'sink', 'laundromat.sock'),
+    ],
+    enterable: true,
   },
   icecream: {
     id: 'icecream', name: 'Cone Zone Ice Cream', tagline: 'Soft serve · Key lime · Shakes',
     greeting: ['Waffle cone or cup? Be honest.'],
     blurb: 'Soft-serve in a pastel building shaped like a cone, if you squint.',
     sells: [item('cone', 'Key lime cone', 'Cool off.', 5, 'buff', 'icecream.cone')],
-    enterable: false,
+    enterable: true,
   },
   motel: {
     id: 'motel', name: 'Sunset Motor Lodge', tagline: 'Vacancy · Color TV · Ice machine',
     greeting: ['Room 7 is free. It has a view of the other motel.'],
     blurb: 'A two-storey roadside motel with a neon sign that has never once said NO VACANCY. A night here will skip the clock to sunset and save.',
     sells: [item('night', 'One night, room 7', 'Skips to sunset.', 79, 'service', 'motel.night')],
-    enterable: false,
+    enterable: true,
   },
   convenience: {
     id: 'convenience', name: 'Stop-N-Go', tagline: 'Gas · Snacks · Live bait (maybe)',
     greeting: ['Gas pump two is broken. So is pump one.'],
     blurb: 'Chips, ice and a lot of fluorescent light. Boat fuel and snacks will be sold here.',
     sells: [
-      item('fuel', 'Jerry can of fuel', 'Range for the boat.', 30, 'consumable', 'boat.fuel'),
+      // DELISTED. There is no fuel tank in sim/boat.ts, and the services agent's reasoning for
+      // not inventing one is right: a tank that can run dry strands you mid-ocean, and a tank that
+      // cannot is a gauge that never matters. Left listed it would have charged $30 for a can that
+      // does nothing — the same inert-purchase failure already fixed twice. Off the shelf until
+      // there is a fuel system worth having.
+      { ...item('fuel', 'Jerry can of fuel', 'Range for the boat.', 30, 'consumable', 'boat.fuel'), status: 'planned' as const },
       item('snacks', 'Chips and a soda', 'Morale.', 4, 'buff', 'conv.snacks'),
     ],
-    enterable: false,
+    enterable: true,
   },
 };

@@ -64,6 +64,28 @@ export function humanOptionsFor(look: Look, i: number): HumanOptions {
     case 'bartender': return { ...base, shirt: 0xf3efe5, shortSleeve: true, shorts: 0x2b2118, hair: 0x7a3a1c, longHair: true, hairStyle: 'bun' };
     case 'cook': return { ...base, shirt: 0xffffff, cap: 0xffffff, shorts: 0x23262a, shortSleeve: true };
     case 'patron': return { ...base, shortSleeve: true, cap: 0x5a7bd6, shorts: 0x6b5a3a };
+    // Pink Flamingo performers — the same `bikini` figure the boat's own pole dancer and deck
+    // party use (entities/boat/model.ts), in the club's magenta rather than swimwear colours.
+    // Reusing that option rather than adding a new body keeps one figure to maintain and keeps
+    // this exactly as explicit as the rest of the game, which is to say not.
+    case 'dancer': return {
+      ...base, bikini: true, longHair: true,
+      hairStyle: (['long', 'wavy', 'pony'] as const)[i % 3],
+      shorts: [0xff3ea5, 0x8a3cff, 0x38e0ff][i % 3], skin: SKIN[(i + 1) % SKIN.length], glasses: false,
+    };
+    case 'mc': return { ...base, shirt: 0x2a0f26, shortsLong: true, shorts: 0x2a0f26, shoes: 0x15171a, glasses: true, shortSleeve: false };
+    case 'dj': return { ...base, shirt: 0x15171a, cap: 0xff3ea5, shortSleeve: true, shorts: 0x23262a, glasses: true };
+    // The people behind the other eleven counters. Each reads from across a room by ONE loud thing,
+    // because a figure is ~2 m tall at 8 m and nothing finer survives: the dive shop's tan and teal
+    // shirt, the bait man's cap and boots, the gunsmith's glasses and black tee, the scoop shop's paper hat.
+    case 'divemaster': return { ...base, skin: 0xb87a55, shirt: 0x1ea5b8, shortSleeve: true, shorts: 0x23466e, hair: 0xd8b46a, cap: 0xffffff, shoes: 0x2b2b2b };
+    case 'baitman': return { ...base, skin: 0xc98d68, shirt: 0xd9d4a0, shortSleeve: true, cap: 0x23466e, shorts: 0x4d5a4a, shoes: 0x3a2f22, glasses: true, hair: 0x9a9a9a };
+    case 'gunsmith': return { ...base, skin: 0xe9b48f, shirt: 0x1d1d20, shortSleeve: true, glasses: true, shorts: 0x4a4636, shoes: 0x1a1a1a, cap: 0x3b3b3e };
+    case 'clerk': return { ...base, shirt: [0xd9342b, 0x2b6cb0, 0xf2c14e][i % 3], shortSleeve: true, shorts: 0x2b2f3a, cap: i % 2 ? undefined : 0xd9342b };
+    case 'pawnbroker': return { ...base, skin: 0xd9a27f, shirt: 0x6b4f2a, shortSleeve: false, glasses: true, shorts: 0x2b2118, hair: 0x7a7a7a, shoes: 0x1a1a1a };
+    case 'scooper': return { ...base, shirt: 0xf7a7c6, shortSleeve: true, cap: 0xffffff, shorts: 0xffffff, longHair: true, hairStyle: 'pony', skin: 0xf0c2a0 };
+    case 'innkeeper': return { ...base, skin: 0xc98d68, shirt: 0xf3efe5, shortSleeve: true, shorts: 0x7a3a2c, hair: 0x2e1c12, glasses: true };
+    case 'attendant': return { ...base, shirt: 0x1d6fb3, shortSleeve: true, shorts: 0xcdbf9a, longHair: true, hairStyle: 'wavy', skin: 0x9a6644 };
     // a runner is the only person on the street dressed for it: neon top, short shorts, a visor or a pony tail
     case 'jogger': return { ...base, longHair: true, hairStyle: 'pony', shirt: 0xff4f9a, shortSleeve: true, shorts: 0x23262a, shoes: 0xf2f23a, skin: SKIN[(i + 1) % SKIN.length] };
     case 'jogger-m': return { ...base, shirt: 0x2fd6c4, shortSleeve: true, shorts: 0x1d2a44, shoes: 0xffffff, cap: 0xffffff };

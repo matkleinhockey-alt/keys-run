@@ -131,7 +131,13 @@ describe('getting back', () => {
     c.tryEnter(alongsideTHead(), HULL);
     expect(c.debugPlace(m.sx, m.sz + 80, 0)).toBe(false);          // open harbour
     expect(c.debugPlace(m.sx + 21, m.sz - 61.4, 0)).toBe(false);   // on top of the bar counter
-    expect(c.debugPlace(m.sx + 50, m.sz - 56, 0)).toBe(false);     // inside the club
+    // The club is walk-in now (you own it), so its floor is legitimately standable — what must
+    // still refuse is the furniture. Replacing rather than deleting this case: "inside the club"
+    // stopped being a blocked point the moment the rope came down, and a test that only checked
+    // the old solid footprint would have quietly stopped testing anything.
+    expect(c.debugPlace(m.sx + 50, m.sz - 67, 0)).toBe(false);     // on top of the club stage
+    expect(c.debugPlace(m.sx + 64, m.sz - 61, 0)).toBe(false);     // inside the owner's booth
+    expect(c.debugPlace(m.sx + 50, m.sz - 56, 0)).toBe(true);      // the dance floor, now open to you
   });
 });
 

@@ -1,10 +1,13 @@
 /**
  * Boot Key Harbor City, in the real game, by Playwright.
  *
- * Usage:  CLIENT_URL=http://localhost:5191 node test/capture-town.mjs [shots|night|modes|perf]
+ * Usage:  CLIENT_URL=http://localhost:5191 node test/capture-town.mjs [shots|interiors|night|modes|perf]
  *
  *   shots  walk the town (teleporting the walker, never faking the mode) and save screenshots to
  *          test/screenshots/town/ — every venue by day, the venue panels, the two interiors.
+ *   interiors  walk into every walk-in venue (teleporting the walker to the doorstep, then through the door's
+ *          line into the room): the entrance view, the counter view with the shopkeeper, a side view of the racks,
+ *          and the real F-key panel at the counter. Asserts the room was built, is drawn, and the prompt appears.
  *   night  sunset from the water, then the street, the neon and both interiors after dark.
  *   modes  boat -> land -> boat and boat -> diver -> boat, repeated, asserting after each leg that
  *          the camera planes, HUD, input bindings and boat state came back (see `assertBoatNormal`).
@@ -134,7 +137,7 @@ if (which === 'shots') {
     await shot(page, name);
   }
   // venue panels: walk to each door, read the prompt, press the real F key
-  for (const [name, id, yaw] of [['30-panel-guns', 'door-guns', 0], ['31-panel-club', 'door-club', 0], ['32-panel-tackle', 'door-tackle', 0], ['33-panel-bar-counter', 'counter-bar', 0]]) {
+  for (const [name, id, yaw] of [['30-panel-guns', 'counter-guns', 0], ['31-panel-club', 'door-club', 0], ['32-panel-tackle', 'counter-tackle', 0], ['33-panel-bar-counter', 'counter-bar', 0]]) {
     const at = await page.evaluate((id) => window.__landDebug.interactWorld(id), id);
     await page.evaluate(({ x, z, yaw }) => { window.__landDebug.place(x, z, yaw); window.__landDebug.look(yaw, -0.05); }, { x: at[0], z: at[1], yaw });
     await sleep(3000);
@@ -203,6 +206,57 @@ if (which === 'night') {
   await page.evaluate(({ x, z }) => { window.__landDebug.place(x, z, 0); window.__landDebug.view('third'); window.__landDebug.look(0.5, -0.12); }, { x: W(44, 41)[0], z: W(44, 41)[1] });
   await sleep(6000);
   await shot(page, '50-night-third-person-club');
+}
+
+if (which === 'interiors') {
+  await tieUpAtTownDock(page);
+  // [id, lot door u, lot v0, counter prompt id, a side-look yaw] in the town's local frame, from packages/shared/src/world/town.ts
+  const ids = (process.env.ONLY || 'dive,tackle,guns,liquor,gifts,pawn,laundromat,icecream,motel,stopngo,bar,diner').split(',');
+  const shops = await page.evaluate(() => window.__landDebug.shops());
+  for (const id of ids) {
+    const sh = shops.find((q) => q.id === id);
+    if (!sh) { errs.push('unknown shop ' + id); continue; }
+    // the doorstep, then 2.6 m inside the door looking straight in
+    const inside = W(sh.door, sh.v0 + 2.6);
+    await page.evaluate(({ x, z }) => { window.__landDebug.view('first'); window.__landDebug.place(x, z, 0); window.__landDebug.look(0, -0.06); }, { x: inside[0], z: inside[1] });
+    await sleep(4500);
+    const st = (await stats(page)).town;
+    if (!st.interiorsBuilt.includes(id) || !st.interiorsVisible.includes(id)) errs.push(`${id}: interior built=${st.interiorsBuilt.includes(id)} visible=${st.interiorsVisible.includes(id)}`);
+    await shot(page, `60-${id}-a-entrance`);
+    // the counter, as the prompt point puts you, looking at the shopkeeper
+    const at = await page.evaluate((id) => window.__landDebug.interactWorld(id), 'counter-' + sh.venue);
+    await page.evaluate(({ x, z }) => { window.__landDebug.place(x, z, 0); window.__landDebug.look(0, 0.02); }, { x: at[0], z: at[1] });
+    await sleep(3500);
+    const prompt = await page.evaluate(() => document.getElementById('landPrompt').textContent);
+    console.log(id, 'prompt:', JSON.stringify(prompt));
+    if (!prompt) errs.push('no prompt at the counter of ' + id);
+    await shot(page, `61-${id}-b-counter`);
+    // a side look from the middle of the shop: both walls' racks
+    const mid = W(sh.door, sh.v0 + Math.min(7, sh.depth * 0.3));
+    for (const [tag, yaw] of [['c-west', Math.PI / 2], ['d-east', -Math.PI / 2]]) {
+      await page.evaluate(({ x, z, yaw }) => { window.__landDebug.place(x, z, yaw); window.__landDebug.look(yaw, -0.1); }, { x: mid[0], z: mid[1], yaw });
+      await sleep(3000);
+      await shot(page, `62-${id}-${tag}`);
+    }
+    // the real F key at the counter: the panel opens with the shopkeeper's rotating greeting, and Escape closes it
+    await page.evaluate(({ x, z }) => { window.__landDebug.place(x, z, 0); window.__landDebug.look(0, 0.02); }, { x: at[0], z: at[1] });
+    await sleep(2500);
+    await page.keyboard.press('KeyF'); await sleep(2000);
+    const open = await page.evaluate(() => !document.getElementById('landPanel').classList.contains('hidden'));
+    const say = await page.evaluate(() => document.querySelector('#landPanel .say')?.textContent || '');
+    console.log(id, 'panel open:', open, JSON.stringify(say));
+    if (!open) errs.push('panel did not open at ' + id);
+    if (id === 'dive' || id === 'guns') await shot(page, `63-${id}-panel`);
+    await page.keyboard.press('Escape'); await sleep(700);
+  }
+  // third person at the dive-shop counter: the player's own body with the shopkeeper behind the counter
+  if (ids.includes('dive')) {
+    const at = await page.evaluate(() => window.__landDebug.interactWorld('counter-dive'));
+    await page.evaluate(({ x, z }) => { window.__landDebug.place(x, z, 0); window.__landDebug.view('third'); window.__landDebug.look(0.5, -0.12); }, { x: at[0], z: at[1] });
+    await sleep(4500);
+    await shot(page, '64-dive-third-person');
+  }
+  console.log(JSON.stringify((await stats(page)).town.interiorsBuilt));
 }
 
 if (which === 'modes') {
@@ -348,6 +402,14 @@ if (which === 'perf') {
   await go(-2800, chain(-2800) + 900); seaRows.push(await measure('west of the bridge, 2 km away', (s) => s.distance > 1500 && !s.farVisible));
   await go(-300, chain(-300) + 1200); farRows.push(await measure('Hawk Channel, 1 km out (far silhouette: 2 draw calls)', (s) => s.distance > 800 && s.distance < 1500 && s.farVisible));
   await go(-900, 306 + 220); farRows.push(await measure('harbour mouth, ~350 m (far silhouette)', (s) => s.distance > 300 && s.distance < 700 && s.farVisible));
+  if (process.env.PERF_ONLY === 'far') {
+    // A re-run of just the sea and far-silhouette rows (the first four), for when a reef chunk streaming in during one sample
+    // pushed a delta past the 25-call allowance: the far path is two draw calls by construction and unrelated to any interior.
+    const farOk = farRows.every((r) => !r.lights && r.deltaCalls <= 25);
+    console.log('FAR SILHOUETTE (re-run):', farRows.map((r) => r.deltaCalls).join(', '), farOk ? '-> within budget' : '-> OVER BUDGET');
+    if (!farOk) errs.push('far silhouette is not cheap');
+    await browser.close(); console.log('errors:', errs.length); process.exit(errs.length ? 1 : 0);
+  }
   await go(-900, 306 + 90); await measure('approaching the dock, ~130 m off the seawall (near detail)', (s) => s.distance < 200 && s.nearVisible);
   await go(-900, 306);
   await page.keyboard.press('KeyF'); await sleep(3000);
@@ -355,6 +417,17 @@ if (which === 'perf') {
   await measure('in the street, day', (s) => s.distance === 0 && s.nearVisible);
   await page.evaluate(({ x, z, yaw }) => { window.__landDebug.place(x, z, yaw); window.__landDebug.look(yaw, -0.08); }, { x: W(21, 52)[0], z: W(21, 52)[1], yaw: 0 });
   await measure('inside the bar, day (the interior lamp is the only real light)', (s) => s.lightsActive && s.interiorsVisible.includes('bar'));
+  // The rooms that did not exist before (set EXTRA_ROOMS=0 to run against a build that predates them): the dive shop
+  // (the room the brief names) and the motel lobby (52 m wide, the biggest room in town).
+  if (process.env.EXTRA_ROOMS !== '0') {
+    for (const [label, id, u, v] of [['inside the dive shop, day', 'dive', -19, 104], ['inside the motel lobby, day', 'motel', 20, 106]]) {
+      await page.evaluate(({ x, z }) => { window.__landDebug.place(x, z, 0); window.__landDebug.look(0, -0.08); }, { x: W(u, v)[0], z: W(u, v)[1] });
+      await measure(label, (s) => s.lightsActive && s.interiorsVisible.includes(id));
+    }
+    // two doors in range at once, the busiest the street gets (the diner and the tackle store both within 36 m of the camera)
+    await page.evaluate(({ x, z }) => { window.__landDebug.place(x, z, 0); window.__landDebug.look(0, 0); }, { x: W(-30, 40)[0], z: W(-30, 40)[1] });
+    await measure('on the sidewalk with two doors in range (day)', (s) => s.distance === 0 && s.interiorsVisible.length >= 2);
+  }
   await page.evaluate(({ x, z }) => { window.__landDebug.place(x, z, 0); window.__landDebug.look(0, 0); }, { x: W(0, 36)[0], z: W(0, 36)[1] });
   await page.keyboard.press('KeyO'); // sunset; #btnSun is hidden ashore, O is the same toggle
   await sleep(100000);

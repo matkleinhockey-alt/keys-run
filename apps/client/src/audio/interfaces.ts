@@ -86,3 +86,24 @@ export interface PartySite {
    * together never lock into an unnaturally tight groove. */
   bpm: number;
 }
+
+/**
+ * The pirates' sloop, as much as the audio engine needs: where it is, whether the crew is singing,
+ * and a counter that ticks each time somebody speaks so the engine can answer with a hail without
+ * `entities/life/pirates.ts` holding a reference to the audio engine (it is polled, like every
+ * other site). Absent entirely while they are away — see `engine.ts`'s `updatePirates`.
+ *
+ * Deliberately not a `RemoteEngineSource`: a sailboat has no engine, and giving it one to get a
+ * sound would make `updateTraffic` synthesize a V8 under a gaff cutter.
+ */
+export interface PirateSite {
+  id: string;
+  x: number;
+  z: number;
+  /** Increments on every spoken line; the engine hails once per change. */
+  hail: number;
+  /** 0 = the captain (low), 1 = the mate (higher, rougher). */
+  voice: 0 | 1;
+  /** Crew sing while closing and while hove to; they stop once they are sailing away. */
+  singing: boolean;
+}

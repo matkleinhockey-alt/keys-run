@@ -12,7 +12,7 @@ import { MARINAS, landH, depthAt, creekDist } from '../src/world/depth.js';
 import { shoreInfo, VACA } from '../src/world/chain.js';
 import {
   TOWN_FRAME, TOWN_MARINA, PAD, PAD_Y, RAMP, DECK_TOP, LOTS, PALMS, LAMPS, BENCHES, CARS, SOLID_PROPS, INTERACTS,
-  NPCS, INTERIOR_BOXES, COLLIDERS, DOOR_W, WALL_T, SURFACES,
+  NPCS, INTERIOR_BOXES, SHOP_COUNTERS, COLLIDERS, DOOR_W, WALL_T, SURFACES,
   toWorld, toLocal, worldRect, carRect, lotWalls, groundAt, marinaDecks, marinaDeckBoxes, marinaShedRect, findBerth, inTownFootprint,
   type Rect,
 } from '../src/world/town.js';
@@ -21,6 +21,7 @@ import {
   PEOPLE, DOGS, SQUIRRELS, SKUNKS, CATS, GULLS, LITTER, PUDDLES, DECOR, WASHING, TRASH_CANS, BOLLARDS, STREET_PERIOD,
   sample, newPose, leashDog, gullAt, walkableAt, palmShape, palmTrunkAt,
 } from '../src/world/town-life.js';
+import { flood, nearestReached, STEP } from './walk-grid.js';
 
 const F = TOWN_FRAME;
 const overlap = (a: Rect, b: Rect, gap = 0): boolean => a.x0 < b.x1 + gap && a.x1 > b.x0 - gap && a.z0 < b.z1 + gap && a.z1 > b.z0 - gap;
@@ -273,7 +274,22 @@ describe('props, cars and people', () => {
       const [x, z] = toWorld(F, n.at!.u, n.at!.v);
       const g = groundAt(x, z);
       expect(g, `${n.id} is not on the pad`).toBe(PAD_Y);
-      const blocked = COLLIDERS.some((c) => x > c.x0 - 0.2 && x < c.x1 + 0.2 && z > c.z0 - 0.2 && z < c.z1 + 0.2);
+      // Someone standing ON furniture (a dancer on the stage, the DJ in the booth) sits inside
+      // that box's footprint by definition — from above the two are the same rectangle. They
+      // declare which box they are on, and must be on that one and inside nothing else.
+      const onBox = n.onBox ? INTERIOR_BOXES.find((b) => b.id === n.onBox) : undefined;
+      if (n.onBox) expect(onBox, `${n.id} names a box that does not exist: ${n.onBox}`).toBeDefined();
+      if (onBox) {
+        expect(
+          n.at!.u > onBox.u0 && n.at!.u < onBox.u1 && n.at!.v > onBox.v0 && n.at!.v < onBox.v1,
+          `${n.id} is not actually on ${n.onBox}`,
+        ).toBe(true);
+      }
+      const onBoxRect = onBox ? worldRect(F, onBox.u0, onBox.u1, onBox.v0, onBox.v1) : null;
+      const blocked = COLLIDERS.some((c) => {
+        if (onBoxRect && c.x0 === onBoxRect.x0 && c.z0 === onBoxRect.z0 && c.x1 === onBoxRect.x1 && c.z1 === onBoxRect.z1) return false;
+        return x > c.x0 - 0.2 && x < c.x1 + 0.2 && z > c.z0 - 0.2 && z < c.z1 + 0.2;
+      });
       expect(blocked, `${n.id} is standing inside something`).toBe(false);
       if (n.inside) {
         const l = LOTS.find((q) => q.id === n.inside)!;
@@ -317,6 +333,105 @@ describe('the island keeps out of the streets', () => {
     const shed = marinaShedRect(TOWN_MARINA);
     const [, v] = toLocal(F, (shed.x0 + shed.x1) / 2, (shed.z0 + shed.z1) / 2);
     expect(v).toBeLessThan(PAD.v0 - 3);
+  });
+});
+
+describe('every walk-in venue is a room you can walk into', () => {
+  type Lot = (typeof LOTS)[number];
+  // Data-driven on purpose: a lot someone else turns walk-in later (the cabaret is being built separately) is
+  // picked up by every test below the moment its `enterable` flips, with no edit here.
+  const WALKIN = LOTS.filter((l) => l.enterable);
+  const around = (l: Lot): { u0: number; u1: number; v0: number; v1: number } => ({ u0: l.u0 - 3, u1: l.u1 + 3, v0: l.v0 - 4, v1: l.v1 + 1 });
+  const KEEPER = /bartender|cook|divemaster|baitman|gunsmith|clerk|pawnbroker|scooper|innkeeper|attendant/;
+
+  it('keeps the lot, the venue table and the furniture in agreement about every door', () => {
+    for (const l of LOTS) {
+      expect(VENUES[l.venue].enterable, `${l.id}: venue table and lot disagree about the door`).toBe(l.enterable);
+      expect(INTERIOR_BOXES.some((b) => b.lot === l.id), `${l.id}: furniture and lot disagree`).toBe(l.enterable);
+    }
+    // the brief's priorities: the dive shop, the tackle store and the gun counter can be walked into
+    for (const id of ['dive', 'tackle', 'guns', 'bar', 'diner']) expect(LOTS.find((l) => l.id === id)!.enterable, id).toBe(true);
+    expect(WALKIN.length).toBeGreaterThanOrEqual(12);
+  });
+
+  it('puts a shopkeeper behind a counter in every shop, facing the door', () => {
+    for (const l of WALKIN) {
+      expect(NPCS.filter((n) => n.inside === l.id && KEEPER.test(n.look)).length, `${l.id} has nobody behind the counter`).toBeGreaterThanOrEqual(1);
+    }
+    for (const c of SHOP_COUNTERS) {
+      const box = INTERIOR_BOXES.find((b) => b.id === c.counter)!;
+      expect(box.lot).toBe(c.lot);
+      const keeper = NPCS.find((n) => n.id === `i-keeper-${c.lot}`)!;
+      const prompt = INTERACTS.find((i) => i.id === `counter-${LOTS.find((l) => l.id === c.lot)!.venue}`)!;
+      // inland of the counter, in the same column as the prompt point, looking toward the door
+      expect(keeper.at!.v, c.lot).toBeGreaterThan(box.v1);
+      expect(Math.abs(keeper.at!.u - prompt.u), c.lot).toBeLessThan(0.01);
+      expect(keeper.at!.yaw, c.lot).toBeCloseTo(-Math.PI / 2, 6);
+    }
+  });
+
+  it('puts the prompt point a metre in front of a counter the shopkeeper stands behind', () => {
+    for (const c of SHOP_COUNTERS) {
+      const l = LOTS.find((x) => x.id === c.lot)!;
+      const i = INTERACTS.find((q) => q.id === `counter-${l.venue}`)!;
+      const box = INTERIOR_BOXES.find((b) => b.id === c.counter)!;
+      expect(i.u, c.lot).toBeGreaterThanOrEqual(box.u0);
+      expect(i.u, c.lot).toBeLessThanOrEqual(box.u1);
+      expect(box.v0 - i.v, c.lot).toBeGreaterThan(0.5);
+      expect(box.v0 - i.v, c.lot).toBeLessThan(2);
+      expect(i.u > l.u0 && i.u < l.u1 && i.v > l.v0 && i.v < l.v1, `${i.id} is outside its own shop`).toBe(true);
+    }
+  });
+
+  it('keeps furniture from overlapping other furniture in the same room', () => {
+    for (let i = 0; i < INTERIOR_BOXES.length; i++) for (let j = i + 1; j < INTERIOR_BOXES.length; j++) {
+      const a = INTERIOR_BOXES[i], b = INTERIOR_BOXES[j];
+      if (a.lot !== b.lot) continue;
+      const clear = a.u1 <= b.u0 || a.u0 >= b.u1 || a.v1 <= b.v0 || a.v0 >= b.v1;
+      expect(clear, `${a.id} / ${b.id}`).toBe(true);
+    }
+  });
+
+  it('can be walked from the doorstep to the counter of every shop, by the walker\'s own rules', () => {
+    for (const l of WALKIN) {
+      const g = flood(l.door, l.v0 - 1.5, around(l));
+      const counters = INTERACTS.filter((i) => i.venue === l.venue && i.id.startsWith('counter-'));
+      expect(counters.length, l.id).toBeGreaterThan(0);
+      for (const c of counters) {
+        expect(nearestReached(g, c.u, c.v, 0.4), `${c.id} is walled off from the door of ${l.id}`).not.toBeNull();
+      }
+    }
+  });
+
+  it('leaves a real room to browse in, not a cupboard', () => {
+    for (const l of WALKIN) {
+      const g = flood(l.door, l.v0 - 1.5, around(l));
+      let inside = 0;
+      for (const k of g.seen.keys()) {
+        const [i, j] = k.split(',').map(Number);
+        const u = i * STEP, v = j * STEP;
+        if (u > l.u0 && u < l.u1 && v > l.v0 && v < l.v1) inside++;
+      }
+      const m2 = inside * STEP * STEP, total = (l.u1 - l.u0) * (l.v1 - l.v0);
+      expect(m2 / total, `${l.id}: ${m2.toFixed(0)} of ${total.toFixed(0)} m2 reachable`).toBeGreaterThan(0.3);
+    }
+  });
+
+  it('only lets you in through the door: the street reaches the inside, and nothing leaks through the front wall', () => {
+    for (const l of WALKIN) {
+      const g = flood(l.door - 6, l.v0 - 1.5, around(l));
+      const insideCell = [...g.seen.keys()].some((k) => {
+        const [i, j] = k.split(',').map(Number);
+        return i * STEP > l.u0 + WALL_T && i * STEP < l.u1 - WALL_T && j * STEP > l.v0 + WALL_T && j * STEP < l.v1 - WALL_T;
+      });
+      expect(insideCell, `${l.id}: the street never gets inside`).toBe(true);
+      // and not through a wall: every reached cell on the front wall's line is within the door gap
+      for (const k of g.seen.keys()) {
+        const [i, j] = k.split(',').map(Number);
+        const u = i * STEP, v = j * STEP;
+        if (u > l.u0 && u < l.u1 && v > l.v0 && v < l.v0 + WALL_T) expect(Math.abs(u - l.door), `${l.id} leaks through its front wall at u=${u}`).toBeLessThan(DOOR_W / 2 + 0.01);
+      }
+    }
   });
 });
 

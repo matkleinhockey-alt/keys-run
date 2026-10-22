@@ -209,12 +209,17 @@ export function drawRateFor(speed: number): number {
  * Phase boundary: the tick on which `reloadT` expires does not also draw, so the earliest possible
  * `canFire` is strictly later than SPEAR_RELOAD_FLOOR even with a perfect hand.
  */
-export function stepReload(gun: GunState, dt: number, hand: ReloadHand = IDLE_HAND): GunState {
+export function stepReload(gun: GunState, dt: number, hand: ReloadHand = IDLE_HAND, reloadMul = 1): GunState {
   if (gun.draw >= 1 && gun.reloadT <= 0) return gun;
   if (gun.reloadT > 0) return { reloadT: Math.max(0, gun.reloadT - dt), draw: gun.draw };
   let draw = gun.draw;
   if (hand.drawing) {
-    draw = Math.min(1, draw + (dt / SPEAR_DRAW_TIME) * drawRateFor(hand.speed));
+    // `reloadMul` < 1 is a faster draw (sim/shop.ts's `Modifiers.spearReloadMul`, the gun shop's
+    // band gun and reel conversion). It scales ONLY this hauled phase — the braced recover phase
+    // above is governed by SPEAR_RELOAD_FLOOR, which is an anti-cheat bound that no purchase may
+    // buy past. Clamped so a future item cannot make the draw instant and collapse the mechanic.
+    const k = 1 / Math.max(0.35, reloadMul);
+    draw = Math.min(1, draw + ((dt * k) / SPEAR_DRAW_TIME) * drawRateFor(hand.speed));
   } else {
     const notch = Math.floor(draw * SPEAR_DRAW_NOTCHES + 1e-9) / SPEAR_DRAW_NOTCHES;
     draw = Math.max(notch, draw - SPEAR_DRAW_SLIP * dt);

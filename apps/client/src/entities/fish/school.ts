@@ -242,10 +242,12 @@ function stepMember(
   const surf = waveHBase(mx, mz, t, amp);
 
   let y: number;
-  if (V.level === 'surface') y = surf - 0.5 - (m.oy + 1) * 0.15;
+  const hold = g.anchor?.hold;
+  if (hold && V.level !== 'bottom') y = clamp(floor + hold.h + m.oy * hold.r, floor + 0.4, surf - 0.6);
+  else if (V.level === 'surface') y = surf - 0.5 - (m.oy + 1) * 0.15;
   else if (V.level === 'bottom') y = floor + 0.25 + (m.oy + 1) * 0.05;
   else y = clamp(lerp(floor + 0.35, surf - 0.45, 0.55 + m.oy * 0.2), floor + 0.2, surf - 0.35);
-  if (g.dive > 0 && V.level !== 'bottom') y = lerp(y, Math.max(floor + 0.5, surf - Math.min(14, (surf - floor) * 0.85)), g.dive);
+  if (g.dive > 0 && V.level !== 'bottom' && !hold) y = lerp(y, Math.max(floor + 0.5, surf - Math.min(14, (surf - floor) * 0.85)), g.dive);
 
   let pitch = 0, roll = 0;
   if (V.act && V.act !== 'glide') {

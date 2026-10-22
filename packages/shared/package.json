@@ -38,9 +38,17 @@
       "types": "./dist/world/current.d.ts",
       "default": "./dist/world/current.js"
     },
+    "./world/wrecks": {
+      "types": "./dist/world/wrecks.d.ts",
+      "default": "./dist/world/wrecks.js"
+    },
     "./world/frenzy": {
       "types": "./dist/world/frenzy.d.ts",
       "default": "./dist/world/frenzy.js"
+    },
+    "./world/pirates": {
+      "types": "./dist/world/pirates.d.ts",
+      "default": "./dist/world/pirates.js"
     },
     "./waves": {
       "types": "./dist/waves/index.d.ts",
@@ -125,6 +133,18 @@
     "./sim/gear": {
       "types": "./dist/sim/gear.d.ts",
       "default": "./dist/sim/gear.js"
+    },
+    "./sim/services": {
+      "types": "./dist/sim/services.d.ts",
+      "default": "./dist/sim/services.js"
+    },
+    "./sim/wardrobe": {
+      "types": "./dist/sim/wardrobe.d.ts",
+      "default": "./dist/sim/wardrobe.js"
+    },
+    "./content/cosmetics": {
+      "types": "./dist/content/cosmetics.d.ts",
+      "default": "./dist/content/cosmetics.js"
     }
   },
   "scripts": {
