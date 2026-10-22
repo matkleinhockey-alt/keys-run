@@ -18,8 +18,10 @@
  *
  * ## Draw calls (measured in apps/client/test/capture-town.mjs, reported with the commit)
  * solid + neon + glow + flashA + flashB + 4 screens + signs + floor + ceiling + fountain water = 13,
- * plus one mesh per person (a person is 15-20 meshes; the crowd is therefore built only when the
- * camera first comes near, and hidden unless the camera is inside the building or at its door).
+ * plus three for the aquarium wall's fish, their tails and its glass (casino-aquarium.ts — the tank
+ * itself is in the batches above and so is free), plus one mesh per person (a person is 15-20
+ * meshes; the crowd is therefore built only when the camera first comes near, and hidden unless the
+ * camera is inside the building or at its door).
  *
  * ## Why the people are not in world/town.ts's `NPCS`
  * `NPCS` is the street's cast and `people.ts` (another agent's file) turns each `NpcLook` into a
@@ -35,6 +37,7 @@ import { Zf } from './props.js';
 import type { LightSource } from './build.js';
 import type { Interior } from './interiors.js';
 import { makeCasinoPerson, type CasinoPerson } from './casino-people.js';
+import { buildAquarium } from './casino-aquarium.js';
 import { paintSymbol } from '../../game/casino/art.js';
 
 const GOLD = 0xe0b34a, CYAN = 0x35e0ff, PINK = 0xff3fa4, LIME = 0x7dff8a, AMBER = 0xffb23f, VIOLET = 0x8a3cff;
@@ -363,6 +366,9 @@ export function buildCasinoInterior(lot: Lot, kit: TownKit): Interior {
     glow.pool(fx, y0 + 0.08, fz, 6.5, CYAN);
   }
 
+  // ---- the aquarium wall (its own module: the fish in it are animated, everything else is batched here)
+  const aquarium = buildAquarium(group, box('casino-aquarium'), y0, solid, neonB, glow);
+
   // ---- pillars with neon rings, and potted palms because the carpet needs something living to argue with
   for (const id of ['casino-pillar-w', 'casino-pillar-e']) {
     const p = box(id);
@@ -432,6 +438,10 @@ export function buildCasinoInterior(lot: Lot, kit: TownKit): Interior {
       const ph = Math.floor(t * 3) % 2 === 0;
       fa.visible = ph; fb.visible = !ph;
       const near = inside(cam, 3) || (Math.abs(cam.x - lot.door) < 14 && -cam.z > lot.v0 - 16 && -cam.z <= lot.v0 + 3);
+      // the tank swims only while somebody is in the room to see it; the shell is batched and costs
+      // nothing whether it moves or not, and the fish are a closed form of `t`, so they are in the
+      // right place the frame the player walks back in rather than resuming where they left off
+      if (near) aquarium.update(t);
       if (near && !people) {
         people = CASINO_NPCS.map((n) => makeCasinoPerson(n, PAD_Y));
         for (const p of people) {
@@ -460,6 +470,7 @@ export function buildCasinoInterior(lot: Lot, kit: TownKit): Interior {
       }
     },
     dispose() {
+      aquarium.dispose();
       geos.forEach((g) => g.dispose()); mats.forEach((m) => m.dispose()); texs.forEach((tx) => tx.dispose());
       people?.forEach((p) => p.human.group.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) m.geometry.dispose(); }));
       group.clear();
