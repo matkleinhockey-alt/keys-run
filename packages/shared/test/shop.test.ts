@@ -1,0 +1,116 @@
+/**
+ * Buying things, and what owning them changes. See sim/shop.ts's header for why every effect
+ * collapses into one `Modifiers` bag instead of each system asking about item ids.
+ */
+import { describe, expect, it } from 'vitest';
+import { VENUES } from '../src/content/venues.js';
+import {
+  buy, emptyInventory, modifiersFor, useOne, countOf, has, pruneBuffs, buffActive,
+  NO_MODIFIERS, slotOf, type Inventory,
+} from '../src/sim/shop.js';
+
+const own = (...buys: Array<[keyof typeof VENUES, string]>): Inventory => {
+  let inv = emptyInventory();
+  for (const [v, id] of buys) inv = buy(inv, v, id, 1e6, 0).inventory;
+  return inv;
+};
+
+describe('the shelf', () => {
+  it('every item is for sale, priced, and maps to an effect', () => {
+    for (const v of Object.values(VENUES)) {
+      for (const s of v.sells) {
+        expect(s.status, `${v.id}/${s.id}`).toBe('live');
+        expect(s.price, `${v.id}/${s.id} price`).toBeGreaterThan(0);
+        expect(s.effect.key, `${v.id}/${s.id} effect`).toMatch(/\./);
+      }
+    }
+  });
+
+  it('every gear item actually changes something — no inert purchases', () => {
+    // The failure this catches is a shop item that takes your money and does nothing, which is
+    // worse than one that is honestly greyed out.
+    for (const v of Object.values(VENUES)) {
+      for (const s of v.sells) {
+        if (s.effect.kind !== 'gear') continue;
+        const m = modifiersFor(own([v.id, s.id]), 0);
+        expect(JSON.stringify(m), `${v.id}/${s.id} is inert`).not.toBe(JSON.stringify(NO_MODIFIERS));
+      }
+    }
+  });
+});
+
+describe('buying', () => {
+  it('refuses what you cannot afford, and takes nothing', () => {
+    const r = buy(emptyInventory(), 'dive', 'tank-pony', 10, 0);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('cannot-afford');
+    expect(r.cost).toBe(0);
+    expect(r.inventory).toEqual(emptyInventory());
+  });
+
+  it('refuses to sell the same gear twice', () => {
+    const once = own(['dive', 'fins-long']);
+    expect(buy(once, 'dive', 'fins-long', 1e6, 0).reason).toBe('already-owned');
+  });
+
+  it('does not mutate what it is given', () => {
+    const before = emptyInventory();
+    const snapshot = JSON.stringify(before);
+    buy(before, 'dive', 'fins-long', 1e6, 0);
+    expect(JSON.stringify(before)).toBe(snapshot);
+  });
+
+  it('consumables stack and are spent one at a time', () => {
+    let inv = own(['tackle', 'bait-shrimp']);
+    expect(countOf(inv, 'bait.shrimp')).toBe(12);
+    inv = buy(inv, 'tackle', 'bait-shrimp', 1e6, 0).inventory;
+    expect(countOf(inv, 'bait.shrimp')).toBe(24);
+    inv = useOne(inv, 'bait.shrimp');
+    expect(countOf(inv, 'bait.shrimp')).toBe(23);
+  });
+
+  it('spending a consumable you do not have is a no-op you can detect', () => {
+    const inv = emptyInventory();
+    expect(useOne(inv, 'bait.shrimp')).toBe(inv);
+  });
+
+  it('a cosmetic is worn as soon as it is bought, one per slot', () => {
+    const inv = own(['gifts', 'shirt-hawaiian']);
+    expect(inv.wearing[slotOf('cosmetic.shirt.hawaiian')]).toBe('cosmetic.shirt.hawaiian');
+  });
+});
+
+describe('buffs', () => {
+  it('expire, and a second one re-times rather than stacking', () => {
+    let inv = buy(emptyInventory(), 'diner', 'coffee', 1e6, 0).inventory;
+    expect(buffActive(inv, 'diner.coffee', 100)).toBe(true);
+    expect(buffActive(inv, 'diner.coffee', 10_000)).toBe(false);
+    inv = buy(inv, 'diner', 'coffee', 1e6, 500).inventory;
+    expect(buffActive(inv, 'diner.coffee', 1000)).toBe(true);
+    expect(pruneBuffs(inv, 10_000).buffs).toEqual({});
+  });
+
+  it('drinking is a liability, not a buff', () => {
+    const drunk = modifiersFor(buy(emptyInventory(), 'liquor', 'sixer', 1e6, 0).inventory, 0);
+    expect(drunk.sway).toBeGreaterThan(0);
+    expect(drunk.steadyMul).toBeLessThan(1);
+  });
+});
+
+describe('the dive shop is the reason to go to town', () => {
+  it('a pony bottle more than doubles bottom time, and the kit stacks', () => {
+    expect(modifiersFor(own(['dive', 'tank-pony']), 0).breathMul).toBeGreaterThan(2);
+    const full = modifiersFor(own(['dive', 'tank-pony'], ['dive', 'wetsuit'], ['dive', 'fins-long']), 0);
+    expect(full.breathMul).toBeGreaterThan(2.5);
+    expect(full.swimMul).toBeGreaterThan(1.2);
+  });
+
+  it('owning nothing changes nothing', () => {
+    expect(modifiersFor(emptyInventory(), 0)).toEqual(NO_MODIFIERS);
+  });
+
+  it('gear is permanent — it survives a buff sweep', () => {
+    const inv = pruneBuffs(own(['dive', 'tank-pony']), 1e9);
+    expect(has(inv, 'dive.tank')).toBe(true);
+  });
+});

@@ -6,11 +6,12 @@
  * `world/town.ts`'s lots and looks each venue up here by id; a future server-side shop handler can
  * import the same table, which is why `sells` lives here and not next to the three.js meshes.
  *
- * ## The hook
- * Every `ShelfItem` carries `status: 'planned'` today: nothing is purchasable and the venue panel
- * says so out loud ("stock arriving") instead of faking a transaction. When a currency exists, flip
- * an item to `'live'`, give it an `effect`, and the same panel grows a Buy button — no client
- * rework. `effect.kind` is the system that will consume the purchase:
+ * ## The hook (now wired)
+ * Every `ShelfItem` is `status: 'live'` and really sells: `sim/shop.ts` validates the purchase
+ * against the wallet, puts it in the player's inventory, and collapses everything owned into one
+ * flat `Modifiers` bag that each system reads. Nothing outside sim/shop.ts knows an item id, so
+ * adding stock is: list it here, map its `effect.key` there. `effect.kind` is the system that
+ * consumes the purchase:
  *   - 'gear'       permanently changes the rod / reel / boat (the tackle store)
  *   - 'consumable' a counted item (bait, ice, ammo for the harpoon gun, fuel)
  *   - 'buff'       a timed modifier (a diner breakfast steadies your hands; a bar tab does not)
@@ -55,7 +56,7 @@ export interface Venue {
 }
 
 const item = (id: string, name: string, blurb: string, price: number, kind: EffectKind, key: string): ShelfItem =>
-  ({ id, name, blurb, price, status: 'planned', effect: { kind, key } });
+  ({ id, name, blurb, price, status: 'live', effect: { kind, key } });
 
 export const VENUES: Readonly<Record<VenueId, Venue>> = {
   tackle: {
@@ -142,10 +143,13 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
   dive: {
     id: 'dive', name: 'Scuba Steve\'s Dive & Spear', tagline: 'Fills · Gear · Charters',
     greeting: ['Tanks are filled. Your air is your own problem.', 'Dive flag up, always.'],
-    blurb: 'Masks, fins and fills. The diver\'s air supply and mask upgrades will be sold here.',
+    blurb: 'Masks, fins, suits and fills. This is where your bottom time comes from — a pony bottle more than doubles it, and the fins and suit stretch what you already have.',
     sells: [
-      item('mask-wide', 'Wide-view mask', 'A little more peripheral vision.', 90, 'gear', 'dive.mask'),
-      item('fins-long', 'Long-blade freediving fins', 'Faster swim, longer kick.', 140, 'gear', 'dive.fins'),
+      item('mask-wide', 'Wide-view mask', 'A little more peripheral vision down there.', 90, 'gear', 'dive.mask'),
+      item('fins-long', 'Long-blade freediving fins', 'Faster swim, and less air burned per metre.', 140, 'gear', 'dive.fins'),
+      item('wetsuit', '3 mm shorty wetsuit', 'Warmth is air. Shivering burns it faster than swimming does.', 160, 'gear', 'dive.wetsuit'),
+      item('tank-pony', 'Slung pony bottle and reg', 'The big one: more than twice as long on the bottom.', 900, 'gear', 'dive.tank'),
+      item('fill', 'Air fill', 'Tops the bottle back up. Steve will do it while you wait.', 12, 'consumable', 'dive.fill'),
     ],
     enterable: false,
   },
