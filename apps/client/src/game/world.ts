@@ -1324,6 +1324,9 @@ export function initWorld(wrap: HTMLElement): World {
     poolStats: fishWorld.debugPoolStats,
     stats: () => fishWorld.stats,
     blowCount: fishWorld.debugBlowCount,
+    /** Verification-only: where the three gold bluefin are. Finding them is the whole point, so
+     * nothing in normal play reads this. */
+    legend: fishWorld.debugLegend,
     /** Verification-only: the real per-fish spear capsules `getSpearTargets` builds, exposed
      * directly so a screenshot script can confirm a capsule's (ax,ay,az)-(bx,by,bz) midpoint lands
      * on the same point a rendered fish occupies, instead of taking the alignment on faith. No

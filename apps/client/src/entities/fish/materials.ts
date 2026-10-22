@@ -44,6 +44,13 @@ function pbrParamsFor(key: string, V: CreatureVis): PbrParams {
   // whale) — less glossy than a dolphin's rubbery sheen, no iridescence at all.
   if (V.kind === 'whale') return { roughness: 0.42, metalness: 0.03, iridescence: 0, iridescenceIOR: 1.3 };
   if (MATTE.has(key)) return { roughness: 0.68, metalness: 0.05, iridescence: 0.02, iridescenceIOR: 1.3 };
+  // The gold bluefin is the only thing in the water that is meant to look like treasure: near
+  // mirror-smooth, properly metallic, and iridescent enough to flare when it turns. Every other
+  // shiny fish is a wet animal; this one is a bar of gold that swims.
+  // Metalness deliberately moderate, not 0.92: a near-pure metal underwater reflects the water
+  // and comes out blue, which is the opposite of the brief. Enough to glint, low enough that its
+  // own gold albedo (and the emissive term below) is what you actually see.
+  if (key === 'goldbluefin') return { roughness: 0.14, metalness: 0.45, iridescence: 0.8, iridescenceIOR: 1.8 };
   if (SHINY.has(key) || V.kind === 'tuna') return { roughness: 0.22, metalness: 0.35, iridescence: 0.55, iridescenceIOR: 1.45 };
   return { roughness: 0.35, metalness: 0.22, iridescence: 0.18, iridescenceIOR: 1.35 };
 }
@@ -70,6 +77,19 @@ export function createFishMaterial(key: string, V: CreatureVis, vat: VatBake, uS
     iridescenceIOR: pbr.iridescenceIOR,
     iridescenceThicknessRange: [100, 380],
   });
+  // THE GOLD BLUEFIN carry their own light.
+  //
+  // Metal and albedo both lose to the water: the extinction model eats red at 0.45/m, so by the
+  // time a gold fish is 10 m away through seawater its red channel is down to about half a
+  // percent — and a metal surface underwater reflects the water, which is blue-green. The first
+  // capture of these came out pale teal, which is physically right and completely defeats the
+  // point of them. An emissive term is the only thing that survives, because it is the fish's own
+  // colour rather than the water's light reflected off it. It still attenuates with distance,
+  // which is what keeps them a glint you have to get close to rather than a beacon.
+  if (key === 'goldbluefin') {
+    mat.emissive = new THREE.Color(0xffb52e);
+    mat.emissiveIntensity = 1.15;
+  }
   // (no `material.extensions.derivatives` flag needed: r186 dropped WebGL1 entirely, and
   // dFdx/dFdy — used below for the derivative-based normal bump — are core GLSL ES3/WebGL2.)
 

@@ -305,6 +305,40 @@ export function tryRoamCell(seed: number, cellX: number, cellZ: number): RoamSpa
   return { type, V, x, z, heading, members };
 }
 
+/**
+ * THE LEGEND SCHOOL: the one school of gold bluefin in the world.
+ *
+ * Built once, by hand, rather than drawn from a zone table. Every other school in this file is
+ * placed by a per-cell hash, which makes "how often do you meet one" a weight — and a weight small
+ * enough to make three fish rare also makes them appear and disappear as you cross chunk
+ * boundaries, which is the opposite of a thing that is always somewhere. These exist continuously,
+ * wander the whole chart, and are where they are because of where they have swum.
+ *
+ * Deterministic from the world seed: the same world starts them in the same place, so "where are
+ * they" is a fact about the world and not about when you happened to load it.
+ */
+export function instantiateLegend(seed: number, type: string, V: CreatureVis): SchoolState | null {
+  // Somewhere in open water, found by walking a deterministic sequence of candidate points rather
+  // than clamping — a clamped point lands on the chart's edge, and the edge is where nobody looks.
+  for (let i = 0; i < 64; i++) {
+    const x = WB.x0 + hashCell(seed, 7717, i, SALT.ROAM_OFFSET_X) * (WB.x1 - WB.x0);
+    const z = WB.z0 + hashCell(seed, 7717, i, SALT.ROAM_OFFSET_Z) * (WB.z1 - WB.z0);
+    const d = depthAt(x, z);
+    if (d < Math.max(V.dMin, 14) || shoreInfo(x, z).d < 60) continue;
+    const heading = hashCell(seed, 7717, i, SALT.ROAM_HEADING) * Math.PI * 2;
+    return {
+      id: `legend:${type}`,
+      type,
+      cx: x, cz: z, heading,
+      phase: heading * 3.7, vx: 0, vz: 0, turnRate: 0, turn: 0, flee: 0, fleeHeading: heading,
+      bowRide: 0, glide: 0, dive: 0, diveTimer: 9, diveTarget: 0,
+      anchor: null, resident: false,
+      members: buildMembers(seed, 7717, i, V, V.school[0], x, z),
+    };
+  }
+  return null;
+}
+
 let roamCounter = 0;
 export function instantiateRoamer(spawn: RoamSpawn): SchoolState {
   roamCounter = (roamCounter + 1) % 1_000_000;

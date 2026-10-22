@@ -21,6 +21,7 @@ import {
   chunkOf, chunkKey, residentsForChunk, instantiateResident,
   tryRoamCell, instantiateRoamer, ROAM_CELL, ROAM_MIN_R, ROAM_MAX_R, ROAM_TARGET, DORMANT_TTL_S,
   nearFieldForCell, instantiateNearField, nearCellOf, nearKey, NEAR_CELL, NEAR_RADIUS,
+  instantiateLegend,
   wreckSchoolsFor, instantiateWreckSchool,
 } from './spawn.js';
 import { wrecksFor, WRECK_RESIDENTS } from '@keysrun/shared/world/wrecks';
@@ -138,6 +139,10 @@ export interface FishWorld {
   /** Verification-only: per-species-pool draw-call/triangle accounting, isolated from the rest of
    * the scene. */
   debugPoolStats(): Array<{ type: string; lod: string; triPerInstance: number; instances: number; capacity: number }>;
+  /** VERIFICATION ONLY: where the gold bluefin are right now, or null if the world could not
+   * place them. They are the one thing in the game you are meant to have to FIND, so this exists
+   * for harnesses and is not reachable in normal play. */
+  debugLegend(): { type: string; x: number; z: number; count: number } | null;
   /** Verification-only: running count of 'blow' SchoolEvents consumed since world creation — lets
    * a screenshot script (test/capture-mammals-screenshots.mjs) confirm a whale has actually blown
    * at least once instead of guessing from a screenshot whether it just hasn't happened yet. */
@@ -176,6 +181,17 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
   // dropped when it leaves. Pure per wreck, so a rebuild is the same fish.
   const wreckSchools = new Map<string, SchoolState[]>(); // wreck id -> its schools
   const roamers = new Map<string, SchoolState>(); // id -> active roamer
+  /**
+   * The one school of gold bluefin in the world (spawn.ts's `instantiateLegend`).
+   *
+   * Deliberately NOT in `roamers`: the roamer housekeeping retires anything that drifts out of
+   * range and recycles the slot, which would quietly delete the only three of these that exist.
+   * It is stepped every frame no matter how far away it is — three fish is nothing, and the
+   * whole point is that they are always somewhere, getting on with it, whether or not anyone is
+   * watching. A school that only moves while you can see it is not roaming the map, it is
+   * waiting for you.
+   */
+  const legend: SchoolState | null = instantiateLegend(seed, 'goldbluefin', VIS.goldbluefin);
   const dormant = new Map<string, DormantEntry>(); // id -> frozen roamer
 
   // Whale blow/spout visual — see spout.ts. One shared effect pool for the whole fish world,
@@ -375,6 +391,7 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
     for (const state of nearField.values()) runSchool(state);
     for (const list of wreckSchools.values()) for (const state of list) runSchool(state);
     for (const state of roamers.values()) runSchool(state);
+    if (legend) runSchool(legend);
 
     let draws = 0, triangles = 0;
     for (const pool of touched) {
@@ -431,6 +448,7 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
     for (const s of nearField.values()) out.push(row(s, true));
     for (const list of wreckSchools.values()) for (const s of list) out.push(row(s, true));
     for (const s of roamers.values()) out.push(row(s, false));
+    if (legend) out.push(row(legend, false));
     return out;
   }
 
@@ -576,11 +594,17 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
       if (dx * dx + dz * dz > schoolR2) continue;
       pushSchoolTargets(state, x, y, z, radius, out);
     }
+    // The gold bluefin are deliberately absent from here. `pushSchoolTargets` sizes a capsule from
+    // `SPECIES[type]` and bails on a species it does not know, and they have no SPECIES entry —
+    // because a SPECIES entry IS the rod-fishing table, and test/catchable.test.ts holds the line
+    // that nothing in it may be `catchable: false`. They are a sighting, like the whale shark and
+    // the giant manta: no rod, no spear, nothing to do but see them.
     return out;
   }
 
   return {
     group, update, setCamera, stats, spearTargetsNear,
+    debugLegend: () => (legend ? { type: legend.type, x: +legend.cx.toFixed(1), z: +legend.cz.toFixed(1), count: legend.members.length } : null),
     findResidentNear, waterColumnAt, debugActiveSchools, debugPoolStats, debugBlowCount,
   };
 }

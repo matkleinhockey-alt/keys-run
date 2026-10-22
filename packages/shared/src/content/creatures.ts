@@ -219,6 +219,30 @@ export const VIS: Record<string, CreatureVis> = {
   // Cubera snapper — the biggest snapper there is, and a wreck fish. Dark, slab-sided, with the
   // heavy jaw the species is known for.
   cubera:{kind:'fish',len:1.6,h:.52,w:.28,back:'#5a4a46',belly:'#b9a89c',fin:'#3e3330',level:'bottom',speed:.8,school:[1,3],spread:3,dMin:8,dMax:60},
+
+  /**
+   * THE GOLD BLUEFIN. Three giants, over a thousand pounds each, and there is exactly one school
+   * of them in the entire world.
+   *
+   * It appears in NO zone table on purpose. Every other creature here is placed by the
+   * resident/near-field/roamer layers from `ZONE_LIFE`, which means "how often do you meet one"
+   * is a weight. These are placed by hand, once, and then wander the whole chart forever
+   * (entities/fish/index.ts's legend school) — so meeting them is not a dice roll per chunk, it
+   * is a question of where they happen to be when you happen to be there. You go looking, or
+   * they come past you.
+   *
+   * Over a thousand pounds each at this length — a real giant bluefin runs 3 m and 1,000-1,500 lb,
+   * and these are drawn at 3.1 m.
+   *
+   * `catchable: false`, and with no `SPECIES` entry at all. That is not a shortcut: a SPECIES
+   * entry IS the rod-fishing weight/strength table, and test/catchable.test.ts holds the line
+   * that nothing in it may be uncatchable. So they are a sighting, like the whale shark and the
+   * giant manta — there is no rod roll and no spear hit, and no weight is ever displayed because
+   * nothing ever weighs one. Making them hookable is a real piece of work rather than a flag:
+   * a cast table that only offers them when you are actually among them, and a fight tuned an
+   * order of magnitude above anything else in the game.
+   */
+  goldbluefin:{kind:'tuna',tuna:true,len:3.1,h:.84,w:.66,back:'#8a6a1c',belly:'#f6e7a8',fin:'#b8902c',finlet:'#ffd84a',sickle:.46,pattern:'spots',level:'surface',speed:3.4,school:[3,3],spread:5,dMin:6,dMax:1e5,act:'bust',catchable:false},
 };
 
 /** Single source of truth for "can this creature ever be landed" — see `CreatureVis.catchable`'s
@@ -404,4 +428,7 @@ export const SHAPE: Record<string, FishShape> = {
   warsaw:{peak:.4,nose:.5,ped:.34,tail:'round',tl:.15,th:.5,dor:[[.26,.8,.26,'spiny']],anal:[[.64,.82,.26,'round']],pec:.2,belly:1.1},
   // Cubera: a snapper's profile with the jaw carried heavy and forward.
   cubera:{peak:.38,nose:.8,ped:.22,tail:'truncate',tl:.2,th:.62,dor:[[.3,.76,.3,'spiny']],anal:[[.64,.78,.3,'round']],pec:.17,belly:1.02},
+  // Same hull as a bluefin — it IS a bluefin — a little deeper through the shoulder, which is
+  // what a fish that size actually looks like.
+  goldbluefin:{peak:.43,nose:.88,ped:.06,tail:'lunate',tl:.23,th:1.1,dor:[[.3,.4,.42,'tri']],anal:[],pec:.15,finlets:true},
 };
