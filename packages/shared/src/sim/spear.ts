@@ -74,7 +74,47 @@ export const SPEAR_DRAW_MIN_RATE = 0.35;
  * linear speed-vs-distance relationship (`shaftSpeedAtDist` below) — a nice closed-form bonus,
  * not a separate model.
  */
-export const SPEAR_DRAG_K = (0.4 * SPEAR_SPEED) / SPEAR_RANGE; // ≈0.909 / s
+export const SPEAR_DRAG_K = dragKFor(SPEAR_RANGE); // ≈0.556 / s at 18 m
+
+/**
+ * The drag constant for a gun of a given effective range.
+ *
+ * WHY THIS IS A FUNCTION OF RANGE and not a fixed K with a longer cutoff. The long-range band gun
+ * (`spear.long`, +6 m) must extend reach without making the extra reach free. Two designs:
+ *   - Keep K (0.556/s), raise the cutoff to 24 m. REJECTED: it breaks the relationship K was
+ *     defined by. The shaft would arrive at 24 m with 47% of muzzle speed (holdChance 0.34
+ *     against the stock edge's 0.55), so the new band is MORE unreliable than the old edge, and
+ *     inside 18 m the "upgrade" would fly exactly like the stock gun: the item buys a worse
+ *     far band and nothing else.
+ *   - Keep the *relationship* K was defined by: 60% of muzzle speed is lost by the cutoff
+ *     (`K = 0.4 * v / range`, the line above). The long gun's far edge (24 m) is then exactly as
+ *     unreliable as the stock edge (60% of muzzle speed retained, holdChance 0.55: the same
+ *     curve, stretched), and it is strictly better at any *shared* distance (lower K = faster
+ *     shaft = less lead needed; e.g. 18 m in 0.86 s vs 0.92 s). CHOSEN.
+ * So reach grows, the unreliable band moves outward with it, and no distance becomes a sure hit.
+ * `SPEAR_DRAG_K` stays the stock gun's value so everything that imported it is unchanged.
+ */
+export function dragKFor(range: number): number {
+  return (0.4 * SPEAR_SPEED) / range;
+}
+
+/** Largest range any gun can have: the stock 18 m plus the long gun's +6 m. world.ts sizes its
+ * fish query radius from this so the longest legal shot is never clipped. Pinned against
+ * `modifiersFor` by test/gear.test.ts so a shop change that grows the bonus fails loudly. */
+export const SPEAR_RANGE_MAX = SPEAR_RANGE + 6;
+
+/** A spare shaft (see sim/gear.ts `SPARE_SHAFT_RANGE_MUL`) flies this fraction of stock range. */
+export const SPEAR_SPARE_RANGE_MUL = 0.6;
+
+/**
+ * Effective range of the gun given its range bonus and whether it is firing a bought shaft or the
+ * bent spare. Clamped to [stock*spare, SPEAR_RANGE_MAX] so a bad modifier can neither make the
+ * shaft stall inside the muzzle nor outrun the world's query radius.
+ */
+export function spearRangeFor(rangeBonusM: number, spare = false): number {
+  const r = (SPEAR_RANGE + Math.max(0, rangeBonusM)) * (spare ? SPEAR_SPARE_RANGE_MUL : 1);
+  return clamp(r, SPEAR_RANGE * SPEAR_SPARE_RANGE_MUL, SPEAR_RANGE_MAX);
+}
 
 export interface Vec3 { x: number; y: number; z: number }
 
@@ -82,8 +122,9 @@ export interface Vec3 { x: number; y: number; z: number }
  * `SPEAR_DRAG_K`'s doc comment for why this must be evaluated from cumulative elapsed time, never
  * accumulated step-by-step. Not range-clamped; callers clamp to `SPEAR_RANGE` themselves (`stepSpear`
  * does). */
-export function distAtFlightTime(t: number): number {
-  return (SPEAR_SPEED / SPEAR_DRAG_K) * (1 - Math.exp(-SPEAR_DRAG_K * t));
+export function distAtFlightTime(t: number, range: number = SPEAR_RANGE): number {
+  const k = dragKFor(range);
+  return (SPEAR_SPEED / k) * (1 - Math.exp(-k * t));
 }
 
 /**
@@ -94,18 +135,19 @@ export function distAtFlightTime(t: number): number {
  * argument goes non-positive at the shaft's asymptotic maximum range (`v/k`, ~27.5 m — well past
  * `SPEAR_RANGE`), so it is clamped to keep this finite for any input a caller can produce.
  */
-export function timeToDistance(dist: number): number {
-  const maxD = SPEAR_SPEED / SPEAR_DRAG_K;
+export function timeToDistance(dist: number, range: number = SPEAR_RANGE): number {
+  const k = dragKFor(range);
+  const maxD = SPEAR_SPEED / k;
   const frac = clamp(dist / maxD, 0, 0.999);
-  return -Math.log(1 - frac) / SPEAR_DRAG_K;
+  return -Math.log(1 - frac) / k;
 }
 
 /** Instantaneous shaft speed after traveling `dist` meters from the muzzle. Linear in distance —
  * the algebraic consequence of `SPEAR_DRAG_K`'s exponential-in-time decay (substitute `t` out of
  * `v(t)` and `dist(t)`; see that constant's doc comment) — clamped at 0 defensively, though
  * `SPEAR_RANGE`'s hard cutoff means a real shaft never travels far enough to reach it. */
-export function shaftSpeedAtDist(dist: number): number {
-  return Math.max(0, SPEAR_SPEED - SPEAR_DRAG_K * dist);
+export function shaftSpeedAtDist(dist: number, range: number = SPEAR_RANGE): number {
+  return Math.max(0, SPEAR_SPEED - dragKFor(range) * dist);
 }
 
 /**
@@ -201,14 +243,17 @@ export interface ShotState {
    * convenience derived from it. */
   t: number;
   alive: boolean;
+  /** This shot's effective range, m (its own gun's — see `spearRangeFor`). Optional so every
+   * pre-existing literal/fixture means the stock gun; `stepSpear` reads `shot.range ?? SPEAR_RANGE`. */
+  range?: number;
 }
 
 /** legacy-free, net-new: `fire` just normalizes direction and starts the shaft at `dist=0`. The
  * caller is responsible for gating this on `canFire`/consuming a `GunState` reload — this
  * function only knows about the projectile. */
-export function fire(origin: Vec3, dir: Vec3): ShotState {
+export function fire(origin: Vec3, dir: Vec3, range: number = SPEAR_RANGE): ShotState {
   const len = Math.hypot(dir.x, dir.y, dir.z) || 1;
-  return { ox: origin.x, oy: origin.y, oz: origin.z, dx: dir.x / len, dy: dir.y / len, dz: dir.z / len, dist: 0, t: 0, alive: true };
+  return { ox: origin.x, oy: origin.y, oz: origin.z, dx: dir.x / len, dy: dir.y / len, dz: dir.z / len, dist: 0, t: 0, alive: true, range };
 }
 
 /* ------------------------------------------------------------------------------------------ *
@@ -293,6 +338,8 @@ export function assistAim(
 ): AssistResult {
   const cone = opts.cone ?? ASSIST_CONE;
   const strength = clamp(opts.strength ?? ASSIST_STRENGTH, 0, 1);
+  // `range` is both the assist reach and the shaft's ballistic range: the gun that will fire the
+  // shot (long gun, spare shaft) decides how far the lead must be solved for.
   const range = opts.range ?? ASSIST_RANGE;
   // The frame the PLAYER aims in. `origin` is where the shaft physically leaves (the muzzle);
   // `eye` is where the crosshair is measured from (the camera). They are not the same point, and
@@ -326,7 +373,7 @@ export function assistAim(
     if (vx || vy || vz) {
       for (let i = 0; i < 2; i++) {
         const d = Math.hypot(aimX - origin.x, aimY - origin.y, aimZ - origin.z);
-        const tof = timeToDistance(Math.min(d, SPEAR_RANGE));
+        const tof = timeToDistance(Math.min(d, range), range);
         aimX = cx + vx * tof; aimY = cy + vy * tof; aimZ = cz + vz * tof;
       }
     }
@@ -496,7 +543,8 @@ export function stepSpear(
 ): { shot: ShotState; hit: SpearHit | null } {
   if (!shot.alive) return { shot, hit: null };
   const newT = shot.t + dt;
-  const newDist = Math.min(distAtFlightTime(newT), SPEAR_RANGE);
+  const range = shot.range ?? SPEAR_RANGE;
+  const newDist = Math.min(distAtFlightTime(newT, range), range);
   const travel = newDist - shot.dist;
   const p1 = shaftPosition(shot, shot.dist);
   const p2 = shaftPosition(shot, newDist);
@@ -514,14 +562,14 @@ export function stepSpear(
   if (best) {
     const atDist = shot.dist + travel * best.s;
     const point = shaftPosition(shot, atDist);
-    const impactSpeed = shaftSpeedAtDist(atDist);
+    const impactSpeed = shaftSpeedAtDist(atDist, range);
     const held = rng ? rng() < holdChance(impactSpeed) : true;
     return {
       shot: { ...shot, dist: atDist, t: newT, alive: false },
       hit: { id: best.target.id, atDist, point, impactSpeed, held },
     };
   }
-  const alive = newDist < SPEAR_RANGE - 1e-9;
+  const alive = newDist < range - 1e-9;
   return { shot: { ...shot, dist: newDist, t: newT, alive }, hit: null };
 }
 
@@ -541,10 +589,21 @@ export interface SpearFightParams {
   tetherMax: number;
 }
 
-export function spearFightParamsFor(key: string, weight: number): SpearFightParams {
+/** Stock tether, m. */
+export const SPEAR_TETHER_M = 15;
+
+/**
+ * `tetherMul` is `Modifiers.spearTetherMul` (reel-line conversion, x0.6 -> 9 m): the fish can run
+ * only that far before the line stops it, so it is hauled in sooner and spends less of the
+ * diver's breath. It shortens the *fight*, not the odds of the shaft tearing free (that is
+ * tension, which the tether does not touch), so the conversion is a convenience and a breath
+ * saver, not a guaranteed landing. Floor of 4 m keeps a bad multiplier from pinning the fish on
+ * top of the diver, where `dist < 1.2` landing would trigger without any hauling.
+ */
+export function spearFightParamsFor(key: string, weight: number, tetherMul = 1): SpearFightParams {
   const S = SPECIES[key];
   const sizeT = clamp((weight - S.min) / (S.max - S.min), 0, 1);
-  return { key, weight, str: S.str * (0.8 + 0.55 * sizeT), tetherMax: 15 };
+  return { key, weight, str: S.str * (0.8 + 0.55 * sizeT), tetherMax: Math.max(4, SPEAR_TETHER_M * tetherMul) };
 }
 
 export type SpearFightOutcome = 'fighting' | 'landed' | 'tornFree';

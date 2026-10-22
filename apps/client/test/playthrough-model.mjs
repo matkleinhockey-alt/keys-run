@@ -25,6 +25,7 @@ import { zoneAt, depthAt, landH, nearHump } from '@keysrun/shared/world/depth';
 import { chainZ } from '@keysrun/shared/world/chain';
 import { chooseFish, fightParamsFor, startFight, stepFight } from '@keysrun/shared/sim/fight';
 import { TACKLE, tackleById } from '@keysrun/shared/content/tackle';
+import { emptyInventory, modifiersFor } from '@keysrun/shared/sim/shop';
 import { airBurnRate, AIR_MAX, SURFACE_REFILL_RATE } from '@keysrun/shared/sim/diver';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -126,6 +127,11 @@ const anyZone = new Set(ZONES.flatMap((z) => [...speciesOf(z)]));
 const CAST_M = +(process.env.CAST_M ?? 35);
 const TACKLE_ID = process.env.TACKLE ?? 'mono30';
 const TK = tackleById(TACKLE_ID);
+// Shop gear, e.g. GEAR=rod.heavy,reel.lever FLUORO=1. Goes through the real modifiersFor, so this
+// measures exactly what the game applies (sim/shop.ts), not a re-implementation of it.
+const GEAR_KEYS = (process.env.GEAR ?? '').split(',').filter(Boolean);
+const GEAR_MODS = modifiersFor({ ...emptyInventory(), gear: GEAR_KEYS }, 0);
+const GEAR = { lineMul: GEAR_MODS.lineMul, reelMul: GEAR_MODS.reelMul, fluoro: !!process.env.FLUORO };
 const DT = 1 / 30;
 const withDrag = (d) => (typeof d === 'number' ? { drag: d } : d);
 
@@ -167,7 +173,7 @@ const POLICIES = {
 function fight(key, weight, dragSpec, bob, policyName = 'angler', tk = TK) {
   const pol = POLICIES[policyName];
   const { drag: base } = withDrag(dragSpec);
-  const params = fightParamsFor(key, weight, base, tk);
+  const params = fightParamsFor(key, weight, base, tk, GEAR);
   let s = startFight(params, bob.x + CAST_M, bob.z, rng);
   const env = { boatX: bob.x, boatZ: bob.z };
   let t = 0, held = true, nextDecide = 0, drag = base, peak = 0;
@@ -297,7 +303,7 @@ const tackleView = {};
   }
 }
 if (process.env.FIGHT_ONLY) {
-  console.log(JSON.stringify({ CAST_M, TACKLE_ID, fightByPolicy, fightByDrag, fightByZoneTackle, dragSummary, dragHistogram, speciesDrag, tackleView }, null, 1));
+  console.log(JSON.stringify({ CAST_M, TACKLE_ID, GEAR_KEYS, GEAR, fightByPolicy, fightByDrag, fightByZoneTackle, dragSummary, dragHistogram, speciesDrag, tackleView }, null, 1));
   process.exit(0);
 }
 // ---- D. Session simulation: what does N minutes of play look like, and is anything new? ----

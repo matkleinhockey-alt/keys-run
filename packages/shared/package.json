@@ -117,6 +117,10 @@
     "./sim/steady": {
       "types": "./dist/sim/steady.d.ts",
       "default": "./dist/sim/steady.js"
+    },
+    "./sim/gear": {
+      "types": "./dist/sim/gear.d.ts",
+      "default": "./dist/sim/gear.js"
     }
   },
   "scripts": {

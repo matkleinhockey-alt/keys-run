@@ -70,7 +70,17 @@ export interface ChooseFishOpts {
   hotspot: boolean;
   /** legacy `nearHump(F.bob.x,F.bob.z)` — boosts amberjack/blackfin/kingfish near an offshore hump. */
   hump: Hump | null;
+  /** Rigged-bait odds multiplier for the rarer end of the zone table (`Modifiers.rareMul`, here
+   * only while a ballyhoo is on the hook). 1/undefined = the table as it always was. */
+  rareMul?: number;
 }
+
+/** A table entry counts as the "rarer end" when its raw odds are at most this. Absolute rather
+ * than relative to the table's max on purpose: Offshore's top entry is 6 (mahi) and its rare end
+ * (sailfish 2, marlin 1.3, swordfish 1.1, bluefin .4) sits below 2, and Creek's whole table is
+ * 2..5, so a relative cut would have made snook "rare" in a creek. Measured on Offshore: 2 puts
+ * wahoo, sailfish and the marlins on the boosted side and leaves mahi/blackfin/skipjack alone. */
+export const RARE_ODDS_MAX = 2;
 
 /**
  * legacy `pickSpecies(zone,hs)` (index.html:2650-2653). `zone` takes `Zone | (string & {})` —
@@ -92,6 +102,10 @@ export function pickSpecies(zone: Zone | (string & {}), bob: { x: number; z: num
   const weighted: Array<[string, number]> = tbl.filter(([k]) => isCatchable(k)).map(([k, v]) => {
     let x = opts.hotspot && v < 2.5 ? v * 2.5 : v;
     x *= BIG[k] ? 1 + 4 * f * BIG[k] : 1 - 0.45 * f;
+    // Ballyhoo skews the roll, it never replaces it: the rarer end is multiplied, everything else
+    // is untouched, so a 2x bait roughly doubles the share of wahoo/sailfish/marlin without
+    // making an offshore cast a guaranteed billfish (tested in gear.test.ts).
+    if (opts.rareMul && v <= RARE_ODDS_MAX) x *= opts.rareMul;
     if (opts.hump && (k === 'amberjack' || k === 'blackfin' || k === 'kingfish')) x *= 4;
     return [k, x];
   });
@@ -241,7 +255,44 @@ export function scaledLenM(key: string, weight: number): number {
   return VIS[key].len * scale;
 }
 
-export function fightParamsFor(key: string, weight: number, drag: number, tackle: Tackle = tackleById(STARTER_TACKLE)): FightParams {
+/**
+ * What owned gear and a spent consumable change in a fight. A structural subset of shop.ts's
+ * `Modifiers` (so a whole bag can be passed straight in) plus the one consumable effect that
+ * belongs to the fight and not to the cast: a fluorocarbon leader.
+ */
+export interface FightGear {
+  /** Multiplies main-line AND leader rating (heavy rod, lever reel's stiffer blank). */
+  lineMul?: number;
+  /** Multiplies unloaded retrieve speed (lever-drag two-speed). */
+  reelMul?: number;
+  /** A fluorocarbon leader is on this rig (spent at the cast; see sim/gear.ts). */
+  fluoro?: boolean;
+}
+
+/** Fraction of leader chafe rate that remains with a fluoro leader, by fish kind. Toothy fish are
+ * the shelf's stated purpose ("fewer bite-offs on toothy fish"), so they get the big cut;
+ * everyone else a small one (fluoro also resists rock and mangrove). It only slows the chafe
+ * clock; it never touches snap/pull/slack/spool, so it cannot make a fight safe. */
+export const FLUORO_ROUGH_MUL_TOOTHY = 0.5;
+export const FLUORO_ROUGH_MUL_OTHER = 0.85;
+
+/**
+ * Applies gear to a tackle outfit. Done on the Tackle itself, BEFORE anything is derived, so
+ * `ratingLb`, `Dn = dragFraction * lineLb / ratingLb`, `pullN` and the fray clock all see one
+ * consistent outfit. Scaling only the rating would have skewed Dn, i.e. made the drag setting
+ * mean something different on a heavy rod; scaling line and leader together keeps `Dn` (the
+ * clutch as a fraction of rating) identical, so the drag trade-off is untouched and gear only
+ * moves how many line-ratings the fish pulls (`pullN`). That is what stops a heavy rod from
+ * becoming a drag-5 cheat code.
+ */
+export function applyGear(tackle: Tackle, gear?: FightGear): Tackle {
+  const lm = gear?.lineMul ?? 1, rm = gear?.reelMul ?? 1;
+  if (lm === 1 && rm === 1) return tackle;
+  return { ...tackle, lineLb: tackle.lineLb * lm, leaderLb: tackle.leaderLb * lm, reelMs: tackle.reelMs * rm };
+}
+
+export function fightParamsFor(key: string, weight: number, drag: number, baseTackle: Tackle = tackleById(STARTER_TACKLE), gear?: FightGear): FightParams {
+  const tackle = applyGear(baseTackle, gear);
   const S = SPECIES[key];
   const sizeT = (weight - S.min) / (S.max - S.min);
   const str = S.str * (0.8 + 0.55 * sizeT);
@@ -260,7 +311,8 @@ export function fightParamsFor(key: string, weight: number, drag: number, tackle
     tackle, ratingLb, forceLb, pullN: forceLb / ratingLb,
     endure: 0.8 + 0.5 * Math.log10(1 + weight),
     hookRisk: 1 + (S.jump ? 0.3 : 0) + (SOFT_MOUTH.has(key) ? 0.4 : 0),
-    rough: TOOTHY.has(key) ? 2.4 : sounder ? 1.6 : 1,
+    rough: (TOOTHY.has(key) ? 2.4 : sounder ? 1.6 : 1)
+      * (gear?.fluoro ? (TOOTHY.has(key) ? FLUORO_ROUGH_MUL_TOOTHY : FLUORO_ROUGH_MUL_OTHER) : 1),
   };
 }
 

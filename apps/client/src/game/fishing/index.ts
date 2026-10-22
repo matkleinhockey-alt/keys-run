@@ -28,6 +28,10 @@ export interface FishingSystemDeps {
   particles: ParticleSystem;
   boatInput: BoatInput;
   getBoat(): BoatState;
+  /** Player inventory port — see update.ts's `FishingDeps.gear`. */
+  gear?: FishingDeps['gear'];
+  /** Equipped outfit; omitted = the starter rung. */
+  getTackle?: FishingDeps['getTackle'];
   /** Frenzy/weedline/rig lookup (life.spots); omitted by harnesses with no life systems. */
   spots?: SpotQuery;
   onLanded(fish: LandedFish): void;
@@ -70,6 +74,8 @@ export function createFishing(deps: FishingSystemDeps): FishingSystem {
     onActionWhileCaught: deps.onActionWhileCaught,
     tags: deps.tags,
     getModifiers: deps.getModifiers,
+    gear: deps.gear,
+    getTackle: deps.getTackle,
   });
   const unbindInput = bindFishingInput(logic, deps.fp, deps.getBoat, deps.isSuspended);
 

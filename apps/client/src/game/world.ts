@@ -52,7 +52,7 @@ import { updateDiverCamera } from '../entities/diver/camera.js';
 import { updateDiverHud, showDiverHud, clearBlackoutOverlay } from '../entities/diver/hud.js';
 import { createLandSystem } from '../entities/land/index.js';
 
-import { SPEAR_RANGE, closestDistSqSegmentSegment } from '@keysrun/shared/sim/spear';
+import { SPEAR_RANGE_MAX, closestDistSqSegmentSegment } from '@keysrun/shared/sim/spear';
 import { createSpeargun, type DiverAimInput, type SpearTarget } from '../entities/speargun/index.js';
 import { bindSpeargunInput } from '../entities/speargun/input.js';
 
@@ -83,7 +83,7 @@ const DT = 1 / 30;
  * the edge of range is never clipped just because the query origin (the diver body, not the
  * gun's muzzle — same small gap `debugSyntheticTarget`'s own comment calls out) sits a little
  * behind the real shaft origin. */
-const SPEAR_QUERY_RADIUS = SPEAR_RANGE + 6;
+const SPEAR_QUERY_RADIUS = SPEAR_RANGE_MAX + 6; // MAX: the long gun reaches 24 m, not 18
 /** How close (m) a *missed* shaft has to pass a real fish to spook it and its school (Problem 2 —
  * see the near-miss detection in `frame()`'s fixed-step loop, below). Added on top of the fish's
  * own capsule radius, same shape as `SPEAR_QUERY_RADIUS`'s margin above the gun's own `ax..bz`
@@ -816,13 +816,14 @@ export function initWorld(wrap: HTMLElement): World {
         if (spearActiveNow && speargun.getFightState()) shotHadFight = true;
         if (!spearActiveNow && prevSpearActive && !shotHadFight) {
           const p1 = { x: shotOx, y: shotOy, z: shotOz };
-          const p2 = { x: shotOx + shotDx * SPEAR_RANGE, y: shotOy + shotDy * SPEAR_RANGE, z: shotOz + shotDz * SPEAR_RANGE };
+          const shotRange = speargun.lastShotRangeM(); // this shaft's own range (long gun / spare)
+          const p2 = { x: shotOx + shotDx * shotRange, y: shotOy + shotDy * shotRange, z: shotOz + shotDz * shotRange };
           // Caelen is in the same ray's way (entities/life/caelen.ts's `resolveSpearShot`): he is
           // deliberately NOT a `SpearTarget`, so aim assist never helps you hit him and the gun
           // never tries to start a fight with a seagull — he just owns a capsule and an opinion,
           // and this is the one place a resolved shaft segment is already in hand.
           life.caelenShot(p1, p2);
-          for (const fish of fishWorld.spearTargetsNear(shotOx, shotOy, shotOz, SPEAR_RANGE + SPEAR_NEAR_MISS_MARGIN)) {
+          for (const fish of fishWorld.spearTargetsNear(shotOx, shotOy, shotOz, shotRange + SPEAR_NEAR_MISS_MARGIN)) {
             const { distSq } = closestDistSqSegmentSegment(
               p1, p2, { x: fish.ax, y: fish.ay, z: fish.az }, { x: fish.bx, y: fish.by, z: fish.bz },
             );
