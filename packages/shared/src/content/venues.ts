@@ -54,6 +54,22 @@ export interface Venue {
   sells: readonly ShelfItem[];
   /** True when the game offers a door you can walk through; false = exterior and counter only. */
   enterable: boolean;
+  /**
+   * What this place puts on the back of a banner plane (entities/life/banner-plane.ts).
+   *
+   * Its own line rather than a slice of `tagline`, because a banner is read at 200 m by someone
+   * squinting into the sun: a handful of words, no punctuation to parse, and the name has to
+   * survive being the only thing anyone actually takes in. Taglines are three bullet-separated
+   * clauses and turn to mush at that size — the first attempt did slice them and the Stop-N-Go's
+   * banner read "GAS SNACKS LIVE BAIT (MAYBE)".
+   *
+   * Uppercase is applied at draw time, not here, so the copy stays readable in source.
+   *
+   * Every line names the business and then earns its forty metres of canvas. A banner that is
+   * only a joke stops being an advert, and one that is only an advert is forty metres of nothing
+   * — so each is the shop's name, a separator, and a line about how your fishing is going.
+   */
+  banner: string;
 }
 
 /**
@@ -115,6 +131,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       item('leader-fluoro', '80 lb fluorocarbon leader', 'Fewer bite-offs on toothy fish.', 22, 'consumable', 'leader.fluoro'),
     ],
     enterable: true,
+    banner: 'hook line & sinker · blame the lure',
   },
   guns: {
     id: 'guns', name: 'Deadeye Guns & Ammo', tagline: 'Firearms · Ammunition · Spearguns · Pawn',
@@ -143,6 +160,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       item('flare', 'Marine flare kit', 'Three parachute flares, fired from the pistol grip (Z). Required by the Coast Guard, best after sunset.', 38, 'consumable', 'safety.flare'),
     ],
     enterable: true,
+    banner: 'deadeye guns · the fish started it',
   },
   bar: {
     id: 'bar', name: 'The Rusty Anchor', tagline: 'Cold beer · Hot wings · No shirt, no problem',
@@ -160,6 +178,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       item('shot-key-lime', 'Key lime shot', 'Local colour.', 8, 'buff', 'bar.shot'),
     ],
     enterable: true,
+    banner: 'rusty anchor · cold beer hot lies',
   },
   club: {
     id: 'club', name: 'Pink Flamingo Cabaret', tagline: 'Live entertainment · Cocktails · Under new management',
@@ -178,6 +197,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       item('tip', 'Tip jar', 'The band and the staff still get paid. Tip them.', 10, 'sink', 'club.tip'),
     ],
     enterable: true,
+    banner: 'pink flamingo · the tarpon dance too',
   },
   casino: {
     id: 'casino', name: 'Gaff & Gill Casino', tagline: 'Slots · Tarpon · Free coffee, tipped',
@@ -193,6 +213,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
     // machines settle through game/casino/ (sim/slots.ts), never through sim/shop.ts.
     sells: [],
     enterable: true,
+    banner: 'gaff & gill · looser than your drag',
   },
   diner: {
     id: 'diner', name: 'Salty Dog Diner', tagline: 'Breakfast all day · Fresh catch · Pie',
@@ -209,6 +230,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       item('pie', 'Key lime pie', 'Morale. The gull will still call you a loser.', 7, 'buff', 'diner.pie'),
     ],
     enterable: true,
+    banner: 'salty dog · we cook what you missed',
   },
   dive: {
     id: 'dive', name: 'Scuba Steve\'s Dive & Spear', tagline: 'Fills · Gear · Charters',
@@ -230,6 +252,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       item('fill', 'Air fill', 'Tops the bottle back up. Steve will do it while you wait.', 12, 'consumable', 'dive.fill'),
     ],
     enterable: true,
+    banner: 'scuba steve · meet the one that got away',
   },
   liquor: {
     id: 'liquor', name: 'Cheap Beer & Lotto', tagline: 'Wine · Spirits · Scratch-offs',
@@ -240,6 +263,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       item('scratch', 'Scratch-off ticket', 'A tiny chance at a big number.', 5, 'sink', 'liquor.scratch'),
     ],
     enterable: true,
+    banner: 'cheap beer & lotto · colder than the bite',
   },
   gifts: {
     id: 'gifts', name: 'Conch Republic Gifts', tagline: 'T-shirts · Shells · Hot sauce',
@@ -261,6 +285,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       item('flag-loser', 'White flag', 'The seagull has a point. Fly it first.', 9, 'cosmetic', 'cosmetic.flag.loser'),
     ],
     enterable: true,
+    banner: 'conch republic · proof you went fishing',
   },
   pawn: {
     id: 'pawn', name: 'Keys Pawn & Loan', tagline: 'We buy gold · We buy tackle · No questions',
@@ -268,6 +293,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
     blurb: 'Used rods, used reels, used regrets. Sell back gear you have outgrown.',
     sells: [item('used-rod', 'Used spinning rod', 'Cheap and cheerful.', 40, 'gear', 'rod.used')],
     enterable: true,
+    banner: 'keys pawn · we buy the rod you snapped',
   },
   laundromat: {
     id: 'laundromat', name: 'Suds & Sun Coin Laundry', tagline: 'Wash · Dry · Fold',
@@ -278,6 +304,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       item('sock', 'Lost-and-found sock', 'A mystery sock. Eight to collect. Nothing happens.', 3, 'sink', 'laundromat.sock'),
     ],
     enterable: true,
+    banner: 'suds & sun · gets the fish smell out',
   },
   icecream: {
     id: 'icecream', name: 'Cone Zone Ice Cream', tagline: 'Soft serve · Key lime · Shakes',
@@ -285,6 +312,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
     blurb: 'Soft-serve in a pastel building shaped like a cone, if you squint.',
     sells: [item('cone', 'Key lime cone', 'Cool off.', 5, 'buff', 'icecream.cone')],
     enterable: true,
+    banner: 'cone zone · key lime beats a skunked day',
   },
   motel: {
     id: 'motel', name: 'Sunset Motor Lodge', tagline: 'Vacancy · Color TV · Ice machine',
@@ -292,6 +320,7 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
     blurb: 'A two-storey roadside motel with a neon sign that has never once said NO VACANCY. A night here will skip the clock to sunset and save.',
     sells: [item('night', 'One night, room 7', 'Skips to sunset.', 79, 'service', 'motel.night')],
     enterable: true,
+    banner: 'sunset lodge · sleep it off the fish keep',
   },
   convenience: {
     id: 'convenience', name: 'Stop-N-Go', tagline: 'Gas · Snacks · Live bait (maybe)',
@@ -307,5 +336,6 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
       item('snacks', 'Chips and a soda', 'Morale.', 4, 'buff', 'conv.snacks'),
     ],
     enterable: true,
+    banner: 'stop-n-go · live bait liveliness varies',
   },
 };

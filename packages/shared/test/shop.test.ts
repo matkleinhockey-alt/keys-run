@@ -181,3 +181,37 @@ describe('the dive shop is the reason to go to town', () => {
     expect(has(inv, 'dive.tank')).toBe(true);
   });
 });
+
+describe('the banner planes', () => {
+  /** entities/life/banner-plane.ts's atlas, and its per-slogan instance budget. */
+  const ATLAS = /^[A-Z0-9&\-· ]+$/;
+  const MAX_LETTERS = 44;
+
+  it('every venue has a banner, because the plane picks one at random', () => {
+    for (const v of Object.values(VENUES)) {
+      expect(v.banner, `${v.id} has no banner slogan`).toBeTruthy();
+    }
+  });
+
+  it('every slogan fits the banner and the glyph atlas', () => {
+    // The plane draws one quad per character from a fixed-size instanced mesh and one shared
+    // atlas. A slogan longer than the mesh is silently truncated mid-word, and a character the
+    // atlas has no cell for is dropped to a space — both are the kind of thing nobody notices
+    // until a screenshot says "KEYS PAWN WE BUY THE ROD YOU SNAP".
+    for (const v of Object.values(VENUES)) {
+      expect(v.banner.length, `${v.id}'s banner is too long to fit`).toBeLessThanOrEqual(MAX_LETTERS);
+      expect(v.banner.toUpperCase(), `${v.id}'s banner uses a character the atlas has no glyph for`).toMatch(ATLAS);
+    }
+  });
+
+  it('names the business, so it is an advert and not just a joke', () => {
+    // A banner that is only a punchline is forty metres of canvas that sells nothing. Each one
+    // has to carry something a player can act on — a name they will recognise when they walk
+    // up Palm Avenue.
+    for (const v of Object.values(VENUES)) {
+      const words = v.name.toUpperCase().replace(/[^A-Z0-9& ]/g, ' ').split(/\s+/).filter((w) => w.length > 2);
+      const banner = v.banner.toUpperCase();
+      expect(words.some((w) => banner.includes(w)), `${v.id}'s banner never names it: "${v.banner}"`).toBe(true);
+    }
+  });
+});

@@ -32,6 +32,7 @@ import * as THREE from 'three';
 import { createRacerFleet, type RacerFleet } from './racers.js';
 import { createTrafficFleet, type TrafficFleet } from './traffic.js';
 import { createPelicanFlocks, type PelicanFlocks } from './pelicans.js';
+import { createBannerPlanes, type BannerPlanes } from './banner-plane.js';
 import { createWrecks, type Wrecks } from './wrecks.js';
 import type { SpotQuery } from '../../game/fishing/spot.js';
 import { createHotspotWorld, type HotspotWorld, type GullSite } from './hotspots.js';
@@ -111,6 +112,8 @@ export interface LifeSystems {
   /** The pirate sloop for `audio/engine.ts`'s `updatePirates`, or null while they are away. */
   pirateSite(): PirateSite | null;
   isLuigiOn(): boolean;
+  /** VERIFICATION ONLY: the banner plane currently overhead, and a way to summon one. */
+  bannerPlanes: BannerPlanes;
   toggleBuddy(): void;
   isBuddyOn(): boolean;
   /** Tests one resolved spear shot against Caelen and applies his reaction — see
@@ -161,6 +164,9 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
   const racerFleet: RacerFleet = createRacerFleet(scene);
   const trafficFleet: TrafficFleet = createTrafficFleet(scene);
   const pelicans: PelicanFlocks = createPelicanFlocks(scene, boatSpawn);
+  // Somebody is always towing a banner up the Keys. It is the only thing out on the water that
+  // advertises the town, which otherwise you have to already know about to visit.
+  const bannerPlanes: BannerPlanes = createBannerPlanes(scene);
   const hotspotWorld: HotspotWorld = createHotspotWorld(scene, deps.lightMats);
   const buddy: FishingBuddy = createFishingBuddy(scene, deps);
   const luigi: LuigiMode = createLuigiMode({ hypeCallout: deps.hypeCallout, particles: deps.particles });
@@ -198,6 +204,7 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
       racerFleet.update(dt, t, boat, cameraXZ, deps.particles);
       trafficFleet.update(dt, t, boat, cameraXZ, deps.particles);
       pelicans.update(dt, t, boat, cameraXZ, deps.particles);
+      bannerPlanes.update(dt, t, boat, cameraXZ);
       hotspotWorld.update(dt, t, boat, cameraXZ, deps.particles);
       buddy.update(dt, t, boat, playerBoatId, camera, viewport, deps.particles);
       caelen.update(dt, t, boat, camera, viewport, inputs.diver ?? null);
@@ -236,6 +243,7 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
     partySites(): readonly PartySite[] { return partyBoats.sites(); },
     pirateSite(): PirateSite | null { return pirates.site(); },
     isLuigiOn(): boolean { return luigi.isOn(); },
+    bannerPlanes,
     toggleBuddy(): void { buddy.toggle(); },
     isBuddyOn(): boolean { return buddy.isOn(); },
     caelenShot(p1, p2): CaelenShotResult { return caelen.resolveSpearShot(p1, p2); },
@@ -275,6 +283,7 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
       carcasses.dispose();
       pirates.dispose();
       buddy.dispose();
+      bannerPlanes.dispose();
     },
   };
 }

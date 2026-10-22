@@ -1449,6 +1449,15 @@ export function initWorld(wrap: HTMLElement): World {
     gunTargetCount(): number { return getSpearTargets().length; },
     /** Verification-only: Caelen's live capsule (null while he's sulking) and how long he's gone
      * for. He is not in `targets()` by design — see `life.caelenShot`'s call site in `frame()`. */
+    /** Verification-only: the banner plane overhead right now, and a way to summon one without
+     * waiting out the gap between passes. */
+    banner(): unknown { return life.bannerPlanes.debug(); },
+    bannerFlyBy(venue?: string): void {
+      life.bannerPlanes.debugFlyBy(
+        { x: stateBox.state.x, z: stateBox.state.z },
+        venue as Parameters<typeof life.bannerPlanes.debugFlyBy>[1],
+      );
+    },
     caelen(): { hitbox: ReturnType<ReturnType<typeof createLifeSystems>['caelenDebugHitbox']>; awayFor: number } {
       return { hitbox: life.caelenDebugHitbox(), awayFor: +life.caelenAwayFor().toFixed(1) };
     },
