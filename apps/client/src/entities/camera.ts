@@ -14,6 +14,7 @@ import * as THREE from 'three';
 import type { BoatModel } from './boat/model.js';
 import type { BoatState } from '@keysrun/shared/sim/boat';
 import { clamp } from '../core/math.js';
+import type { HandWobble } from '@keysrun/shared/sim/steady';
 import { F, lineOut, fishingActive } from '../game/fishing/state.js';
 
 export interface CamState {
@@ -47,6 +48,8 @@ export interface CameraDeps {
   sky: THREE.Mesh;
   sunDisc: THREE.Mesh;
   sunDir: THREE.Vector3;
+  /** Hand wobble from food/drink (sim/steady.ts `handWobble`). Omitted = none, as before buffs. */
+  hand?: HandWobble;
 }
 
 export function cycleView(fp: FpState, model: BoatModel | null): string {
@@ -69,6 +72,7 @@ export function updateCamera(
   hullLen: number,
 ): void {
   const { camera, sky, sunDisc, sunDir } = deps;
+  const hand = deps.hand;
   const m = model;
 
   const want = gameRunning && fp.pref && fishingActive();
@@ -108,7 +112,8 @@ export function updateCamera(
       fp.pitch = THREE.MathUtils.lerp(fp.pitch, clamp(Math.atan2(tgt.y - eye.y, hd) + 0.06, -0.7, 0.3), Math.min(1, dt * 2.5));
     }
     fp.userT -= dt;
-    camera.rotation.set(fp.pitch + (Math.random() - 0.5) * cam.shake * 0.03, fp.yaw, 0, 'YXZ');
+    // Hand wobble: coffee shrinks the idle shake, a drink adds roll and drift (sim/steady.ts).
+    camera.rotation.set(fp.pitch + (Math.random() - 0.5) * cam.shake * 0.03 + (hand?.pitch ?? 0), fp.yaw + (hand?.yaw ?? 0), hand?.roll ?? 0, 'YXZ');
   } else if (fp.driveOn) {
     m.group.updateMatrixWorld(true);
     const loc = fp.view === 2 && m.tower ? tmpV.copy(m.tower.pos).add(tmpV2.set(0, 1.62, 0)) : tmpV.copy(m.helmPos).add(tmpV2.set(0, 1.66, -0.05));
@@ -121,7 +126,7 @@ export function updateCamera(
       fp.dPitch *= 1 - Math.min(1, dt * 1.2);
     }
     m.group.getWorldQuaternion(fp.qA);
-    fp.qB.setFromEuler(fp.eB.set(fp.dPitch - (fp.view === 2 ? 0.16 : 0.2), fp.dYaw, 0, 'YXZ'));
+    fp.qB.setFromEuler(fp.eB.set(fp.dPitch - (fp.view === 2 ? 0.16 : 0.2) + (hand?.pitch ?? 0), fp.dYaw + (hand?.yaw ?? 0), hand?.roll ?? 0, 'YXZ'));
     camera.quaternion.copy(fp.qA).multiply(fp.qB);
     if (cam.shake > 0) camera.position.add(tmpV.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(cam.shake * 0.15));
   } else {

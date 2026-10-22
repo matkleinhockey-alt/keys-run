@@ -22,6 +22,7 @@ import { toast } from '../../ui/toast.js';
 import { F } from './state.js';
 import type { FishingVisuals } from './visuals.js';
 import type { RodViewModel } from './rod-viewmodel.js';
+import { strikeWindowS, STRIKE_BASE_S, type HandInputs } from '@keysrun/shared/sim/steady';
 import { resolveCastSpot, type SpotQuery } from './spot.js';
 
 function $(id: string): HTMLElement | null { return document.getElementById(id); }
@@ -52,6 +53,8 @@ export interface FishingDeps {
   /** The equipped rod-and-line outfit (shared/content/tackle). Omitted = the starter 30 lb; this is
    * the seam a tackle shop plugs into — see content/tackle.ts. */
   getTackle?(): Tackle;
+  /** Steadiness and sway from the food/drink buffs (game/buffs.ts). Omitted = unbuffed. */
+  getModifiers?(): HandInputs;
   /** legacy's `case 'caught': if (now-caughtT>1600) releaseFish();` — delegated to game/catch. */
   onActionWhileCaught(): void;
   /** Tag-and-release registry (game/catch/tags.ts). Omitted = every fish is untagged. */
@@ -283,7 +286,10 @@ export function createFishingLogic(deps: FishingDeps) {
         F.nibT -= dt;
         if (F.nibT <= 0) {
           if (F.nibs <= 0) {
-            F.state = 'bite'; F.win = 1.4;
+            F.state = 'bite';
+            // The strike window is where steady hands pay off: coffee 1.4 -> 1.75 s, a six-pack
+            // 1.4 -> ~1.0 s (sim/steady.ts has the numbers and why).
+            F.win = strikeWindowS(STRIKE_BASE_S, deps.getModifiers?.() ?? { steadyMul: 1, sway: 0 });
             $('strike')?.classList.remove('hidden');
             deps.particles.splash(F.bob.x, F.bob.z, 20, 1.2);
             deps.camState.shake = Math.max(deps.camState.shake, 0.15);
