@@ -61,6 +61,7 @@ import { createRaceMode } from './race/index.js';
 import { F as FishF, lineOut as fishingLineOut } from './fishing/state.js';
 import { createCatchFlow } from './catch/catch-flow.js';
 import { createEconomySystem } from './economy/system.js';
+import { createGearScreen } from '../ui/gear.js';
 import { bindCatchInput } from './catch/input.js';
 
 import { updateHUD } from '../ui/hud.js';
@@ -479,13 +480,14 @@ export function initWorld(wrap: HTMLElement): World {
   // 13c-2. land mode (entities/land/**, entities/town/**): tie up at a marina, walk Boot Key Harbor
   // City. A third peer beside the boat and the diver; everything mode-shaped lives in the facade,
   // and this file touches it only where marked `land.` below. See entities/land/index.ts's header.
+  createGearScreen(econ.shop); // Tab / the Gear button: owned, carried, running, and what it adds up to
   const land = createLandSystem({
     scene, camera, canvas: renderer.domElement, sky: sceneCtx.sky, sunDisc: sceneCtx.sunDisc, sunDir,
     camState, fpState, lightMats: tod.lightMats, getTodK: tod.getK, onBuilt: (g) => shadows.applyToSubtree(g),
     isTouch: isTouch(), getBoat: () => stateBox.state, getHullLen: () => boatSpec.len, getModel: () => model,
     refuse: () => (diver.mode === 'diver' ? 'Climb back aboard first.' : FishF.state === 'fight' ? 'Land your fish first.' : catchFlow.current ? 'Finish with your catch first.' : null),
     prepare: () => { if (FishF.state !== 'idle' && FishF.state !== 'caught') fishing.reelIn(); },
-    toast, gameRunning: () => game.running,
+    toast, shop: econ.shop, gameRunning: () => game.running,
   });
 
   // 13d. speargun (entities/speargun/**) — first-person harpoon. Fires at whatever
@@ -722,6 +724,7 @@ export function initWorld(wrap: HTMLElement): World {
     sw += (st.sw - sw) * k; ch += (st.ch - ch) * k;
 
     simTime += dt;
+    econ.tick(dt); // inventory clock + buff expiry, in simulated seconds (see game/economy/system.ts)
     // legacy `game.running && F.state!=='caught'` / `F.state==='fight'` / `lineOut()` — read
     // from *this* fixed step's starting fishing state, same one-frame-stale ordering as
     // legacy's `updateBoat(dt,t); updateFishing(dt,t);` (fishing.update runs below, after

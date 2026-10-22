@@ -39,6 +39,7 @@ import { createTown, type Town } from '../town/town.js';
 import { animateGait } from '../town/people.js';
 import { createLandController, type LandController, type LandMode } from './controller.js';
 import { updateLandCamera, cycleLandView } from './camera.js';
+import type { ShopPort } from '../../ui/gear.js';
 import { createLandHud, type LandHudHandles } from './hud.js';
 
 export type { LandMode } from './controller.js';
@@ -66,6 +67,8 @@ export interface LandDeps {
   /** Called on the way ashore: reel in an idle line, so fishing never holds a reference into a boat nobody is driving. */
   prepare(): void;
   toast(msg: string): void;
+  /** The wallet + inventory the venue panel buys through (game/economy/system.ts `shop`). */
+  shop: ShopPort;
   gameRunning(): boolean;
 }
 
@@ -100,7 +103,7 @@ interface Snapshot {
 export function createLandSystem(deps: LandDeps): LandSystem {
   const { scene, camera } = deps;
   const ctl: LandController = createLandController({ canvas: deps.canvas });
-  const hud: LandHudHandles = createLandHud(deps.isTouch);
+  const hud: LandHudHandles = createLandHud(deps.isTouch, deps.shop);
   const town: Town = createTown({ scene, lightMats: deps.lightMats, getTodK: deps.getTodK, onBuilt: deps.onBuilt });
 
   let prevMode: LandMode = 'boat';
