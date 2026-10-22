@@ -26,7 +26,7 @@ import { createProfiler } from '../ui/profiler.js';
 import { createWater } from '../world/water.js';
 import { installUnderwaterFog } from '../world/underwater/fog-override.js';
 import { createUnderwaterWorld } from '../world/underwater/index.js';
-import { createSeafloor } from '../world/seafloor.js';
+import { createSeafloor, seafloorHeightAt } from '../world/seafloor.js';
 import { createIslands } from '../world/islands.js';
 import { createBridge } from '../world/bridge.js';
 import { createLandmarks } from '../world/landmarks.js';
@@ -44,7 +44,7 @@ import { applyBoatVisuals, sampleWaterHeight } from '../entities/boat/visuals.js
 import { createBoatInput, bindBoatInput, type BoatStateBox } from '../entities/boat/input.js';
 import { createCamState, createFpState, updateCamera, cycleView, bindCameraPointerControls } from '../entities/camera.js';
 
-import { AIR_MAX, type DiverEvent } from '@keysrun/shared/sim/diver';
+import { AIR_MAX, waterVelocity, type DiverEvent } from '@keysrun/shared/sim/diver';
 import { createDiverController, NEUTRAL_BOAT_INPUT } from '../entities/diver/controller.js';
 import { createDiverModel } from '../entities/diver/model.js';
 import { applyDiverVisuals } from '../entities/diver/visuals.js';
@@ -533,6 +533,9 @@ export function initWorld(wrap: HTMLElement): World {
   // `frame()`'s fixed-step loop, right after `speargun.update()`, using the aim captured at the
   // *rising* edge (`shotOx/.../shotDz` below) rather than whatever the diver is looking at by the
   // time the shot resolves a flight-time later — see that block's own comment.
+  /** The diver's last speed through the water — what decides how far fish stand off. Tracked
+   * here only so `__fishDebug.diverThreat()` can report it; nothing reads it in normal play. */
+  let lastDiverRelSpeed = 0;
   let prevSpearActive = false;
   let shotHadFight = false;
   let shotOx = 0, shotOy = 0, shotOz = 0, shotDx = 0, shotDy = 0, shotDz = -1;
@@ -885,7 +888,20 @@ export function initWorld(wrap: HTMLElement): World {
     let fishThreats: Threat[] = [];
     if (diver.mode === 'diver' && diverState) {
       focus = { x: diverState.x, z: diverState.z };
-      fishThreats = [{ x: diverState.x, z: diverState.z, kind: 'diver', speed: Math.hypot(diverState.vx, diverState.vy, diverState.vz) }];
+      // Speed RELATIVE TO THE WATER, not over the ground. The diver is now carried by the real
+      // current (sim/diver.ts's `waterVelocity`), so absolute velocity is non-zero whenever the
+      // Florida Current or a surge has hold of you — and a fish holding station in that same
+      // water is drifting with you. To it you are motionless, which is exactly what it looks
+      // like. Feeding absolute speed to the flee check meant a diver who had stopped kicking
+      // still read as "finning hard", and the shoal backed off to the species' full radius:
+      // measured 1.15 m away while stationary at the surface, 10.8 m once the current took hold.
+      const wv = waterVelocity(diverState.x, diverState.y, diverState.z, simTime, seafloorHeightAt(diverState.x, diverState.z));
+      // Horizontal only. `waterVelocity` models the horizontal field, so including `vy` would
+      // compare the diver's vertical motion against nothing — and at the surface `vy` is mostly
+      // wave bob, which is the water moving the diver, not the diver swimming at a fish.
+      const relSpeed = Math.hypot(diverState.vx - wv.x, diverState.vz - wv.z);
+      lastDiverRelSpeed = relSpeed;
+      fishThreats = [{ x: diverState.x, z: diverState.z, kind: 'diver', speed: relSpeed }];
     } else {
       const debugDiver = (window as unknown as { __fishDebugDiver?: { x: number; z: number } }).__fishDebugDiver;
       if (debugDiver) fishThreats = [{ x: debugDiver.x, z: debugDiver.z, kind: 'diver', speed: 0.6 }];
@@ -1082,6 +1098,14 @@ export function initWorld(wrap: HTMLElement): World {
      * real throttle input to demonstrate — teleport() above always zeroes speed) instead of
      * guessing where it ended up. No normal code path reads this. */
     boatState: () => ({ x: curState.x, z: curState.z, h: curState.h, speed: curState.speed }),
+    /** Verification-only: the diver's speed through the WATER, which is what decides how far fish
+     * stand off (entities/fish/behavior.ts's DIVER_BODY_RADIUS ramp). Absolute speed is the wrong
+     * number once the current carries the diver, and the two are indistinguishable from outside. */
+    diverThreat: (): { relSpeed: number; abs: number } | null => {
+      const ds = diver.state;
+      if (!ds) return null;
+      return { relSpeed: +lastDiverRelSpeed.toFixed(2), abs: +Math.hypot(ds.vx, ds.vy, ds.vz).toFixed(2) };
+    },
     /** Verification-only: whether the rod is currently holding the astern throttle off, and why.
      * The reel key doubles as astern (see the `rodHasLine` guard in `frame()`), and the symptom of
      * that guard silently never firing is subtle — a cast refused with "Slow under 3 knots" some

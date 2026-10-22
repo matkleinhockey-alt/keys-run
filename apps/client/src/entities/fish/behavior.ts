@@ -62,6 +62,27 @@ export interface FleeParams {
 const HULL_CLEAR_RADIUS = 7.5;
 
 /**
+ * How close fish will come to a *calm* diver — the same idea as HULL_CLEAR_RADIUS, for the same
+ * reason, and it was missing.
+ *
+ * `diverRadius` (3-9 m by class) was applied at every diver speed, so simply hanging in the water
+ * cleared a bubble of baitfish wider than you could see through, and the reef read as empty from
+ * the one viewpoint the whole underwater mode exists for. Real reef fish ignore a motionless
+ * diver and will drift within touching distance; they bolt from one finning hard at them. That
+ * distinction is what this restores — and it is the same one `nearestTrigger` already draws
+ * between a boat under way and a boat at anchor.
+ *
+ * It is also what spearfishing needs: the gun's range is 11 m, so a 9 m permanent exclusion zone
+ * left almost nothing legitimately in range.
+ */
+const DIVER_BODY_RADIUS = 1.6;
+/** At or below this speed (m/s) a diver is drifting, and only `DIVER_BODY_RADIUS` applies. */
+const DIVER_CALM_SPEED = 0.5;
+/** At or above this, the species' full `diverRadius` applies — a hard-finning diver reads as a
+ * predator closing. Between the two the radius ramps, so easing off visibly brings fish back in. */
+const DIVER_SPOOK_SPEED = 2;
+
+/**
  * `boatRadius` is the radius for a boat **under way** (`nearestTrigger` only applies it above
  * 2 kn; a stopped boat uses HULL_CLEAR_RADIUS instead).
  *
@@ -89,8 +110,15 @@ export function nearestTrigger(
   let best: Threat | null = null, bestD = Infinity;
   for (const th of threats) {
     const d = Math.hypot(th.x - cx, th.z - cz);
-    const radius = th.kind === 'diver' ? p.diverRadius
-      : th.kind === 'spear' ? p.spearRadius
+    let radius: number;
+    if (th.kind === 'spear') {
+      radius = p.spearRadius;
+    } else if (th.kind === 'diver') {
+      // A diver hanging still is furniture; one finning hard is a predator closing — see
+      // DIVER_BODY_RADIUS for why this distinction had to exist at all.
+      const k = (th.speed - DIVER_CALM_SPEED) / (DIVER_SPOOK_SPEED - DIVER_CALM_SPEED);
+      radius = DIVER_BODY_RADIUS + (p.diverRadius - DIVER_BODY_RADIUS) * Math.min(1, Math.max(0, k));
+    } else {
       // A boat under way and a boat sitting still are two different things to a fish, and the
       // radius has to reflect that or one of the two reads wrong.
       //
@@ -106,7 +134,8 @@ export function nearestTrigger(
       //
       // HULL_CLEAR_RADIUS is physical, not behavioural — an apex predator and a baitfish are
       // equally unable to occupy the same space as a hull — so it is not per-class.
-      : (th.speed > 2 ? p.boatRadius + th.speed * p.boatSpeedRadius : HULL_CLEAR_RADIUS);
+      radius = th.speed > 2 ? p.boatRadius + th.speed * p.boatSpeedRadius : HULL_CLEAR_RADIUS;
+    }
     if (d < radius && d < bestD) { best = th; bestD = d; }
   }
   return best;
