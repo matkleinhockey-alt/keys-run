@@ -1038,7 +1038,11 @@ export function initWorld(wrap: HTMLElement): World {
     // network message, and on the one thing it genuinely does not do (a synchronised start).
     raceMode.update(dt, simTime, { x: curState.x, z: curState.z }, netRemoteBoats);
     fishWorld.setCamera(camera);
-    fishWorld.update(clamped, simTime, focus, boatThreat, fishThreats);
+    // `life.carcasses()` is the attractor list — dead birds floating after being shot out of the
+    // sky (entities/life/carcass.ts). It is one frame stale here, because `life.update` runs
+    // further down: harmless, and the alternative (reordering life ahead of the fish) would move a
+    // lot more than this one line.
+    fishWorld.update(clamped, simTime, focus, boatThreat, fishThreats, life.carcasses());
 
     const amp = ampAt(renderState.x, renderState.z);
     applyBoatVisuals(renderState, model, { t: simTime, dt: clamped, todK: tod.getK(), sw, ch, amp, hull: { len: boatSpec.len, beam: boatSpec.beam, topMs: boatSpec.top * 0.5144 * SPEED_SCALE }, particles, water }, events);
@@ -1216,6 +1220,15 @@ export function initWorld(wrap: HTMLElement): World {
      * guessing where it ended up. No normal code path reads this. */
     boatState: () => ({ x: curState.x, z: curState.z, h: curState.h, speed: curState.speed }),
     dogState: () => life.dogState(),
+    /** Verification-only: the floating bird carcasses and their live chum potency
+     * (@keysrun/shared/sim/chum). Paired with `__fishDebug.activeSchools()`'s own `feed` field,
+     * this is what lets a script prove fish moved TOWARD a carcass rather than infer it from a
+     * screenshot. No normal code path reads it. */
+    carcasses: () => life.carcassDebug(),
+    /** Verification-only: drop a carcass at a chosen point, and jump the carcass clock — see
+     * `LifeSystems.carcassDebugDrop`/`carcassDebugAge` for why both exist. */
+    dropCarcass: (x: number, z: number) => life.carcassDebugDrop(x, z),
+    ageCarcasses: (seconds: number) => life.carcassDebugAge(seconds),
     /** Verification-only: the diver's speed through the WATER, which is what decides how far fish
      * stand off (entities/fish/behavior.ts's DIVER_BODY_RADIUS ramp). Absolute speed is the wrong
      * number once the current carries the diver, and the two are indistinguishable from outside. */

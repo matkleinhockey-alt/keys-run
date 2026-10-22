@@ -161,6 +161,10 @@
     "./sim/handgun": {
       "types": "./dist/sim/handgun.d.ts",
       "default": "./dist/sim/handgun.js"
+    },
+    "./sim/chum": {
+      "types": "./dist/sim/chum.d.ts",
+      "default": "./dist/sim/chum.js"
     }
   },
   "scripts": {

@@ -29,6 +29,7 @@ import { depthAt, offshoreF, WB } from '@keysrun/shared/world/depth';
 import { shoreInfo } from '@keysrun/shared/world/chain';
 import { ampFor, waveHBase } from '@keysrun/shared/waves';
 import type { CreatureVis } from '@keysrun/shared/content/creatures';
+import { chumPull, CARCASS_MILL_R } from '@keysrun/shared/sim/chum';
 import { clamp, lerp, rand } from '../../core/math.js';
 import { SWIM_ANG_BASE } from './swim.js';
 import {
@@ -167,7 +168,42 @@ export function stepSchool(state: SchoolState, V: CreatureVis, ctx: SchoolCtx): 
   // all — the wander above runs untouched. Only past the edge does a homing term fade in, and the
   // slight tangential lead that stops a school charging straight through the middle reverses on a
   // ~90 s cycle, so no school can settle into a fixed carousel even out at the boundary.
-  if (g.anchor && g.flee <= 0 && !bowRiding) {
+  //
+  // A shot bird floating on the surface (sim/chum.ts) is leaned toward by exactly the same
+  // mechanism, with the subject changed: `chumPull` hands back a point and a 0..1 weight, the same
+  // pair the diver-curiosity block below produces, and the patch is lerped toward it. The obvious
+  // alternative — point the centroid at the carcass and swim — is not used, because it gives you a
+  // shark that tracks the bait like a torpedo, and what the scene wants is something that works
+  // its way in on a long arc and then jostles over it. Milling is already what this block does
+  // once the patch is underneath the school, so reusing it is most of the feature.
+  const feed = (g.flee <= 0 && !bowRiding) ? chumPull(g.type, g.cx, g.cz, ctx.carcasses ?? []) : null;
+  // The catch: nearly every species that comes to a carcass is a ROAMER, and spawn.ts gives a
+  // roamer `anchor: null`. So a carcass has to be able to CREATE a patch, not only lean one that
+  // already exists, or the feature would work for exactly the resident barracuda and nothing else.
+  let patch = g.anchor;
+  // Homing authority for a patch that only exists because of the carcass. Without it the
+  // synthesized patch sits at the carcass with the feeding radius, so `pull` saturates at 1 even
+  // 50 m out and the school charges in dead straight at full rate — the thing the comment above
+  // says not to do. Scaling the turn rate by the carcass's own weight instead means a distant fish
+  // bends toward it slowly, with its own wander still arguing, and only commits once it is close.
+  let leanK = 1;
+  if (feed) {
+    // Copying the old patch keeps `hold` (the wreck layer's height-above-the-seabed band), and
+    // that is on purpose: eight of the thirteen scavengers are also wreck residents, and one that
+    // drifts over to a carcass should still be holding the water column it holds. It ends up
+    // *under* the bird rather than at it, which for an amberjack stacked on steel is the right
+    // picture anyway — nothing in this game asks a bottom-holding school to rise.
+    patch = patch
+      ? { ...patch, x: lerp(patch.x, feed.x, feed.k), z: lerp(patch.z, feed.z, feed.k), r: lerp(patch.r, CARCASS_MILL_R, feed.k) }
+      : { x: feed.x, z: feed.z, r: CARCASS_MILL_R };
+    if (!g.anchor) leanK = 0.25 + 0.75 * feed.k;
+    // Food is on the TOP. Left alone, the dive cycle a few lines down would periodically take a
+    // feeding school 14 m under its own meal; cancelling the target keeps them up where the bird
+    // is. Bottom-dwellers are exempt: a goliath grouper comes up for the hit and lives down there,
+    // which is both true to life and what `level: 'bottom'` placement already does.
+    if (feed.k > 0.25 && V.level !== 'bottom') g.diveTarget = 0;
+  }
+  if (patch && g.flee <= 0 && !bowRiding) {
     // A diver hanging still is worth a look. Reef fish genuinely close on a motionless diver —
     // it is why you hold station and wait rather than chase — and without it the near-field layer
     // leaves you watching shapes at 9-10 m, which is the wrong end of an 11 m speargun.
@@ -176,7 +212,7 @@ export function stepSchool(state: SchoolState, V: CreatureVis, ctx: SchoolCtx): 
     // school keeps milling over its own ground, that ground just shifts. So nothing charges you,
     // and the moment you fin hard the flee check above takes over and they are gone. Capped by
     // CURIOUS_PULL so a school never abandons its patch outright, and it fades with distance.
-    let anx = g.anchor.x, anz = g.anchor.z;
+    let anx = patch.x, anz = patch.z;
     const curious = threats.find((th) => th.kind === 'diver' && th.speed <= CURIOUS_MAX_SPEED);
     if (curious) {
       const dd = Math.hypot(curious.x - g.cx, curious.z - g.cz);
@@ -188,7 +224,7 @@ export function stepSchool(state: SchoolState, V: CreatureVis, ctx: SchoolCtx): 
       }
     }
     const ax = g.cx - anx, az = g.cz - anz, d0 = Math.hypot(ax, az) || 1;
-    const R = g.anchor.r || 10;
+    const R = patch.r || 10;
     // <0 inside the patch, 0 at the edge, >0 outside. The -0.15 starts the pull just inside the
     // boundary so a school eases round instead of overshooting and visibly snapping back.
     const pull = clamp((d0 - R) / R + 0.15, 0, 1);
@@ -197,8 +233,12 @@ export function stepSchool(state: SchoolState, V: CreatureVis, ctx: SchoolCtx): 
 const tang = 0.55 * (1 - pull); // fades out the further from home, so a stray school comes back
       const vx = (-ax / d0) * pull + (-az / d0) * dir * tang;
       const vz = (-az / d0) * pull + (ax / d0) * dir * tang;
-      g.heading = angLerp(g.heading, Math.atan2(-vx, -vz), dt * 1.6 * (0.4 + pull));
+      g.heading = angLerp(g.heading, Math.atan2(-vx, -vz), dt * 1.6 * (0.4 + pull) * leanK);
     }
+    // Note this now also applies to a roamer that is merely within reach of a carcass: as soon as
+    // one is in the water it drops to three-quarter cruise, for as long as it is in range. Left in
+    // deliberately — a predator working a scent slows down and quarters it rather than steaming
+    // through — but it is a behaviour change to a roaming school that no anchor gave it before.
     sp *= 0.75;
   }
   if (g.glide > 0) {

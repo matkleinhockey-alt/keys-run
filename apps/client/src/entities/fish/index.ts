@@ -27,6 +27,7 @@ import { wrecksFor, WRECK_RESIDENTS } from '@keysrun/shared/world/wrecks';
 import { swimClock } from './swim-clock.js';
 import { fishCapsule } from './hitbox.js';
 import type { SchoolState, Threat } from './types.js';
+import { chumPull, type Carcass } from '@keysrun/shared/sim/chum';
 import { WORLD_SEED } from '../../state/constants.js';
 
 /** Reused by `setAllPassFrustum` — a plane normal needs *a* direction; which one is irrelevant
@@ -69,6 +70,17 @@ export interface SpearTargetLite {
   vx: number; vy: number; vz: number;
 }
 
+/** One row of `debugActiveSchools` — verification only. */
+export interface DebugSchool {
+  id: string; type: string; cx: number; cz: number; heading: number;
+  count: number; resident: boolean;
+  /** `stepSchool`'s live flee countdown: >0 means spooked right now. */
+  flee: number;
+  /** `chumPull`'s live 0..1 weight from the nearest/best carcass: >0 means this school is being
+   * drawn to a dead bird on the surface (sim/chum.ts). 0 for every non-scavenger, always. */
+  feed: number;
+}
+
 export interface FishWorld {
   group: THREE.Group;
   /**
@@ -79,7 +91,7 @@ export interface FishWorld {
    * of `focus` — the hull is a standing threat to nearby fish even while its driver is over the
    * side and the population focus has moved to the diver (see world.ts's call site).
    */
-  update(dt: number, t: number, focus: { x: number; z: number }, boat: Threat, extraThreats?: Threat[]): void;
+  update(dt: number, t: number, focus: { x: number; z: number }, boat: Threat, extraThreats?: Threat[], carcasses?: readonly Carcass[]): void;
   /** The camera every LOD/cull decision is made against (render.ts). Separate from `focus` (the
    * *population* centre — the diver or the boat) because the two genuinely differ: in the chase
    * camera the eye sits metres behind the hull, and while diving the camera is at eye height
@@ -122,7 +134,7 @@ export interface FishWorld {
    * `>0` is a direct, no-guessing signal that a school is actively spooked right now, used by
    * test/capture-spearable-fish.mjs to confirm a missed shot's flee response actually fired
    * instead of inferring it from position deltas. */
-  debugActiveSchools(): Array<{ id: string; type: string; cx: number; cz: number; heading: number; count: number; resident: boolean; flee: number }>;
+  debugActiveSchools(): Array<DebugSchool>;
   /** Verification-only: per-species-pool draw-call/triangle accounting, isolated from the rest of
    * the scene. */
   debugPoolStats(): Array<{ type: string; lod: string; triPerInstance: number; instances: number; capacity: number }>;
@@ -176,6 +188,10 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
   // reconstructed here from the boat's own frame-to-frame displacement — cheap, and exactly
   // equivalent for a planing hull that doesn't instantaneously strafe sideways.
   let lastBoatX: number | null = null, lastBoatZ: number | null = null, lastBoatHeading = 0;
+  /** The carcass list this frame's `update` was handed — kept only so `debugActiveSchools` can
+   * report the pull each school is actually under, by calling the very same `chumPull` the step
+   * used rather than a verification script re-deriving it from positions. */
+  let lastCarcasses: readonly Carcass[] = [];
 
   let blowCount = 0;
 
@@ -314,7 +330,7 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
     setAllPassFrustum();
   }
 
-  function update(dt: number, t: number, focus: { x: number; z: number }, boat: Threat, extraThreats: Threat[] = []): void {
+  function update(dt: number, t: number, focus: { x: number; z: number }, boat: Threat, extraThreats: Threat[] = [], carcasses: readonly Carcass[] = []): void {
     swimClock.value = t;
     throttle -= dt;
     if (throttle <= 0) {
@@ -337,7 +353,8 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
     lastBoatX = boat.x; lastBoatZ = boat.z;
 
     const threats: Threat[] = [boatWithHeading, ...extraThreats];
-    const ctx = { t, dt, threats };
+    lastCarcasses = carcasses;
+    const ctx = { t, dt, threats, carcasses };
 
     updateView(focus);
 
@@ -400,12 +417,20 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
     return out;
   }
 
-  function debugActiveSchools(): Array<{ id: string; type: string; cx: number; cz: number; heading: number; count: number; resident: boolean; flee: number }> {
-    const out: Array<{ id: string; type: string; cx: number; cz: number; heading: number; count: number; resident: boolean; flee: number }> = [];
-    for (const s of residents.values()) out.push({ id: s.id, type: s.type, cx: s.cx, cz: s.cz, heading: s.heading, count: s.members.length, resident: true, flee: s.flee });
-    for (const s of nearField.values()) out.push({ id: s.id, type: s.type, cx: s.cx, cz: s.cz, heading: s.heading, count: s.members.length, resident: true, flee: s.flee });
-    for (const list of wreckSchools.values()) for (const s of list) out.push({ id: s.id, type: s.type, cx: s.cx, cz: s.cz, heading: s.heading, count: s.members.length, resident: true, flee: s.flee });
-    for (const s of roamers.values()) out.push({ id: s.id, type: s.type, cx: s.cx, cz: s.cz, heading: s.heading, count: s.members.length, resident: false, flee: s.flee });
+  function debugActiveSchools(): Array<DebugSchool> {
+    const out: Array<DebugSchool> = [];
+    // `feed` is the live carcass pull on this school (sim/chum.ts's `chumPull`, the same call
+    // `stepSchool` makes), 0 when none: the direct signal that chum attraction is engaged, in the
+    // same spirit as `flee` above it.
+    const row = (s: SchoolState, resident: boolean): DebugSchool => ({
+      id: s.id, type: s.type, cx: s.cx, cz: s.cz, heading: s.heading,
+      count: s.members.length, resident, flee: s.flee,
+      feed: chumPull(s.type, s.cx, s.cz, lastCarcasses)?.k ?? 0,
+    });
+    for (const s of residents.values()) out.push(row(s, true));
+    for (const s of nearField.values()) out.push(row(s, true));
+    for (const list of wreckSchools.values()) for (const s of list) out.push(row(s, true));
+    for (const s of roamers.values()) out.push(row(s, false));
     return out;
   }
 

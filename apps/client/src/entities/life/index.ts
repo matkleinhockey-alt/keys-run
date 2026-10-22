@@ -40,7 +40,11 @@ import { createLuigiMode, type LuigiMode } from './luigi.js';
 import { createCaelen, type Caelen, type CaelenDiverInput, type CaelenShotResult } from './caelen.js';
 import { createPartyBoats, type PartyBoats } from './party-boats.js';
 import { createBoatGulls, type BoatGulls } from './boat-gulls.js';
-import type { Bird } from './seabirds.js';
+import { birdWorldPos, shootDownBird, type Bird } from './seabirds.js';
+import { createCarcasses, BIRD_REPLACE_S, type Carcasses } from './carcass.js';
+import { ampFor, waveHBase } from '@keysrun/shared/waves';
+import { depthAt } from '@keysrun/shared/world/depth';
+import type { Carcass } from '@keysrun/shared/sim/chum';
 import { createDog, type Dog } from './dog.js';
 import { createPirates, type Pirates, type PirateLootSource } from './pirates.js';
 import { updateParty } from './deck-party.js';
@@ -117,12 +121,37 @@ export interface LifeSystems {
    * and weedline birds). NOT Caelen: he owns his own capsule and reaction, reached through
    * `caelenShot`. Rebuilt per call - call it per shot, not per frame. */
   shootableBirds(): Bird[];
+  /**
+   * Shoot one bird down: it goes limp, tumbles, hits the water, and leaves a floating carcass that
+   * draws the big predatory species in (entities/life/carcass.ts, `@keysrun/shared/sim/chum`).
+   * Replaces the plain `scareBird` the pistol used to apply to a struck bird — a hit that only
+   * scattered the flock was the end of the story, and the carcass is the story.
+   *
+   * Nothing is spawned here: the fall runs for a second or so and the carcass appears when the
+   * body actually reaches the water, so that the splash, the carcass and the sound all happen at
+   * the same moment rather than at the moment of the hit.
+   */
+  shootBird(B: Bird): void;
+  /**
+   * Dead birds currently floating, for `entities/fish`'s `update` (where `chumPull` turns them
+   * into an attraction). Pure state, no three.js — the mirror image of the `Threat[]` the same
+   * call already takes.
+   */
+  carcasses(): readonly Carcass[];
   /** Seconds until Caelen comes back, 0 when he's here. */
   caelenAwayFor(): number;
   /** VERIFICATION-ONLY: where the boat dog is standing and what it's doing. */
   dogState(): ReturnType<Dog['debugState']>;
   /** VERIFICATION-ONLY: Caelen's live capsule, or null while he's away. */
   caelenDebugHitbox(): ReturnType<Caelen['debugHitbox']>;
+  /** VERIFICATION-ONLY: every floating carcass with the potency the chum rules give it. */
+  carcassDebug(): ReturnType<Carcasses['debug']>;
+  /** VERIFICATION-ONLY: put a carcass in the water at a chosen point, without a bird or a bullet
+   * — the fish side of this has to be testable without first landing a pistol shot on a live gull
+   * that happens to be flying over the right school. */
+  carcassDebugDrop(x: number, z: number): Carcass | null;
+  /** VERIFICATION-ONLY: jump the carcass clock. See `Carcasses.debugAge`. */
+  carcassDebugAge(seconds: number): void;
   /** One-time arrays for `stubs.ts`'s `installWorldLife` — see this module's header, point 4. */
   legacySnapshot(): { rigs: ReadonlyArray<unknown>; weeds: ReadonlyArray<unknown>; hotspots: ReadonlyArray<unknown>; traffic: ReadonlyArray<unknown>; racers: ReadonlyArray<unknown> };
   dispose(): void;
@@ -141,6 +170,11 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
   // The dog belongs to the player, not to the hull, so it is built here once and re-parents
   // itself to whatever boat model it is handed — switching boats rebuilds the model entirely.
   const dog: Dog = createDog({ bark: deps.dogBark });
+  const carcasses: Carcasses = createCarcasses(scene);
+  /** Last `update` sim time. `shootBird` is called from the pistol, outside the frame loop, and
+   * needs a clock to sample the wave height at; this is the same `t` every other bird system in
+   * here is already being stepped with. */
+  let lastT = 0;
   const wrecks: Wrecks = createWrecks(scene);
   // DEV/VERIFICATION HOOK ONLY (same convention as __fishDebug): where the wrecks are and which
   // draw tier / chart state each is in. No normal code path reads it.
@@ -159,6 +193,7 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
   return {
     update(inputs) {
       const { dt, t, model, boat, camera, viewport, rendererEl, boatLen, playerBoatId, trimV, lineOut, fishCaught } = inputs;
+      lastT = t;
       const cameraXZ = { x: camera.position.x, z: camera.position.z };
       racerFleet.update(dt, t, boat, cameraXZ, deps.particles);
       trafficFleet.update(dt, t, boat, cameraXZ, deps.particles);
@@ -171,6 +206,10 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
       dog.update(dt, t, model, boatLen, boat, fishCaught);
       partyBoats.update(dt, t, camera.position, deps.particles, deps.currentTodK);
       wrecks.update(dt, camera.position, boat, inputs.diver ?? null);
+      // After every bird system above has had its frame: a falling bird's splash callback spawns
+      // a carcass through `carcasses.spawn`, so stepping the carcasses last means one that landed
+      // this frame starts at age 0 rather than being aged by a dt it did not exist for.
+      carcasses.update(dt, t);
       pirates.update(dt, t, boat, camera, viewport, deps.particles, deps.currentTodK());
 
       // the player's own deck party/pole/shower, plus idle animation for every human aboard
@@ -201,9 +240,25 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
     isBuddyOn(): boolean { return buddy.isOn(); },
     caelenShot(p1, p2): CaelenShotResult { return caelen.resolveSpearShot(p1, p2); },
     shootableBirds(): Bird[] { return [...boatGulls.birds(), ...pelicans.birds(), ...hotspotWorld.birds()]; },
+    shootBird(B: Bird): void {
+      // The surface height is sampled under the bird NOW rather than under the splash point: the
+      // bird has not landed yet, and over the 10-30 m it drifts while falling the wave field only
+      // differs by a few centimetres of swell. seabirds.ts converts it into the bird's own
+      // parent-local frame (see `shootDownBird`).
+      const p = birdWorldPos(B);
+      const surf = waveHBase(p.x, p.z, lastT, ampFor(depthAt(p.x, p.z)));
+      shootDownBird(B, surf, BIRD_REPLACE_S, (x, _y, z) => {
+        carcasses.spawn(B.kind, x, z);
+        deps.particles.splash(x, z, 8, 0.7);
+      });
+    },
+    carcasses(): readonly Carcass[] { return carcasses.list(); },
     caelenAwayFor(): number { return caelen.awayFor(); },
     dogState() { return dog.debugState(); },
     caelenDebugHitbox() { return caelen.debugHitbox(); },
+    carcassDebug() { return carcasses.debug(); },
+    carcassDebugDrop(x, z) { return carcasses.spawn('gull', x, z); },
+    carcassDebugAge(seconds) { carcasses.debugAge(seconds); },
     legacySnapshot() {
       return {
         rigs: hotspotWorld.listRigs(), weeds: hotspotWorld.listWeeds(), hotspots: hotspotWorld.listHotspots(),
@@ -217,6 +272,7 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
       partyBoats.dispose();
       dog.dispose();
       wrecks.dispose();
+      carcasses.dispose();
       pirates.dispose();
       buddy.dispose();
     },
