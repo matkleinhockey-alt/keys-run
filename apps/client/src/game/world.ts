@@ -63,6 +63,7 @@ import { createCatchFlow } from './catch/catch-flow.js';
 import { createEconomySystem } from './economy/system.js';
 import { createGearScreen } from '../ui/gear.js';
 import { createServicesSystem } from './services/index.js';
+import { createCasinoSystem } from './casino/index.js';
 import { bindCatchInput } from './catch/input.js';
 
 import { updateHUD } from '../ui/hud.js';
@@ -514,6 +515,7 @@ export function initWorld(wrap: HTMLElement): World {
   // 13c-2. land mode (entities/land/**, entities/town/**): tie up at a marina, walk Boot Key Harbor
   // City. A third peer beside the boat and the diver; everything mode-shaped lives in the facade,
   // and this file touches it only where marked `land.` below. See entities/land/index.ts's header.
+  const casino = createCasinoSystem({ economy: econ, toast, audio: audio.engine }); // the Gaff & Gill's slots (game/casino)
   createGearScreen(econ.shop); // Tab / the Gear button: owned, carried, running, and what it adds up to
   const land = createLandSystem({
     scene, camera, canvas: renderer.domElement, sky: sceneCtx.sky, sunDisc: sceneCtx.sunDisc, sunDir,
@@ -521,7 +523,7 @@ export function initWorld(wrap: HTMLElement): World {
     isTouch: isTouch(), getBoat: () => stateBox.state, getHullLen: () => boatSpec.len, getModel: () => model,
     refuse: () => (diver.mode === 'diver' ? 'Climb back aboard first.' : FishF.state === 'fight' ? 'Land your fish first.' : catchFlow.current ? 'Finish with your catch first.' : null),
     prepare: () => { if (FishF.state !== 'idle' && FishF.state !== 'caught') fishing.reelIn(); },
-    toast, shop: econ.shop, gameRunning: () => game.running,
+    toast, shop: econ.shop, gameRunning: () => game.running, casino,
   });
 
   // 13d. speargun (entities/speargun/**) — first-person harpoon. Fires at whatever

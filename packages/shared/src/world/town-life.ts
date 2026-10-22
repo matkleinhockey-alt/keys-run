@@ -523,12 +523,17 @@ export const DOGS: readonly LifeDog[] = [
   { id: 'dog-tied', variant: 'blacklab', tie: { u: 95.6, v: 99.3, owner: 'v-stopngo' }, script: dogWander('dog-tied', [94.2, 98.9], [
     { stay: 60, stance: 'lie', yaw: SEA }, { stay: 20, stance: 'sit', yaw: SEA }, { stay: 40, stance: 'lie', yaw: LAND }, { stay: 20, stance: 'sniff', yaw: 0.5 },
   ], 0) },
+  // Works the car park in front of the casino and the strip up its west side — the middle of the
+  // back lot is the building itself now (world/casino.ts).
   { id: 'dog-loose-lot', variant: 'mutt', script: dogWander('dog-loose-lot', [0, 128], [
-    { go: [[1, 138]], speed: 1.4, stance: 'trot' }, { stay: 6, stance: 'sniff', yaw: LAND },
-    { go: [[-6, 146]], speed: 1.1, stance: 'walk' }, { stay: 9, stance: 'sniff', yaw: 0 },
-    { go: [[5, 156]], speed: 1.6, stance: 'trot' }, { stay: 5, stance: 'sit', yaw: LAND },
-    { go: [[-3, 164]], speed: 1.3, stance: 'trot' }, { stay: 7, stance: 'sniff', yaw: SEA },
-    { go: [[0, 152]], speed: 1.8, stance: 'run' }, { go: [[0, 128]], speed: 1.5, stance: 'trot' },
+    { go: [[1, 134]], speed: 1.4, stance: 'trot' }, { stay: 6, stance: 'sniff', yaw: LAND },
+    { go: [[0, 128]], speed: 1.1, stance: 'walk' }, { stay: 4, stance: 'sniff', yaw: SEA },
+    // along the front of the lot and up the clear strip west of the casino wall: the two props at
+    // u = +-30 sit between v 132 and 136, so the run across happens at v = 128.
+    { go: [[-34, 128]], speed: 1.1, stance: 'walk' }, { stay: 9, stance: 'sniff', yaw: 0 },
+    { go: [[-34, 152]], speed: 1.6, stance: 'trot' }, { stay: 5, stance: 'sit', yaw: LAND },
+    { go: [[-34, 162]], speed: 1.3, stance: 'trot' }, { stay: 7, stance: 'sniff', yaw: SEA },
+    { go: [[-34, 128]], speed: 1.8, stance: 'run' }, { go: [[0, 128]], speed: 1.5, stance: 'trot' },
   ], 30) },
   { id: 'dog-loose-lane', variant: 'dachshund', script: dogWander('dog-loose-lane', [-10, 74.2], [
     { go: [[-30, 74.2]], speed: 0.9, stance: 'walk' }, { stay: 8, stance: 'sniff', yaw: Math.PI },
@@ -536,10 +541,10 @@ export const DOGS: readonly LifeDog[] = [
     { go: [[-14, 74.2]], speed: 1.5, stance: 'trot' }, { stay: 10, stance: 'groom', yaw: LAND },
     { go: [[-10, 74.2]], speed: 0.8, stance: 'walk' },
   ], 55) },
-  { id: 'dog-husky-lot', variant: 'husky', script: dogWander('dog-husky-lot', [40, 160], [
-    { go: [[56, 160]], speed: 1.2, stance: 'walk' }, { stay: 8, stance: 'sniff', yaw: 0 },
-    { go: [[66, 148]], speed: 1.5, stance: 'trot' }, { stay: 12, stance: 'lie', yaw: SEA },
-    { go: [[40, 160]], speed: 1.4, stance: 'trot' }, { stay: 6, stance: 'sit', yaw: 0 },
+  { id: 'dog-husky-lot', variant: 'husky', script: dogWander('dog-husky-lot', [40, 162], [
+    { go: [[56, 162]], speed: 1.2, stance: 'walk' }, { stay: 8, stance: 'sniff', yaw: 0 },
+    { go: [[68, 162]], speed: 1.5, stance: 'trot' }, { stay: 12, stance: 'lie', yaw: SEA },
+    { go: [[40, 162]], speed: 1.4, stance: 'trot' }, { stay: 6, stance: 'sit', yaw: 0 },
   ], 10) },
 ];
 

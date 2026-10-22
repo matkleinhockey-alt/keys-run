@@ -66,6 +66,7 @@ export const LOOKS: Readonly<Record<LotStyle, Look>> = {
   icecream:   { wall: 0xf7c6d8, trim: 0xffffff, roof: 0xe8e0d0, signBg: '#ffffff', signFg: '#e0457b', signRim: '#7ad7d0', neon: '#ff7ab0', windows: 'store', pattern: 'stucco', awning: [0xe0457b, 0xffffff], tagline: false },
   motel:      { wall: 0xefe3c8, trim: 0x2bb3a8, roof: 0xb86a4a, signBg: '#2bb3a8', signFg: '#fff6e0', signRim: '#fff6e0', neon: '#ff6a3a', windows: 'small', pattern: 'stucco', awning: null, tagline: true },
   convenience:{ wall: 0xe8e4da, trim: 0x2a8f4a, roof: 0x9aa4ab, signBg: '#2a8f4a', signFg: '#ffffff', signRim: '#ffd34a', neon: '#6dff9a', windows: 'store', pattern: 'stucco', awning: [0x2a8f4a, 0xffffff], tagline: true },
+  casino:     { wall: 0x0d4d5c, trim: 0xe0b34a, roof: 0x0b1a22, signBg: '#06222e', signFg: '#ffd96a', signRim: '#35e0ff', neon: '#35e0ff', windows: 'none', pattern: 'dark', awning: null, tagline: true },
   dive:       { wall: 0x1f6fa0, trim: 0xffd34a, roof: 0x9aa4ab, signBg: '#0e3a58', signFg: '#ffd34a', signRim: '#38e0ff', neon: '#38e0ff', windows: 'store', pattern: 'stucco', awning: [0xffd34a, 0x0e3a58], tagline: true },
 };
 
@@ -141,6 +142,7 @@ function layoutFor(lot: Lot): Layout {
   const tall = H > 5.5;
   const signBand = lot.style === 'club'
     ? { x: 0.8, y: 3.3, w: W - 1.6, h: H - 3.3 - 0.5 }
+    : lot.style === 'casino' ? { x: 1.2, y: 3.5, w: W - 2.4, h: H - 3.5 - 0.5 }
     : tall ? { x: 1.2, y: 3.2, w: W - 2.4, h: 1.7 }
     : { x: 0.9, y: Math.max(3.05, H - 1.55), w: W - 1.8, h: Math.min(1.35, H - 3.05 - 0.2) };
   return { W, H, door: { x: dx, w: dw, h: 2.35 }, windows, signBand };
@@ -296,6 +298,8 @@ export function paintFacade(lot: Lot): FacadeTex {
     neonText(gg, 'GIRLS  ·  GIRLS  ·  GIRLS', sx + sw / 2, sy + sh * 0.62, sw * 0.8, sh * 0.2, '#ffd23f', true);
     neonText(gg, venue.tagline.split('·')[0].trim().toUpperCase(), sx + sw / 2, sy + sh * 0.84, sw * 0.7, sh * 0.12, '#ffffff', true);
     bulbRing(dg, sx, sy, sw, sh, false); bulbRing(gg, sx, sy, sw, sh, true);
+  } else if (lot.style === 'casino') {
+    casinoSign(dg, gg, sx, sy, sw, sh, name);
   } else {
     dg.fillStyle = look.signFg; fitText(dg, name, sx + sw / 2, nameY, sw * 0.92, nameSize);
     if (taglined) { dg.fillStyle = look.signFg; dg.globalAlpha = 0.8; fitText(dg, venue.tagline.toUpperCase(), sx + sw / 2, sy + sh * 0.82, sw * 0.9, sh * 0.15, BODY, '700'); dg.globalAlpha = 1; }
@@ -405,7 +409,7 @@ function bulbRing(g: CanvasRenderingContext2D, x: number, y: number, w: number, 
 // Hero signs: the one big thing that makes each venue recognisable from across the street.
 // ---------------------------------------------------------------------------------------------
 
-export type HeroKind = 'flamingo' | 'target' | 'vacancy' | 'beer' | 'dinerRoof' | 'marlin';
+export type HeroKind = 'flamingo' | 'target' | 'vacancy' | 'beer' | 'dinerRoof' | 'marlin' | 'casinoMarlin';
 export interface HeroTex { day: THREE.CanvasTexture; glow: THREE.CanvasTexture; aspect: number }
 
 export function paintHero(kind: HeroKind): HeroTex {
@@ -419,6 +423,7 @@ export function paintHero(kind: HeroKind): HeroTex {
     else if (kind === 'vacancy') vacancy(g, W, H, isGlow);
     else if (kind === 'beer') beerSign(g, W, isGlow);
     else if (kind === 'dinerRoof') dinerRoof(g, W, H, isGlow);
+    else if (kind === 'casinoMarlin') casinoMarlin(g, W, H, isGlow);
     else marlin(g, isGlow);
   }
   return { day: toTexture(day.c), glow: toTexture(glow.c), aspect: W / H };
@@ -477,6 +482,66 @@ function beerSign(g: CanvasRenderingContext2D, W: number, glow: boolean): void {
 function dinerRoof(g: CanvasRenderingContext2D, W: number, H: number, glow: boolean): void {
   if (!glow) { g.fillStyle = '#e8edf1'; rrect(g, 8, 8, W - 16, H - 16, 40); g.fill(); g.fillStyle = '#c23a3a'; rrect(g, 20, 20, W - 40, H - 40, 32); g.fill(); }
   neonText(g, 'DINER', W / 2, H / 2, W * 0.84, 160, glow ? '#ffffff' : '#ffffffcc', glow);
+}
+
+/**
+ * A leaping marlin, drawn into a 512 box at (ox, oy) scaled by `k`. Day layer: filled blue with a pale
+ * belly, the way a fibreglass fish on a roof looks. Glow layer: the same outline in neon. `flip`
+ * mirrors it so a pair of them can face each other across the sign.
+ */
+function leapMarlin(g: CanvasRenderingContext2D, ox: number, oy: number, k: number, glow: boolean, flip: boolean, color = '#35e0ff'): void {
+  g.save();
+  g.translate(ox, oy); g.scale(flip ? -k : k, k);
+  const body = (): void => {
+    g.beginPath();
+    g.moveTo(40, 440); g.lineTo(200, 300); g.bezierCurveTo(240, 250, 330, 200, 410, 170); g.bezierCurveTo(440, 160, 470, 130, 490, 70);
+    g.bezierCurveTo(470, 150, 440, 210, 400, 250); g.bezierCurveTo(330, 320, 260, 380, 120, 440); g.closePath();
+  };
+  const sail = (): void => { g.beginPath(); g.moveTo(300, 230); g.lineTo(330, 110); g.lineTo(380, 200); g.closePath(); };
+  if (!glow) {
+    g.fillStyle = '#1f6fb0'; body(); g.fill();
+    g.fillStyle = '#134a7a'; sail(); g.fill();
+    g.fillStyle = '#c8dff0'; g.beginPath(); g.moveTo(180, 340); g.bezierCurveTo(260, 330, 330, 300, 380, 250); g.lineTo(350, 290); g.bezierCurveTo(300, 340, 240, 360, 180, 340); g.fill();
+  } else {
+    g.strokeStyle = color; g.lineWidth = 14 / Math.max(0.2, k * 2); g.lineJoin = 'round'; g.shadowColor = color; g.shadowBlur = 24;
+    body(); g.stroke(); sail(); g.stroke();
+  }
+  g.restore();
+}
+
+/** The casino's roof sign: a big neon marlin in a gold ring with stars. */
+function casinoMarlin(g: CanvasRenderingContext2D, W: number, H: number, glow: boolean): void {
+  const cx = W / 2, cy = H / 2;
+  if (!glow) {
+    g.fillStyle = '#06222e'; g.beginPath(); g.arc(cx, cy, 246, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = '#e0b34a'; g.lineWidth = 12; g.beginPath(); g.arc(cx, cy, 240, 0, Math.PI * 2); g.stroke();
+  } else {
+    tube(g, '#ffd23f', true, 12); g.beginPath(); g.arc(cx, cy, 240, 0, Math.PI * 2); g.stroke();
+    tube(g, '#ff3fa4', true, 6); g.beginPath(); g.arc(cx, cy, 214, 0, Math.PI * 2); g.stroke();
+  }
+  leapMarlin(g, cx - 190, cy - 215, 0.74, glow, false, '#35e0ff');
+  g.shadowBlur = 0;
+  if (glow) {
+    g.fillStyle = '#ffd23f'; g.shadowColor = '#ffd23f'; g.shadowBlur = 12;
+    for (const [x, y, r] of [[120, 130, 11], [400, 110, 9], [430, 330, 12], [96, 340, 8], [256, 52, 10]] as const) {
+      g.beginPath(); for (let i = 0; i < 8; i++) { const a = (i * Math.PI) / 4, rr2 = i % 2 ? r * 0.4 : r; g.lineTo(x + Math.cos(a) * rr2, y + Math.sin(a) * rr2); } g.closePath(); g.fill();
+    }
+    g.shadowBlur = 0;
+  }
+  neonText(g, '777', cx, H - 58, W * 0.42, 64, glow ? '#ff3fa4' : '#ff3fa488', glow);
+}
+
+/** The casino marquee in the sign band: the name in gold, CASINO in cyan, a marlin leaping at each end, a ring of bulbs. */
+function casinoSign(dg: CanvasRenderingContext2D, gg: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, name: string): void {
+  const nm = name.replace(' CASINO', '');
+  for (const [g, glow] of [[dg, false], [gg, true]] as const) {
+    neonText(g, nm, x + w / 2, y + h * 0.33, w * 0.62, h * 0.42, glow ? '#ffd96a' : '#ffd96acc', glow);
+    neonText(g, 'CASINO', x + w / 2, y + h * 0.7, w * 0.3, h * 0.3, glow ? '#35e0ff' : '#35e0ffcc', glow);
+    neonText(g, 'SLOTS  ·  ODDS POSTED INSIDE  ·  PLEASE READ THEM', x + w / 2, y + h * 0.9, w * 0.62, h * 0.09, glow ? '#ffffff' : '#e8e0c8', glow);
+    leapMarlin(g, x + w * 0.04, y + h * 0.1, (h * 0.8) / 512 * 0.85, glow, false);
+    leapMarlin(g, x + w * 0.96, y + h * 0.1, (h * 0.8) / 512 * 0.85, glow, true);
+    bulbRing(g, x, y, w, h, glow);
+  }
 }
 
 function marlin(g: CanvasRenderingContext2D, glow: boolean): void {

@@ -254,6 +254,14 @@ export function createEconomySystem(deps: EconomyDeps) {
       if (!Number.isFinite(n) || n <= 0) return;
       commit(sanitizeEconomy({ ...state, cash: state.cash + Math.floor(n) }));
     },
+    /** Money out that buys a chance rather than an item: the casino's stake. All-or-nothing — false (and
+     * nothing taken) unless the wallet covers a positive whole-dollar `n`. Same persistence path as every
+     * other change, so the stake is on disk before the reels move (game/casino relies on that). */
+    debit(n: number): boolean {
+      if (!Number.isFinite(n) || n <= 0 || n !== Math.floor(n) || state.cash < n) return false;
+      commit(sanitizeEconomy({ ...state, cash: state.cash - n }));
+      return true;
+    },
     /** Make sure the wallet is on disk now (the motel promises "progress saved"). */
     flush(): void { save(state); },
     /** Advance the inventory clock (simulated seconds) and expire buffs. world.ts, once per fixed step. */

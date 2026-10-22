@@ -145,6 +145,18 @@
     "./content/cosmetics": {
       "types": "./dist/content/cosmetics.d.ts",
       "default": "./dist/content/cosmetics.js"
+    },
+    "./sim/slots": {
+      "types": "./dist/sim/slots.d.ts",
+      "default": "./dist/sim/slots.js"
+    },
+    "./sim/reels": {
+      "types": "./dist/sim/reels.d.ts",
+      "default": "./dist/sim/reels.js"
+    },
+    "./world/casino": {
+      "types": "./dist/world/casino.d.ts",
+      "default": "./dist/world/casino.js"
     }
   },
   "scripts": {

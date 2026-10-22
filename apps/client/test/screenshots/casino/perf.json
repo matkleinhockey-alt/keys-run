@@ -1,0 +1,317 @@
+[
+  {
+    "label": "street, 60 m from the casino, facing it (day)",
+    "casinoInteriorDeltaCalls": 14,
+    "casinoInteriorDeltaTris": 19000,
+    "wholeTownDeltaCalls": 31,
+    "wholeTownDeltaTris": 50000,
+    "lights": 0,
+    "lightsActive": false,
+    "programs": 55,
+    "geometries": 1293,
+    "textures": 135,
+    "interiorsVisible": [
+      "diner",
+      "bar",
+      "club",
+      "casino"
+    ],
+    "samples": {
+      "room": {
+        "calls": 14,
+        "tris": 19000,
+        "on": [
+          112,
+          118,
+          118
+        ],
+        "off": [
+          99,
+          104,
+          104
+        ]
+      },
+      "town": {
+        "on": [
+          118,
+          118,
+          118
+        ],
+        "off": [
+          87,
+          87,
+          87
+        ]
+      }
+    }
+  },
+  {
+    "label": "at the door, 3 m out (day)",
+    "casinoInteriorDeltaCalls": 114,
+    "casinoInteriorDeltaTris": 45000,
+    "wholeTownDeltaCalls": 124,
+    "wholeTownDeltaTris": 76000,
+    "lights": 0,
+    "lightsActive": false,
+    "programs": 55,
+    "geometries": 1409,
+    "textures": 135,
+    "interiorsVisible": [
+      "diner",
+      "bar",
+      "club",
+      "casino"
+    ],
+    "samples": {
+      "room": {
+        "calls": 114,
+        "tris": 45000,
+        "on": [
+          210,
+          210,
+          210
+        ],
+        "off": [
+          96,
+          96,
+          96
+        ]
+      },
+      "town": {
+        "on": [
+          210,
+          210,
+          210
+        ],
+        "off": [
+          86,
+          86,
+          86
+        ]
+      }
+    }
+  },
+  {
+    "label": "on the floor looking down the aisle (day)",
+    "casinoInteriorDeltaCalls": 88,
+    "casinoInteriorDeltaTris": 38000,
+    "wholeTownDeltaCalls": 94,
+    "wholeTownDeltaTris": 69000,
+    "lights": 4,
+    "lightsActive": true,
+    "programs": 84,
+    "geometries": 1409,
+    "textures": 135,
+    "interiorsVisible": [
+      "diner",
+      "bar",
+      "casino"
+    ],
+    "samples": {
+      "room": {
+        "calls": 88,
+        "tris": 38000,
+        "on": [
+          180,
+          180,
+          180
+        ],
+        "off": [
+          92,
+          92,
+          92
+        ]
+      },
+      "town": {
+        "on": [
+          180,
+          180,
+          180
+        ],
+        "off": [
+          86,
+          86,
+          86
+        ]
+      }
+    }
+  },
+  {
+    "label": "on the floor facing the west island (day)",
+    "casinoInteriorDeltaCalls": 69,
+    "casinoInteriorDeltaTris": 33000,
+    "wholeTownDeltaCalls": 77,
+    "wholeTownDeltaTris": 64000,
+    "lights": 4,
+    "lightsActive": true,
+    "programs": 89,
+    "geometries": 1451,
+    "textures": 135,
+    "interiorsVisible": [
+      "diner",
+      "bar",
+      "casino"
+    ],
+    "samples": {
+      "room": {
+        "calls": 69,
+        "tris": 33000,
+        "on": [
+          178,
+          178,
+          178
+        ],
+        "off": [
+          109,
+          109,
+          109
+        ]
+      },
+      "town": {
+        "on": [
+          178,
+          178,
+          178
+        ],
+        "off": [
+          101,
+          101,
+          101
+        ]
+      }
+    }
+  },
+  {
+    "label": "on the floor facing a bare wall (day)",
+    "casinoInteriorDeltaCalls": 58,
+    "casinoInteriorDeltaTris": 30000,
+    "wholeTownDeltaCalls": 83,
+    "wholeTownDeltaTris": 61000,
+    "lights": 4,
+    "lightsActive": true,
+    "programs": 91,
+    "geometries": 1677,
+    "textures": 136,
+    "interiorsVisible": [
+      "diner",
+      "bar",
+      "casino"
+    ],
+    "samples": {
+      "room": {
+        "calls": 58,
+        "tris": 30000,
+        "on": [
+          579,
+          579,
+          487
+        ],
+        "off": [
+          521,
+          521,
+          429
+        ]
+      },
+      "town": {
+        "on": [
+          487,
+          487,
+          487
+        ],
+        "off": [
+          404,
+          404,
+          404
+        ]
+      }
+    }
+  },
+  {
+    "label": "on the floor at the machines, crowd in view (day)",
+    "casinoInteriorDeltaCalls": 13,
+    "casinoInteriorDeltaTris": 19000,
+    "wholeTownDeltaCalls": 19,
+    "wholeTownDeltaTris": 50000,
+    "lights": 4,
+    "lightsActive": true,
+    "programs": 91,
+    "geometries": 1676,
+    "textures": 136,
+    "interiorsVisible": [
+      "casino"
+    ],
+    "samples": {
+      "room": {
+        "calls": 13,
+        "tris": 19000,
+        "on": [
+          105,
+          105,
+          105
+        ],
+        "off": [
+          92,
+          92,
+          92
+        ]
+      },
+      "town": {
+        "on": [
+          105,
+          105,
+          105
+        ],
+        "off": [
+          86,
+          86,
+          86
+        ]
+      }
+    }
+  },
+  {
+    "label": "on the floor looking down the aisle, SUNSET (lights pool live)",
+    "casinoInteriorDeltaCalls": 88,
+    "casinoInteriorDeltaTris": 38000,
+    "wholeTownDeltaCalls": 94,
+    "wholeTownDeltaTris": 69000,
+    "lights": 4,
+    "lightsActive": true,
+    "programs": 120,
+    "geometries": 1676,
+    "textures": 136,
+    "interiorsVisible": [
+      "diner",
+      "bar",
+      "casino"
+    ],
+    "samples": {
+      "room": {
+        "calls": 88,
+        "tris": 38000,
+        "on": [
+          180,
+          180,
+          180
+        ],
+        "off": [
+          92,
+          92,
+          92
+        ]
+      },
+      "town": {
+        "on": [
+          180,
+          180,
+          180
+        ],
+        "off": [
+          86,
+          86,
+          86
+        ]
+      }
+    }
+  }
+]

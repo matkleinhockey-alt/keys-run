@@ -1,0 +1,43 @@
+/* The slot machine panel (game/casino/index.ts). Same family as the land venue panel (entities/land/land.css). */
+#casinoPanel{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(468px,96vw);max-height:92vh;overflow:auto;padding:14px 16px 12px;z-index:31;pointer-events:auto;text-align:center}
+#casinoPanel.hidden{display:none}
+#casinoPanel h2{margin:0;font:800 30px/1 var(--display);letter-spacing:.02em;text-transform:uppercase;text-align:left}
+#casinoPanel h3{margin:14px 0 8px;font:800 16px/1 var(--display);letter-spacing:.06em;text-transform:uppercase;color:var(--sun);text-align:left}
+#casinoPanel .vtag{margin:6px 0 12px;font-size:13px;color:var(--flats);text-align:left}
+#casinoPanel .say{margin:0 0 12px;padding:10px 14px;border-left:3px solid var(--sun);font-style:italic;color:var(--ink);text-align:left}
+#casinoPanel p.blurb{margin:0 0 12px;font-size:14px;line-height:1.5;color:var(--muted);text-align:left}
+#casinoPanel .cz-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+#casinoPanel .cz-rtp{font:700 11px/1 system-ui,sans-serif;letter-spacing:.12em;color:var(--sun)}
+#casinoPanel .cz-x{background:none;border:none;color:var(--muted);font-size:16px;padding:2px 6px;cursor:pointer}
+#czCanvas{display:block;width:min(420px,100%);aspect-ratio:420/326;margin:0 auto;border-radius:18px;box-shadow:0 6px 24px rgba(0,0,0,.45)}
+#casinoPanel .cz-result{min-height:2.4em;margin:10px 4px 8px;font-size:15px;font-weight:700;color:var(--ink);display:flex;align-items:center;justify-content:center}
+#casinoPanel .cz-result.win{color:var(--sun)}
+#casinoPanel .cz-result.push{color:var(--flats)}
+#casinoPanel .cz-result.bad{color:var(--marker)}
+#casinoPanel .cz-bets{display:flex;gap:6px;justify-content:center;flex-wrap:wrap}
+#casinoPanel button.cz-bet{background:rgba(255,255,255,.1);color:var(--ink);padding:7px 12px;font-size:13px;border-radius:16px}
+#casinoPanel button.cz-bet.on{background:var(--sun);color:var(--gulf)}
+#casinoPanel button.cz-bet.poor:not(.on){opacity:.45}
+#casinoPanel .cz-row{margin:10px 0 6px}
+#casinoPanel button.cz-spin{width:62%;padding:12px 0;font:800 24px var(--display);letter-spacing:.12em;border-radius:30px;box-shadow:0 4px 0 rgba(0,0,0,.35)}
+#casinoPanel button.cz-spin:disabled{opacity:.55}
+#casinoPanel .foot{margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:12px;color:var(--muted)}
+#casinoPanel .foot .wallet{color:var(--sun)}
+#casinoPanel button{background:var(--sun);color:var(--gulf);border:none;border-radius:20px;padding:8px 18px;font-weight:700;font-size:13px;cursor:pointer}
+#casinoPanel .cz-keys{margin-top:8px;font-size:10px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
+#casinoPanel .cz-pay{margin-top:10px;text-align:left}
+#casinoPanel .cz-pay.hidden{display:none}
+#casinoPanel .cz-paytable{list-style:none;margin:0 0 8px;padding:0;display:grid;gap:3px}
+#casinoPanel .cz-paytable li{display:grid;grid-template-columns:40px 1fr auto;gap:0 10px;align-items:center;padding:3px 8px;border-radius:8px;background:rgba(255,255,255,.06);text-align:left}
+#casinoPanel .cz-paytable li small{grid-column:2/4;color:var(--muted);font-size:11px;margin-top:-2px}
+#casinoPanel .cz-paytable li span{font-weight:800;color:var(--sun)}
+#casinoPanel .cz-paytable .cz-sym{grid-row:1/3;display:block;width:36px;height:24px}
+#casinoPanel .cz-odds,#casinoPanel .cz-fine{margin:0;font-size:12px;line-height:1.5;color:var(--muted)}
+#casinoPanel .cz-fine{margin-top:10px;font-style:italic}
+#casinoPanel .cz-ledger{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:0 0 6px}
+#casinoPanel .cz-ledger div{background:rgba(255,255,255,.06);border-radius:9px;padding:6px 4px;text-align:center}
+#casinoPanel .cz-ledger small{display:block;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+#casinoPanel .cz-ledger b{font-size:13px}
+#casinoPanel .cz-ledger b.neg{color:var(--marker)}
+#casinoPanel .cz-ledger b.pos{color:var(--flats)}
+@media (max-width:520px){#casinoPanel .cz-ledger{grid-template-columns:repeat(3,1fr)}}

@@ -22,6 +22,8 @@ import {
   sample, newPose, leashDog, gullAt, walkableAt, palmShape, palmTrunkAt,
 } from '../src/world/town-life.js';
 import { flood, nearestReached, STEP } from './walk-grid.js';
+import { CABINETS, CASINO_LOT, CASINO_NPCS, CASINO_BOXES, CASINO_INTERACTS } from '../src/world/casino.js';
+import { slotOdds, BET_LADDER } from '../src/sim/slots.js';
 
 const F = TOWN_FRAME;
 const overlap = (a: Rect, b: Rect, gap = 0): boolean => a.x0 < b.x1 + gap && a.x1 > b.x0 - gap && a.z0 < b.z1 + gap && a.z1 > b.z0 - gap;
@@ -356,7 +358,15 @@ describe('every walk-in venue is a room you can walk into', () => {
 
   it('puts a shopkeeper behind a counter in every shop, facing the door', () => {
     for (const l of WALKIN) {
-      expect(NPCS.filter((n) => n.inside === l.id && KEEPER.test(n.look)).length, `${l.id} has nobody behind the counter`).toBeGreaterThanOrEqual(1);
+      // The casino staffs itself from world/casino.ts rather than NPCS: 30 cabinets and a change
+      // booth do not fit the one-counter-spanning-`a` convention SHOP_COUNTERS assumes, the same
+      // reason the cabaret needed its own furniture. Its own describe block below checks that
+      // staff harder than this does — that they are in the room, on the floor and not inside the
+      // furniture — so the invariant here is just "somebody works here", read from both tables.
+      const staff = l.id === 'casino'
+        ? CASINO_NPCS.filter((n) => /cashier|dealer|pitboss/.test(n.look)).length
+        : NPCS.filter((n) => n.inside === l.id && KEEPER.test(n.look)).length;
+      expect(staff, `${l.id} has nobody behind the counter`).toBeGreaterThanOrEqual(1);
     }
     for (const c of SHOP_COUNTERS) {
       const box = INTERIOR_BOXES.find((b) => b.id === c.counter)!;
@@ -702,5 +712,116 @@ describe('the street is alive', () => {
     const kinds = new Set(CARS.map((c) => c.kind));
     for (const k of ['sedan', 'pickup', 'convertible', 'suv', 'van', 'wagon', 'cart']) expect(kinds.has(k as never), k).toBe(true);
     expect(new Set(CARS.map((c) => c.color)).size).toBeGreaterThan(9);
+  });
+});
+
+describe('the Gaff & Gill Casino', () => {
+  const lot = LOTS.find((l) => l.id === 'casino')!;
+  const inLot = (u: number, v: number, m = 0): boolean => u > lot.u0 + WALL_T + m && u < lot.u1 - WALL_T - m && v > lot.v0 + WALL_T + m && v < lot.v1 - WALL_T - m;
+  const blocked = (x: number, z: number, k: number): boolean => COLLIDERS.some((c) => x > c.x0 - k && x < c.x1 + k && z > c.z0 - k && z < c.z1 + k);
+
+  it('is a walk-in building in the back lot, door on the axis of Palm Avenue, registered in the venue table', () => {
+    expect(lot).toBe(CASINO_LOT);
+    expect(lot.enterable).toBe(true);
+    expect(lot.door).toBe(0);
+    expect(lot.v0).toBeGreaterThan(SURFACES.find((s) => s.id === 'back-lot')!.v0);
+    expect(VENUES.casino.enterable).toBe(true);
+    expect(VENUES[lot.venue].sells).toHaveLength(0); // chances, not items: see venues.ts
+  });
+
+  it('stands on dry Vaca Key ground, checked against the real terrain, with the pad under every cell of it', () => {
+    for (const [x, z] of samples(lot.u0, lot.u1, lot.v0, lot.v1, 16)) {
+      expect(shoreInfo(x, z).isl?.name, `${x},${z}`).toBe(VACA.name);
+      expect(landH(x, z), `landH ${x},${z}`).toBeGreaterThan(1.1);
+      expect(depthAt(x, z), `depthAt ${x},${z}`).toBeLessThan(0.5); // depthAt floors at 0.35 over dry land: no water to speak of
+      expect(groundAt(x, z)).toBe(PAD_Y);
+    }
+  });
+
+  it('shares its wall thickness with town.ts (casino.ts cannot import it without a cycle, so this is the guard)', () => {
+    const back = CASINO_BOXES.find((b) => b.id === 'casino-bank-back')!;
+    expect(back.v1).toBeCloseTo(lot.v1 - WALL_T, 9);
+    expect(CASINO_BOXES.find((b) => b.id === 'casino-bank-w')!.u0).toBeCloseTo(lot.u0 + WALL_T, 9);
+    expect(CASINO_BOXES.find((b) => b.id === 'casino-bank-e')!.u1).toBeCloseTo(lot.u1 - WALL_T, 9);
+  });
+
+  it('has thirty cabinets, each inside the bank box that collides for it, none overlapping another', () => {
+    expect(CABINETS).toHaveLength(30);
+    expect(new Set(CABINETS.map((c) => c.id)).size).toBe(30);
+    for (const c of CABINETS) {
+      const banks = CASINO_BOXES.filter((b) => b.id.includes('bank') || b.id.includes('island'));
+      const home = banks.find((b) => c.u - c.w / 2 >= b.u0 - 1e-9 && c.u + c.w / 2 <= b.u1 + 1e-9 && c.v - c.d / 2 >= b.v0 - 1e-9 && c.v + c.d / 2 <= b.v1 + 1e-9)
+        ?? banks.find((b) => c.fu !== 0 && c.u - c.d / 2 >= b.u0 - 1e-9 && c.u + c.d / 2 <= b.u1 + 1e-9 && c.v - c.w / 2 >= b.v0 - 1e-9 && c.v + c.w / 2 <= b.v1 + 1e-9);
+      expect(home, `${c.id} is not inside any bank`).toBeDefined();
+    }
+    const foot = (c: (typeof CABINETS)[number]): Rect => (c.fu !== 0 ? uvRect(c.u - c.d / 2, c.u + c.d / 2, c.v - c.w / 2, c.v + c.w / 2) : uvRect(c.u - c.w / 2, c.u + c.w / 2, c.v - c.d / 2, c.v + c.d / 2));
+    for (let i = 0; i < CABINETS.length; i++) for (let j = i + 1; j < CABINETS.length; j++) {
+      const a = foot(CABINETS[i]), b = foot(CABINETS[j]);
+      const ov = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0) > 1e-6 && Math.min(a.z1, b.z1) - Math.max(a.z0, b.z0) > 1e-6;
+      expect(ov, `${CABINETS[i].id} / ${CABINETS[j].id}`).toBe(false);
+    }
+  });
+
+  it('gives every free cabinet an interaction point in front of it, on the floor and clear of furniture, and none to an occupied one', () => {
+    for (const c of CABINETS) {
+      const i = CASINO_INTERACTS.find((q) => q.id === c.id);
+      if (c.occupied) { expect(i, c.id).toBeUndefined(); continue; }
+      expect(i, c.id).toBeDefined();
+      expect(inLot(i!.u, i!.v, 0.3), `${c.id} stand spot is outside the room`).toBe(true);
+      const [x, z] = toWorld(F, i!.u, i!.v);
+      expect(blocked(x, z, 0.25), `${c.id} stand spot is too close to furniture`).toBe(false);
+      // it is in front of the screen, not behind it
+      expect((i!.u - c.u) * c.fu + (i!.v - c.v) * c.fv).toBeGreaterThan(c.d / 2);
+      expect(i!.venue).toBe('casino');
+    }
+    expect(CABINETS.filter((c) => !c.occupied).length).toBeGreaterThanOrEqual(24);
+    expect(CASINO_INTERACTS.some((i) => i.id === 'counter-casino')).toBe(true);
+  });
+
+  it('can be walked from the front door to every cabinet and the change booth, with room for a person (0.3 m radius)', () => {
+    // flood fill over a 0.25 m grid across the lot, treating anything within 0.3 m of a collider as a wall
+    const R = 0.3, STEP = 0.25;
+    const nu = Math.round((lot.u1 - lot.u0) / STEP), nv = Math.round((lot.v1 - lot.v0 + 6) / STEP);
+    const cell = (u: number, v: number): [number, number] => [Math.round((u - lot.u0) / STEP), Math.round((v - (lot.v0 - 6)) / STEP)];
+    const open = (i: number, j: number): boolean => {
+      const u = lot.u0 + i * STEP, v = lot.v0 - 6 + j * STEP;
+      if (i < 0 || j < 0 || i > nu || j > nv) return false;
+      const [x, z] = toWorld(F, u, v);
+      return !blocked(x, z, R);
+    };
+    const [si, sj] = cell(lot.door, lot.v0 - 2);
+    const seen = new Set<number>(), stack: Array<[number, number]> = [[si, sj]];
+    const key = (i: number, j: number): number => i * 100000 + j;
+    seen.add(key(si, sj));
+    while (stack.length) {
+      const [i, j] = stack.pop()!;
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const a = i + di, b = j + dj;
+        if (seen.has(key(a, b)) || !open(a, b)) continue;
+        seen.add(key(a, b)); stack.push([a, b]);
+      }
+    }
+    for (const i of CASINO_INTERACTS) {
+      const [ci, cj] = cell(i.u, i.v);
+      expect(seen.has(key(ci, cj)), `${i.id} cannot be reached on foot`).toBe(true);
+    }
+  });
+
+  it('puts the casino staff and punters inside the room, on the floor and not in the furniture', () => {
+    expect(new Set(CASINO_NPCS.map((n) => n.id)).size).toBe(CASINO_NPCS.length);
+    for (const l of ['dealer', 'cashier', 'pitboss', 'mascot', 'punter'] as const) expect(CASINO_NPCS.some((n) => n.look === l), l).toBe(true);
+    for (const n of CASINO_NPCS) {
+      expect(inLot(n.at.u, n.at.v, 0.2), `${n.id} outside`).toBe(true);
+      const [x, z] = toWorld(F, n.at.u, n.at.v);
+      expect(groundAt(x, z)).toBe(PAD_Y);
+      expect(blocked(x, z, 0.2), `${n.id} standing inside something`).toBe(false);
+    }
+    // every punter is at an occupied cabinet, and every occupied cabinet has one
+    expect(CASINO_NPCS.filter((n) => n.look === 'punter')).toHaveLength(CABINETS.filter((c) => c.occupied).length);
+  });
+
+  it('prints the same return on the venue blurb as the machines enforce', () => {
+    expect(VENUES.casino.blurb).toContain(`${slotOdds().rtpPct} cents on the dollar`);
+    expect(VENUES.casino.blurb).toContain(`$${BET_LADDER[0]} to $${BET_LADDER[BET_LADDER.length - 1]}`);
   });
 });

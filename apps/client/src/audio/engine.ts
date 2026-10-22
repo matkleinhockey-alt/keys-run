@@ -1196,6 +1196,153 @@ export function createAudioEngine() {
     for (const id of remoteGhostVs.keys()) if (!liveIds.has(id)) remoteGhostVs.delete(id);
   }
 
+  // -------------------------------------------------------------------------------------------
+  // The casino (game/casino/, entities/town/casino.ts). Everything is synthesised here from
+  // oscillators and the shared noise buffer, like the rest of this engine: no sample files, so the
+  // casino costs no bytes in the bundle and nothing to load. Four pieces:
+  //   - `casinoReels`: the clatter of the drums while they spin (one persistent chain, level/rate
+  //     driven by the reels' own speed, so the clatter dies away reel by reel as they stop);
+  //   - `casinoStop`: the clunk each reel makes when it hits its stop (the overshoot "thunk");
+  //   - `casinoWin` / `casinoDud`: the jingle (four sizes, the biggest with a coin shower and a gull,
+  //     because this game has a seagull) and a sad trombone for the boot;
+  //   - `casinoAmbience`: the room itself, a murmur bed with far-off machines blipping and coins
+  //     clinking, faded in by how far inside the building the listener is.
+  // Levels are kept low (most bursts here sit at 0.05-0.35) so the jackpot still lands on top of a
+  // boat engine; they were set by ear against the V8 idle.
+  // -------------------------------------------------------------------------------------------
+
+  let clatter: { g: GainNode; bp: BiquadFilterNode; lfo: OscillatorNode; depth: GainNode } | null = null;
+
+  /** `level` 0..1 is loudness (0 = silent), `rate` 0..1 is how fast the reels are going. */
+  function casinoReels(level: number, rate: number): void {
+    if (!ready || !on || !ctx) return;
+    const c = ctx, now = c.currentTime;
+    if (!clatter) {
+      const src = audNoiseSrc();
+      const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2200; bp.Q.value = 1.4;
+      const g = c.createGain(); g.gain.value = 0;
+      const lfo = c.createOscillator(); lfo.type = 'square'; lfo.frequency.value = 24;
+      const depth = c.createGain(); depth.gain.value = 0;
+      // a square LFO added onto the gain chops the noise into ticks: base + depth * (+-1)
+      lfo.connect(depth); depth.connect(g.gain);
+      src.connect(bp); bp.connect(g); g.connect(requireBus());
+      lfo.start();
+      clatter = { g, bp, lfo, depth };
+    }
+    const lv = clamp01(level);
+    clatter.g.gain.setTargetAtTime(lv * 0.03, now, 0.05);
+    clatter.depth.gain.setTargetAtTime(lv * 0.03, now, 0.05);
+    clatter.lfo.frequency.setTargetAtTime(12 + 44 * clamp01(rate), now, 0.05);
+    clatter.bp.frequency.setTargetAtTime(1300 + 1900 * clamp01(rate), now, 0.05);
+  }
+
+  /** The spin starting: a short rising whirr and a thump of the lever. */
+  function casinoSpin(): void {
+    audBurst({ tone: 90, toneTo: 48, dur: 0.18, gain: 0.3, att: 0.003, wave: 'sine' });
+    audBurst({ type: 'bandpass', freq: 500, freqTo: 2600, q: 1.1, dur: 0.42, gain: 0.12, att: 0.04 });
+  }
+
+  /** A reel hitting its stop. Each reel a little lower than the one before, so the three read as a phrase. */
+  function casinoStop(reel: number): void {
+    audBurst({ tone: 150 - reel * 14, toneTo: 52, dur: 0.17, gain: 0.36, att: 0.002, wave: 'sine' });
+    audBurst({ type: 'highpass', freq: 2600, dur: 0.04, gain: 0.24, att: 0.001 });
+    audBurst({ tone: 940 + reel * 70, toneTo: 720, dur: 0.07, gain: 0.05, wave: 'triangle' });
+  }
+
+  /** One scheduled note: `at` seconds from now. */
+  function chime(freq: number, at: number, dur: number, gain: number, wave: OscillatorType = 'triangle'): void {
+    if (!ready || !on || !ctx) return;
+    const c = ctx, t = c.currentTime + at;
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = wave; o.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gain, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(requireBus());
+    o.start(t); o.stop(t + dur + 0.05);
+  }
+  /** A bell: the fundamental plus two inharmonic partials, which is most of what makes it "metal". */
+  function bell(freq: number, at: number, dur: number, gain: number): void {
+    chime(freq, at, dur, gain, 'sine');
+    chime(freq * 2.76, at, dur * 0.55, gain * 0.4, 'sine');
+    chime(freq * 5.4, at, dur * 0.3, gain * 0.18, 'sine');
+  }
+  /** A coin on a tray: a high ting and a puff of metallic noise. */
+  function coin(at: number, gain = 0.05): void {
+    chime(2300 + ((at * 7919) % 900), at, 0.09, gain, 'sine');
+    if (!ready || !on || !ctx) return;
+    const c = ctx, t = c.currentTime + at;
+    const src = c.createBufferSource(); src.buffer = noise;
+    const f = c.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 5000;
+    const g = c.createGain(); g.gain.setValueAtTime(gain * 0.5, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
+    src.connect(f); f.connect(g); g.connect(requireBus());
+    src.start(t, Math.random() * 1.5); src.stop(t + 0.06);
+  }
+
+  const PENT = [523.25, 587.33, 659.25, 783.99, 880, 1046.5, 1174.7, 1318.5, 1568];
+
+  /** The win jingle, scaled to the win. `push` is a payout smaller than the stake (a pair of shrimp). */
+  function casinoWin(tier: 'push' | 'small' | 'big' | 'jackpot'): void {
+    if (!ready || !on || !ctx) return;
+    if (tier === 'push') { chime(PENT[2], 0, 0.18, 0.07); chime(PENT[3], 0.09, 0.22, 0.07); coin(0.14, 0.03); return; }
+    if (tier === 'small') {
+      [0, 2, 3, 5].forEach((n, i) => chime(PENT[n], i * 0.085, 0.3, 0.09, 'square'));
+      bell(PENT[5], 0.34, 0.8, 0.07);
+      for (let i = 0; i < 6; i++) coin(0.4 + i * 0.07, 0.04);
+      return;
+    }
+    if (tier === 'big') {
+      [0, 1, 2, 3, 4, 5, 3, 5, 6, 7].forEach((n, i) => chime(PENT[n], i * 0.075, 0.34, 0.1, i % 2 ? 'triangle' : 'square'));
+      bell(PENT[7], 0.8, 1.4, 0.1);
+      for (let i = 0; i < 18; i++) coin(0.55 + i * 0.075, 0.05);
+      return;
+    }
+    // jackpot: rising arpeggios, a held chord, a shower of coins, and then the seagull has an opinion
+    for (let rep = 0; rep < 3; rep++) [0, 2, 3, 5, 7, 8].forEach((n, i) => chime(PENT[n], rep * 0.55 + i * 0.07, 0.4, 0.1, 'square'));
+    [0, 3, 5, 7].forEach((n) => bell(PENT[n] * 0.5, 1.7, 2.6, 0.1));
+    for (let i = 0; i < 46; i++) coin(0.4 + i * 0.065 + ((i * 37) % 11) * 0.004, 0.055);
+    setTimeout(() => caelenSquawk(), 2200);
+  }
+
+  /** Sad trombone, for the boot: three notes sliding down. */
+  function casinoDud(): void {
+    if (!ready || !on || !ctx) return;
+    const c = ctx, t0 = c.currentTime;
+    ([[0, 233, 0.28], [0.3, 220, 0.28], [0.62, 207, 0.8]] as const).forEach(([d, f, dur], k) => {
+      const t = t0 + d;
+      const o = c.createOscillator(), lp = c.createBiquadFilter(), g = c.createGain();
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(f * 1.04, t); o.frequency.exponentialRampToValueAtTime(f * (k === 2 ? 0.8 : 0.96), t + dur);
+      lp.type = 'lowpass'; lp.frequency.value = 650; lp.Q.value = 2;
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.07, t + 0.03); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(lp); lp.connect(g); g.connect(requireBus());
+      o.start(t); o.stop(t + dur + 0.05);
+    });
+  }
+
+  /** A button press on the cabinet. */
+  function casinoClick(): void {
+    audBurst({ type: 'highpass', freq: 3200, dur: 0.02, gain: 0.14, att: 0.001 });
+    audBurst({ tone: 1250, dur: 0.03, gain: 0.04, wave: 'square' });
+  }
+
+  let room: NoiseLoop | null = null;
+  let roomT = 2;
+  /** The room: `level` 0..1 is how far inside the casino the listener is (0 = outside, silent and not even built). */
+  function casinoAmbience(dt: number, level: number): void {
+    if (!ready || !on || !ctx) return;
+    if (!room) { if (level < 0.01) return; room = audLoop('lowpass', 560, 0.8, 0); }
+    const now = ctx.currentTime, lv = clamp01(level);
+    room.g.gain.setTargetAtTime(0.045 * lv, now, 0.4);
+    if (lv < 0.08) return;
+    roomT -= dt;
+    if (roomT > 0) return;
+    roomT = rand(0.9, 3.8);
+    // far-off machines: a quiet little run from the same pentatonic scale the jackpot uses, a coin tumble now and then
+    if (Math.random() < 0.65) {
+      const start = Math.floor(rand(0, 5)), n = 3 + Math.floor(rand(0, 3));
+      for (let i = 0; i < n; i++) chime(PENT[start + (i % 3)] * 0.5, i * 0.11, 0.2, 0.012 * lv, 'square');
+    } else for (let i = 0; i < 5; i++) coin(i * 0.06, 0.012 * lv);
+  }
+
   /** legacy `AUD.update` (index.html:3158-3215). */
   function update(input: AudioFrameInputs): void {
     if (!ready) return;
@@ -1249,6 +1396,7 @@ export function createAudioEngine() {
   return {
     init, setPlayerBoat, startEngines, stopEngines, toggleMute, isMuted, isReady, audioContext, masterBus,
     splash, slam, cast, nibble, strike, snap, land, gull, caelenSquawk, bark,
+    casinoReels, casinoSpin, casinoStop, casinoWin, casinoDud, casinoClick, casinoAmbience,
     update, bindVisibilitySuspend, dispose,
     /** Exposed for `music/radio.ts`, which needs to patch into the same `bus`/compressor chain and
      * read `ready`/`on` without this module exporting its whole closure. */
