@@ -33,7 +33,7 @@ export interface ShelfItem {
   id: string;
   name: string;
   blurb: string;
-  /** Whole dollars. Illustrative until the economy lands (content/economy.ts is dock fillet prices). */
+  /** Whole dollars. See PRICING below: gear is priced in "effective sessions" against measured income. */
   price: number;
   /** 'planned' = listed on the shelf but not for sale. The panel greys it out. */
   status: 'planned' | 'live';
@@ -55,6 +55,30 @@ export interface Venue {
   enterable: boolean;
 }
 
+/**
+ * ## PRICING (why the numbers on the shelves are what they are)
+ *
+ * Measured with apps/client/test/playthrough-economy.mjs (real shared fight sim, fixed seed, 'angler'
+ * player, SIMULATED seconds). On the starter outfit (braid50) 30 sim-minutes of rod time pays, in
+ * dollars: Hawk Channel ~$11.1k, Reef ~$12.5k, Offshore ~$21.0k. That is an upper bound on a human
+ * (perfect 250 ms reactions, no missed strikes, no town trips), so a design "session" here is
+ * 15 rod-minutes at 60% realism = 0.3 x that table: **~$3.75k at the Reef, ~$6.3k offshore**, i.e.
+ * about $250 per effective minute inshore. Everything below is quoted in that unit.
+ *
+ * Tiers, by design:
+ *   - pocket    (< 1 min):   consumables, food, cosmetics. Flavour, not progression.
+ *   - first buy (~1-3 min):  mask, fins, wetsuit. The cheap dive kit (1,600) is a first-session purchase,
+ *                            so the shops never read as locked.
+ *   - the fork  (~1 session): pony bottle 4,500 / lever reel 4,000 / a first hull at 9,000. Roughly the
+ *                            second half-hour of play; you can afford ~one of them, not all, and they pay
+ *                            back in different currencies (dive time / fish per minute / status).
+ *   - sinks:                 priced to cost a visible slice of a session, or they are not sinks.
+ * Every gear price was set from a payback of ~2-5 effective sessions on the lift `modifiersFor` gives it
+ * (rod/reel lifts measured in the harness; dive/spear lifts priced by analogy, because the harness does
+ * not model spearing). Rejected: leaving them at the original 90-900, which put the ENTIRE gear shelf
+ * (2,680 dollars) at under one session of income, so there was nothing to choose between, and a
+ * pony bottle cost a quarter of a session while a hull cost two.
+ */
 const item = (id: string, name: string, blurb: string, price: number, kind: EffectKind, key: string): ShelfItem =>
   ({ id, name, blurb, price, status: 'live', effect: { kind, key } });
 
@@ -68,8 +92,16 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
     ],
     blurb: 'Rods, reels, leader, live bait and bagged ice, run by a man who has opinions about every one of them. This is where better tackle will be bought.',
     sells: [
-      item('rod-heavy', 'Heavy-action trolling rod', 'Stops a run the stock rod cannot. Changes the fight sim\'s line strength.', 240, 'gear', 'rod.heavy'),
-      item('reel-lever', 'Lever-drag two-speed reel', 'Finer drag steps and a longer spool.', 520, 'gear', 'reel.lever'),
+      // PRICE 240 -> 2,400. lineMul 1.35 on the starter braid50 = 67 lb. Measured (playthrough-economy.mjs, 30 sim-min): Hawk
+      // +1%, Reef +1%, Offshore +21% ($21.0k -> $25.4k). It is an offshore tool: ~$1.3k per effective session there, so
+      // 2,400 pays back in ~2 offshore sessions (~5 if you stay inshore). At 240 it was 4 minutes of income.
+      item('rod-heavy', 'Heavy-action trolling rod', 'Stops a run the stock rod cannot. Changes the fight sim\'s line strength.', 2_400, 'gear', 'rod.heavy'),
+      // PRICE 520 -> 4,000. reelMul 1.3 + lineMul 1.05. The best single rod-side buy: Hawk +13%, Reef +11%, Offshore +25%
+      // (faster retrieve = more fish per minute AND fewer losses). ~$0.8k per effective session blended, so 4,000 is a ~5-session
+      // payback (2.5 if you fish offshore). Deliberately dearer than the heavy rod because it helps at EVERY range.
+      // Together heavy+lever (6,400) measure the same lift as the braid80 rung (+42% offshore), which is why braid80 is
+      // now 6,500 in content/tackle.ts rather than 12,000: otherwise the rung would be strictly dominated by $760 of town gear.
+      item('reel-lever', 'Lever-drag two-speed reel', 'Finer drag steps and a longer spool.', 4_000, 'gear', 'reel.lever'),
       item('bait-shrimp', 'Live shrimp (dozen)', 'Bite rate up on the flats.', 12, 'consumable', 'bait.shrimp'),
       item('bait-ballyhoo', 'Rigged ballyhoo', 'Trolling bait for mahi and wahoo.', 18, 'consumable', 'bait.ballyhoo'),
       item('ice-bag', 'Bag of ice', 'Keeps the cooler honest.', 4, 'consumable', 'cooler.ice'),
@@ -87,8 +119,12 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
     blurb: 'A proper Keys gun counter, bars on the windows and a flag out front. In this game it is where the harpoon gun gets its upgrades: longer range, faster shafts, and a reel that does not fight back.',
     sells: [
       item('spear-shaft', 'Stainless spear shafts (3)', 'Replacement shafts for the diver\'s speargun.', 45, 'consumable', 'spear.shafts'),
-      item('spear-long', 'Long-range band gun', 'Longer effective range underwater.', 380, 'gear', 'spear.long'),
-      item('spear-reel', 'Reel-line conversion', 'A fish on the spear runs less far before you can haul.', 210, 'gear', 'spear.reel'),
+      // PRICE 380 -> 2,200. +6 m on SPEAR_RANGE 18 is +33% reach = ~1.8x the water a shot covers. Spear income is not in the
+      // rod harness, so this is priced by analogy to the lever reel (the other 'more fish per minute' item), a notch under it.
+      item('spear-long', 'Long-range band gun', 'Longer effective range underwater.', 2_200, 'gear', 'spear.long'),
+      // PRICE 210 -> 1,400. Tether x0.6 saves fish that would otherwise strip the tether; a landing aid, not a rate boost, so
+      // cheaper than the long gun but a real purchase (~1/3 of a session).
+      item('spear-reel', 'Reel-line conversion', 'A fish on the spear runs less far before you can haul.', 1_400, 'gear', 'spear.reel'),
       item('flare', 'Marine flare kit', 'Required by the Coast Guard, loved by everyone else.', 38, 'consumable', 'safety.flare'),
     ],
     enterable: false,
@@ -103,7 +139,8 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
     blurb: 'Weathered boards, a tin roof, a jukebox and a bartender called Dot who has seen every sunburn. A round here will one day cost you Luigi-mode steadiness and buy you hype.',
     sells: [
       item('beer', 'Cold one', 'Lowers your cast accuracy, raises the crowd\'s opinion of you.', 5, 'buff', 'bar.beer'),
-      item('round', 'A round for the bar', 'Money out, reputation in.', 60, 'sink', 'bar.round'),
+      // SINKS: PRICE 60 -> 250. A sink only works if it costs a visible slice of a session. 60 was ~15 seconds of income. 250 = 1 effective minute.
+      item('round', 'A round for the bar', 'Money out, reputation in.', 250, 'sink', 'bar.round'),
       item('wings', 'Hot wings', 'Balances the cold one. Slightly.', 11, 'buff', 'bar.wings'),
       item('shot-key-lime', 'Key lime shot', 'Local colour.', 8, 'buff', 'bar.shot'),
     ],
@@ -118,8 +155,10 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
     ],
     blurb: 'Magenta neon, a velvet rope and a bouncer the size of a bait freezer. You can not get in yet; what you can do is admire the sign and be turned away with some style.',
     sells: [
-      item('cover', 'Cover charge', 'Pay to get past the rope.', 20, 'sink', 'club.cover'),
-      item('bottle', 'Bottle service', 'A very expensive way to feel important.', 250, 'sink', 'club.bottle'),
+      // SINKS: PRICE 20 -> 50 (the rope is closed anyway; this only sets the price of being turned away with style).
+      item('cover', 'Cover charge', 'Pay to get past the rope.', 50, 'sink', 'club.cover'),
+      // SINKS: PRICE 250 -> 2,500. 'Very expensive' has to be true: ~2/3 of a first-session haul, the biggest discretionary sink in town.
+      item('bottle', 'Bottle service', 'A very expensive way to feel important.', 2_500, 'sink', 'club.bottle'),
       item('tip', 'Tip jar', 'Money out of the economy, for the cabaret.', 10, 'sink', 'club.tip'),
     ],
     enterable: false,
@@ -145,10 +184,18 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
     greeting: ['Tanks are filled. Your air is your own problem.', 'Dive flag up, always.'],
     blurb: 'Masks, fins, suits and fills. This is where your bottom time comes from — a pony bottle more than doubles it, and the fins and suit stretch what you already have.',
     sells: [
-      item('mask-wide', 'Wide-view mask', 'A little more peripheral vision down there.', 90, 'gear', 'dive.mask'),
-      item('fins-long', 'Long-blade freediving fins', 'Faster swim, and less air burned per metre.', 140, 'gear', 'dive.fins'),
-      item('wetsuit', '3 mm shorty wetsuit', 'Warmth is air. Shivering burns it faster than swimming does.', 160, 'gear', 'dive.wetsuit'),
-      item('tank-pony', 'Slung pony bottle and reg', 'The big one: more than twice as long on the bottom.', 900, 'gear', 'dive.tank'),
+      // PRICE 90 -> 250. +6 m of view is pure convenience (no income of its own) so it stays the cheapest dive buy and the FIRST
+      // thing a new player can afford: ~1 effective minute of Reef income, i.e. inside the first session. 90 was 20 seconds.
+      item('mask-wide', 'Wide-view mask', 'A little more peripheral vision down there.', 250, 'gear', 'dive.mask'),
+      // PRICE 140 -> 600. Swim +28% and breath +8%: a comfort item that quietly helps every dive. ~2.5 effective minutes.
+      item('fins-long', 'Long-blade freediving fins', 'Faster swim, and less air burned per metre.', 600, 'gear', 'dive.fins'),
+      // PRICE 160 -> 750. breath x1.18 is worth more than the fins' x1.08 and stacks with the bottle (x2.2 x1.18 x1.08 = 2.8x),
+      // so it costs more than the fins. Still under 1/4 of a session: the cheap kit (mask+fins+wetsuit = 1,600) is a first-session buy.
+      item('wetsuit', '3 mm shorty wetsuit', 'Warmth is air. Shivering burns it faster than swimming does.', 750, 'gear', 'dive.wetsuit'),
+      // PRICE 900 -> 4,500. breath x2.2 is the biggest single multiplier in the shop. Set just ABOVE the lever reel (4,000) and
+      // about half a Robalo (9,000) so the early fork is real: ~session 3 you can have the bottle, or the reel, or be 50% of the
+      // way to a hull, and each wins on a different axis (dive time vs fish/minute vs status). 900 was a quarter of one session.
+      item('tank-pony', 'Slung pony bottle and reg', 'The big one: more than twice as long on the bottom.', 4_500, 'gear', 'dive.tank'),
       item('fill', 'Air fill', 'Tops the bottle back up. Steve will do it while you wait.', 12, 'consumable', 'dive.fill'),
     ],
     enterable: false,

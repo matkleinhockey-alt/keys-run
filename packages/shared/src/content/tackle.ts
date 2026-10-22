@@ -55,8 +55,32 @@ export const TACKLE: readonly Tackle[] = [
  */
 export const STARTER_TACKLE = 'braid50';
 
+/**
+ * Rung prices, dollars. NOT wired to a shop yet (nothing buys a rung today), but they are the third
+ * ladder next to BOAT_PRICE and the town's rod/reel, and they must agree with both.
+ *
+ * Measured lift over braid50 in dollars per 30 sim-min (apps/client/test/playthrough-economy.mjs):
+ *            Hawk    Reef    Offshore     (stock rung, angler, drag 3)
+ *   braid50  11.1k   12.5k   21.0k        (starter, owned free)
+ *   braid80  13.0k   13.7k   29.4k        +17% / +10% / +40%
+ *   braid130 12.8k   14.4k   35.2k        +15% / +15% / +67%
+ * and the town's rod+reel, same harness, same units:
+ *   lever reel 12.5k/13.9k/26.3k, heavy rod 11.2k/12.6k/25.4k, BOTH 13.0k/13.7k/29.8k  <- equals braid80.
+ * Because heavy+lever (6,400 in venues.ts) reproduce braid80 almost exactly, the old braid80 price of
+ * 12,000 made the rung strictly dominated by town gear at about half the price. It is now 6,500: the
+ * same money by a different road, and the two routes STACK (braid80 + heavy + lever = 113 lb, between
+ * braid80 and braid130) so neither is a trap. braid130 (130 lb, +67% offshore) is the trophy-billfish
+ * rung: 22,000, between the first and second blue-water hulls, and still ~$440 per added pound against
+ * ~$217 for braid80 and ~$137 for the heavy rod, so marginal cost per pound rises all the way up (the
+ * test asserts it). It was 45,000, which is 5 effective offshore sessions for a +67% that only
+ * matters after you already own most of the fleet's reach.
+ *
+ * Starter and the two light rungs cost nothing: braid50 is what you begin with (it was priced 2,500 back
+ * when mono30 was the starter and braid50 a purchase), and the light rungs are a sporting downgrade.
+ * Fight stats (lineLb etc.) are untouched, so win rates and the per-drag table are unchanged.
+ */
 export const TACKLE_PRICE: Readonly<Record<string, number>> = {
-  mono12: 0, mono30: 0, braid50: 2_500, braid80: 12_000, braid130: 45_000,
+  mono12: 0, mono30: 0, braid50: 0, braid80: 6_500, braid130: 22_000,
 };
 
 export function tackleById(id: string | undefined | null): Tackle {

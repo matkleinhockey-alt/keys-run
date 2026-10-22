@@ -69,22 +69,43 @@ export const BOAT_ORDER: readonly string[] = [
 export const STARTER_BOAT = 'grady';
 
 /**
- * Prices, dollars. Sized against what a ~15-minute session pays at the range that boat opens up
- * (see the reference hauls in test/economy.test.ts), aiming for each step to be 3-6 sessions:
- * the first upgrade lands in an evening, the last is a few weekends (~30 sessions for the whole
- * fleet, steps of 3.2x-5.6x). Each hull also widens the
- * fish you can reach (speed, rough-water rating), which is why a steepening curve does not
- * stall: session income rises about as fast as the prices do.
+ * Prices, dollars.
+ *
+ * RE-MEASURED, not re-guessed (apps/client/test/playthrough-economy.mjs; the old note here assumed a
+ * 12-fish, ~$2k session). With the fight reworked and the starter outfit moved to braid50, 30
+ * sim-minutes on the Grady pay $11.1k (Hawk Channel) / $12.5k (Reef) / $21.0k (Offshore), ~58/56/33
+ * fish, so fish COUNT fell against the effortless fights but dollars per fish are high enough that
+ * income is ~1.7x what these prices were sized for. A human is not the harness angler: one "session"
+ * is 15 rod-minutes at 60% realism = 0.3 x that table = **$3.75k at the Reef, $6.3k offshore** on
+ * the starter kit, rising to ~$8.9k with the town rod+reel and ~$10.6k+ on braid130 (hulls do NOT
+ * change income today: the Grady already runs the Gulf Stream and the stream is ~35 s away, so a
+ * hull is range, handling, status and the deck party, never a catch multiplier).
+ *
+ * Hulls are therefore a status sink that competes with a gear sink, and the ladder is sized as a
+ * greedy buyer's timeline through BOTH (test/economy.test.ts walks it): cheap dive kit in session 1,
+ * lever reel session 2, pony bottle session 3, FIRST HULL session 4, contender 7, braid130 9,
+ * yellowfin 12, freeman 16, midnight 21, mti 27, nortech 34 (whole fleet + every shelf item ~34
+ * sessions, close to the original ~30). Hull-to-hull gaps are 3,3,4,5,6,7 sessions.
+ *
+ * What changed and why: robalo 8k -> 9k (it is a flats boat that is WORSE in a chop than the Grady, so
+ * it must not be the obvious first buy; at 9k it is ~2.4 inshore sessions, the same price band as the
+ * bottle+reel it competes with). contender 18k -> 20k, yellowfin 28k -> 30k and freeman 40k -> 42k
+ * so the early hulls sit behind the 22k braid130 rung rather than ahead of it. The top three were
+ * CUT (midnight 62k -> 56k, mti 90k -> 70k, nortech 125k -> 85k): income plateaus near $10-11k per
+ * session once the kit is bought, and the old 22k/28k/35k steps had grown to 7-12 sessions each. Cuts
+ * to 56/70/85 keep every step at or under 7. Rejected: scaling everything x2.5 to restore the old
+ * "3-6 sessions at ~$2k" arithmetic (a 20k first hull is an afternoon wall to a new player) and
+ * raising payouts (it would inflate the shop's lift/price ratios I just set).
  */
 export const BOAT_PRICE: Readonly<Record<string, number>> = {
   grady: 0,
-  robalo: 8_000,
-  contender: 18_000,
-  yellowfin: 28_000,
-  freeman: 40_000,
-  midnight: 62_000,
-  mti: 90_000,
-  nortech: 125_000,
+  robalo: 9_000,
+  contender: 20_000,
+  yellowfin: 30_000,
+  freeman: 42_000,
+  midnight: 56_000,
+  mti: 70_000,
+  nortech: 85_000,
 };
 
 export function boatPrice(id: string): number {
@@ -184,9 +205,10 @@ export function netWorth(state: EconomyState): number {
 }
 
 /** Net-worth floor of each tier. Tier 0 is a broke angler and a buddy; tier 5 is a full dock
- * party. Thresholds track the boat prices so each hull purchase tends to carry you up a tier
- * (robalo->1, contender->2, yellowfin->3, freeman->4, midnight+->5). */
-export const TIER_FLOOR: readonly number[] = [0, 1_500, 6_000, 25_000, 90_000, 240_000];
+ * party. Net worth counts every hull's sticker price, so the cumulative fleet is what matters:
+ * robalo 9k -> tier 2, contender 29k -> 3, freeman 101k -> 4, mti 227k -> 5 (the top floor moved
+ * 240k -> 215k so the party still peaks at the same hull after the top-end price cuts). */
+export const TIER_FLOOR: readonly number[] = [0, 1_500, 6_000, 25_000, 90_000, 215_000];
 export const TIER_NAMES: readonly string[] = ['Bait money', 'Weekend angler', 'Regular', 'Local legend', 'High roller', 'Dockside royalty'];
 /** People partying aboard at each tier, before the hull's own capacity cap. */
 const TIER_PARTY: readonly number[] = [1, 2, 3, 4, 6, 8];
