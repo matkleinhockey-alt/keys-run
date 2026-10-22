@@ -182,6 +182,43 @@ export const VIS: Record<string, CreatureVis> = {
   // (`pattern:'bars'`) fade with age on a real one; they are kept here because they are what
   // makes it recognisable as a tiger and not just another grey shark.
   tigershark:{kind:'shark',len:4.2,h:.78,w:.72,back:'#5f6a63',belly:'#eceeea',fin:'#515b55',pattern:'bars',level:'mid',speed:1.5,school:[1,1],spread:0,dMin:6,dMax:1e5},
+
+  // ---- A second batch of big ones. The first (above) was about awe; this one is about the
+  // water having a top end you can actually hook, and two animals that are simply enormous.
+
+  // Shortfin mako — the fastest shark in the ocean and a serious gamefish, so unlike the others
+  // here it IS catchable. Deep metallic blue over a white belly, a hard lunate tail like a tuna's
+  // rather than the heterocercal shark fin: makos are built like a billfish and it shows.
+  mako:{kind:'shark',len:3.6,h:.58,w:.56,back:'#1f4f86',belly:'#f2f5f8',fin:'#1b4472',level:'mid',speed:3.4,school:[1,1],spread:0,dMin:20,dMax:1e5},
+  // Great white — prohibited in Florida, so not catchable, and weighted so low you may never see
+  // one. Which is the point: it should be a thing you tell people about.
+  greatwhite:{kind:'shark',len:5,h:1.05,w:1,back:'#6a7078',belly:'#f4f4f2',fin:'#565c63',level:'mid',speed:1.6,school:[1,1],spread:0,dMin:12,dMax:1e5,catchable:false},
+  // Sperm whale — the Gulf of Mexico has a genuine resident population, and they are deep-water
+  // animals, so this belongs out past the wall and over the Humps rather than inshore. `blunt`
+  // plus a heavy `hump` is that enormous square forehead, which is most of the animal.
+  //
+  // Its Humps weight is 0.45, not the 0.1 it started at. At 0.1 it had no resident presence
+  // anywhere within 15 km of five separate offshore origins — the same result the humpback's 0.08
+  // gives, which is the project's deliberate ultra-rarity and is fine for one animal. Two animals
+  // you will never meet is not a roster. The Humps exist to make a rare thing PLACE-BASED and
+  // learnable (see the pilot whale's note), so the sperm whale is findable if you know where to
+  // go, and still an order of magnitude rarer than the pilot whales you went there for.
+  spermwhale:{kind:'whale',len:14,h:2.3,w:2.1,back:'#4a4542',belly:'#6b6460',pattern:'mottle',blunt:true,level:'surface',speed:1.6,school:[1,3],spread:12,dMin:35,dMax:1e5,act:'blow',catchable:false},
+  // Ocean sunfish — a 3 m disc with no tail to speak of, drifting on its side at the surface.
+  // Nothing else in the water looks remotely like it, which is the whole reason to have one.
+  //
+  // It is in the Humps and DeepWall tables as well as Offshore, and that is not decoration:
+  // Offshore is the ROAMING layer only (see that table's own note and spawn.ts), so a creature
+  // listed there and nowhere else has no resident presence at all — searching 12 km of ocean for
+  // this one turned up nothing while the other five were found immediately. A thing this strange
+  // is worth meeting; weighted low enough that meeting it is still an event.
+  mola:{kind:'fish',len:3,h:2.6,w:.55,back:'#8d939a',belly:'#d8dce0',pattern:'mottle',level:'surface',speed:.5,school:[1,1],spread:0,dMin:18,dMax:1e5,act:'roll',catchable:false},
+  // Warsaw grouper — the deep-drop monster. Same body plan as the goliath, darker, and it lives
+  // where you need the bottle to reach it.
+  warsaw:{kind:'fish',len:2.3,h:.72,w:.5,back:'#3b332e',belly:'#6d625a',fin:'#2c2521',level:'bottom',speed:.45,school:[1,1],spread:0,dMin:25,dMax:1e5},
+  // Cubera snapper — the biggest snapper there is, and a wreck fish. Dark, slab-sided, with the
+  // heavy jaw the species is known for.
+  cubera:{kind:'fish',len:1.6,h:.52,w:.28,back:'#5a4a46',belly:'#b9a89c',fin:'#3e3330',level:'bottom',speed:.8,school:[1,3],spread:3,dMin:8,dMax:60},
 };
 
 /** Single source of truth for "can this creature ever be landed" — see `CreatureVis.catchable`'s
@@ -221,28 +258,28 @@ export const ZONE_LIFE: Record<string, Array<[string, number]>> = {
   'Hawk Channel':[['mangrove',4],['eagleray',2],['turtle',1.5],['barracuda',2],['nurse',1.5],['mutton',2],['dolphin',1.8],['cero',2],['pompano',1.5],['cobia',1],['graytrigger',1.2],['jackcrevalle',1.8],['yellowtail',1.5],['sheepshead',1.2],['tarpon',1.6],['goliath',.5],['bullshark',.35],['bluerunner',4.5],['lanesnapper',3],['spanishmack',3],['lookdown',1.5],['schoolmaster',2]],
   // Patch reef / Sombrero crest — the existing shallow reef life (depthAt < REEF_WALL_DEPTH).
   // Dolphins work the reef line hunting bait off the coral too.
-  'Reef':[['yellowtail',5],['parrotfish',3],['angelfish',2],['hogfish',2],['grouper',2],['gag',1.2],['redgrouper',1.2],['nurse',1],['turtle',1.5],['barracuda',1.5],['mutton',2],['lionfish',1.5],['graytrigger',2],['cero',2],['goliath',1.1],['hammerhead',.3],['bullshark',.3],['tarpon',1.2],['dolphin',1],['schoolmaster',4.5],['lanesnapper',3.5],['bluerunner',4],['vermilion',2],['spanishmack',2]],
+  'Reef':[['cubera',.5],['yellowtail',5],['parrotfish',3],['angelfish',2],['hogfish',2],['grouper',2],['gag',1.2],['redgrouper',1.2],['nurse',1],['turtle',1.5],['barracuda',1.5],['mutton',2],['lionfish',1.5],['graytrigger',2],['cero',2],['goliath',1.1],['hammerhead',.3],['bullshark',.3],['tarpon',1.2],['dolphin',1],['schoolmaster',4.5],['lanesnapper',3.5],['bluerunner',4],['vermilion',2],['spanishmack',2]],
   // The reef wall's top and ledges (depthAt in [REEF_WALL_DEPTH, DEEP_WALL_DEPTH), spawn.ts) —
   // docs/ARCHITECTURE.md bands 3-4 (reef wall top / elkhorn-staghorn, ledges and overhangs):
   // grouper holding on ledges, bigger snapper/jack schools working the drop, dolphins cruising
   // the wall edge. `DeepWall` below (band 5, >= DEEP_WALL_DEPTH) used to be the same table all the
   // way to 45 m — split out so the deep wall/wreck band actually feels different, not just emptier.
-  'ReefWall':[['giantmanta',.18],['whaleshark',.05],['tigershark',.12],['grouper',3],['gag',2],['redgrouper',2],['yellowtail',4],['mutton',2.5],['amberjack',2],['kingfish',1.5],['cero',1.5],['nurse',1],['goliath',.6],['graytrigger',1.2],['lionfish',1],['hammerhead',.8],['bullshark',.5],['cobia',1],['dolphin',1.3],['vermilion',5],['bluerunner',3],['schoolmaster',2]],
+  'ReefWall':[['cubera',.7],['warsaw',.35],['mako',.12],['giantmanta',.18],['whaleshark',.05],['tigershark',.12],['grouper',3],['gag',2],['redgrouper',2],['yellowtail',4],['mutton',2.5],['amberjack',2],['kingfish',1.5],['cero',1.5],['nurse',1],['goliath',.6],['graytrigger',1.2],['lionfish',1],['hammerhead',.8],['bullshark',.5],['cobia',1],['dolphin',1.3],['vermilion',5],['bluerunner',3],['schoolmaster',2]],
   // The deep wall and wrecks (depthAt >= DEEP_WALL_DEPTH, spawn.ts) — docs/ARCHITECTURE.md band 5
   // (20 m+, "deep wall, wrecks, the Humps... torch required, blackout risk"). Bigger-bodied
   // structure-holders and more apex presence than the wall top, less of the small schooling
   // yellowtail/mutton clutter that reads as "shallow reef" — this is what makes the deep band feel
   // like a different place rather than the same reef with the lights turned down.
-  'DeepWall':[['giantmanta',.14],['whaleshark',.06],['tigershark',.2],['grouper',3.5],['gag',2.5],['redgrouper',2],['amberjack',3],['kingfish',2],['cobia',1.5],['goliath',1.3],['nurse',1.5],['hammerhead',.7],['bullshark',.5],['mutton',1.4],['yellowtail',1],['cero',1],['dolphin',1],['vermilion',3.5],['bluerunner',1.5]],
+  'DeepWall':[['mola',.1],['warsaw',1],['cubera',.6],['mako',.3],['greatwhite',.04],['giantmanta',.14],['whaleshark',.06],['tigershark',.2],['grouper',3.5],['gag',2.5],['redgrouper',2],['amberjack',3],['kingfish',2],['cobia',1.5],['goliath',1.3],['nurse',1.5],['hammerhead',.7],['bullshark',.5],['mutton',1.4],['yellowtail',1],['cero',1],['dolphin',1],['vermilion',3.5],['bluerunner',1.5]],
   // Gulf Stream / open offshore — pelagics (roaming layer only; see spawn.ts). Dolphin pods are a
   // common sight riding the current lines; pilot whales/humpbacks are a genuine *rare* event out
   // here — tiny weights are deliberate (see the task brief's "Encounter rarity").
-  'Offshore':[['whaleshark',.1],['giantmanta',.12],['tigershark',.14],['mahi',5],['flyingfish',4],['dolphin',2.5],['blackfin',3],['sailfish',1.5],['wahoo',1],['turtle',.8],['marlin',.6],['blackmarlin',.25],['swordfish',.3],['yellowfin',2.5],['albacore',1.2],['bluefin',.8],['kingfish',1.5],['amberjack',1.5],['hammerhead',.3],['pilotwhale',.12],['humpback',.07],['skipjack',4],['bigeye',.7]],
+  'Offshore':[['mako',.5],['mola',.14],['greatwhite',.05],['spermwhale',.05],['whaleshark',.1],['giantmanta',.12],['tigershark',.14],['mahi',5],['flyingfish',4],['dolphin',2.5],['blackfin',3],['sailfish',1.5],['wahoo',1],['turtle',.8],['marlin',.6],['blackmarlin',.25],['swordfish',.3],['yellowfin',2.5],['albacore',1.2],['bluefin',.8],['kingfish',1.5],['amberjack',1.5],['hammerhead',.3],['pilotwhale',.12],['humpback',.07],['skipjack',4],['bigeye',.7]],
   // The Humps (Marathon Hump, West Hump) and other named structure far offshore — real relief that
   // concentrates bottom fish and jacks well out in otherwise-open water. Marathon's actual humps
   // are a known pilot-whale spot — a tiny weight here makes that a learnable, place-based rarity
   // (docs/ARCHITECTURE.md's resident-school note) rather than a per-frame dice roll.
-  'Humps':[['amberjack',4],['grouper',2.5],['gag',1.5],['redgrouper',1.5],['cobia',2],['mutton',2],['yellowtail',2],['kingfish',1.5],['barracuda',1.5],['goliath',.5],['bullshark',.4],['nurse',1],['pilotwhale',2.6],['humpback',.08],['vermilion',3],['bluerunner',3],['skipjack',2]]
+  'Humps':[['mola',.35],['spermwhale',.45],['warsaw',1.2],['mako',.35],['amberjack',4],['grouper',2.5],['gag',1.5],['redgrouper',1.5],['cobia',2],['mutton',2],['yellowtail',2],['kingfish',1.5],['barracuda',1.5],['goliath',.5],['bullshark',.4],['nurse',1],['pilotwhale',2.6],['humpback',.08],['vermilion',3],['bluerunner',3],['skipjack',2]]
 };
 
 /** [startU, endU, heightScale, finStyle] along the body, used by finEdge/buildFishGeo. */
@@ -351,4 +388,20 @@ export const SHAPE: Record<string, FishShape> = {
   // Tiger shark: a heavy forward body tapering hard to the tail, blunt square snout, the tall
   // upper lobe exaggerated a little because it is the silhouette people know.
   tigershark:{peak:.3,nose:.75,ped:.12,tail:'hetero',tl:.3,th:1.2,dor:[[.32,.44,1.1,'tri'],[.74,.8,.3,'tri']],anal:[[.74,.8,.3,'tri']],pec:.42,shark:true},
+  // The second batch (see their VIS entries above).
+  // Mako: a tuna's body on a shark — pointed snout, hard keel, a near-symmetrical lunate tail.
+  mako:{peak:.34,nose:1.1,ped:.08,tail:'lunate',tl:.24,th:1.25,dor:[[.33,.44,.95,'tri'],[.74,.79,.22,'tri']],anal:[[.74,.79,.22,'tri']],pec:.36,shark:true},
+  // Great white: a conical snout on a very deep forward body that tapers hard to a thin tail —
+  // the silhouette everyone already knows, so it has to be right.
+  greatwhite:{peak:.3,nose:.8,ped:.1,tail:'hetero',tl:.28,th:1.3,dor:[[.33,.45,1.25,'tri'],[.76,.81,.28,'tri']],anal:[[.75,.8,.28,'tri']],pec:.46,shark:true},
+  // Sperm whale: the forehead is a third of the body and square at the front, the jaw is a thin
+  // rod underneath it, the dorsal is a knuckle rather than a fin, and the flukes are huge.
+  spermwhale:{peak:.18,nose:.3,ped:.2,tail:'flukes',tl:.24,th:1.3,dor:[[.62,.7,.12,'round']],anal:[],pec:.12,hump:.62},
+  // Mola: almost all body. The dorsal and anal fins are enormous and opposite each other, and the
+  // "tail" is the clavus — a stiff rudder, hence `truncate` with almost no length.
+  mola:{peak:.45,nose:.4,ped:.62,tail:'truncate',tl:.06,th:1.4,dor:[[.3,.52,1.5,'tri']],anal:[[.3,.52,1.5,'tri']],pec:.1},
+  // Warsaw: the goliath's plan, deeper in the body and blunter — a fish shaped like a boulder.
+  warsaw:{peak:.4,nose:.5,ped:.34,tail:'round',tl:.15,th:.5,dor:[[.26,.8,.26,'spiny']],anal:[[.64,.82,.26,'round']],pec:.2,belly:1.1},
+  // Cubera: a snapper's profile with the jaw carried heavy and forward.
+  cubera:{peak:.38,nose:.8,ped:.22,tail:'truncate',tl:.2,th:.62,dor:[[.3,.76,.3,'spiny']],anal:[[.64,.78,.3,'round']],pec:.17,belly:1.02},
 };
