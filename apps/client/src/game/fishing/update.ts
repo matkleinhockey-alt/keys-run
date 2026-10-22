@@ -15,6 +15,7 @@ import { ampAt } from '@keysrun/shared/sim/depth-grid';
 import { chooseFish, fightParamsFor, scaledLenM, startFight, stepFight, type FightState } from '@keysrun/shared/sim/fight';
 import { xoshiro128ss } from '@keysrun/shared/rng';
 import { SPECIES } from '@keysrun/shared/content/species';
+import type { Tackle } from '@keysrun/shared/content/tackle';
 import { clamp, lerp, rand } from '../../core/math.js';
 import { toast } from '../../ui/toast.js';
 import { F } from './state.js';
@@ -45,6 +46,9 @@ export interface FishingDeps {
   /** Bird/bait frenzies, weedlines and rigs — `entities/life`'s `HotspotWorld`. */
   spots: SpotQuery;
   onLanded(fish: LandedFish): void;
+  /** The equipped rod-and-line outfit (shared/content/tackle). Omitted = the starter 30 lb; this is
+   * the seam a tackle shop plugs into — see content/tackle.ts. */
+  getTackle?(): Tackle;
   /** legacy's `case 'caught': if (now-caughtT>1600) releaseFish();` — delegated to game/catch. */
   onActionWhileCaught(): void;
 }
@@ -89,8 +93,7 @@ export function createFishingLogic(deps: FishingDeps) {
     let dist = 12 + power * 73;
     for (let k = 0; k < 8 && landH(boat.x + tmpDir.x * dist, boat.z + tmpDir.z * dist) > -0.4; k++) dist *= 0.8;
     F.to = { x: boat.x + tmpDir.x * dist, y: 0, z: boat.z + tmpDir.z * dist };
-    const tipSrc = deps.fp.on ? deps.rodVM.tip : model.rodTip;
-    tipSrc.getWorldPosition(tmpTarget);
+    deps.rodVM.lineTip(model, deps.fp.on).getWorldPosition(tmpTarget);
     F.from = { x: tmpTarget.x, y: tmpTarget.y, z: tmpTarget.z };
     F.castT = 0; F.castDur = 0.5 + power * 0.9; F.castH = 3 + power * 14;
     F.state = 'casting'; F.key = null;
@@ -135,7 +138,7 @@ export function createFishingLogic(deps: FishingDeps) {
     $('strike')?.classList.add('hidden');
     if (!F.key) chooseFishLocal();
     const key = F.key!, S = F.sp!;
-    const params = fightParamsFor(key, F.weight, F.drag);
+    const params = fightParamsFor(key, F.weight, F.drag, deps.getTackle?.());
     F.fightParams = params;
     F.fight = startFight(params, F.fx, F.fz, clientRng);
     const sizeT = (F.weight - S.min) / (S.max - S.min);
@@ -296,7 +299,7 @@ export function createFishingLogic(deps: FishingDeps) {
         F.fz += (tz - F.fz) * Math.min(1, k);
       }
     } else if (F.state === 'fight' && F.fight && F.fightParams) {
-      const next: FightState = stepFight(F.fight, { reeling: reel }, F.fightParams, { boatX: boat.x, boatZ: boat.z }, clientRng, dt);
+      const next: FightState = stepFight(F.fight, { reeling: reel, drag: F.drag }, F.fightParams, { boatX: boat.x, boatZ: boat.z }, clientRng, dt);
       F.fight = next;
       F.fx = next.x; F.fz = next.z;
       for (const ev of next.events) {
@@ -307,17 +310,23 @@ export function createFishingLogic(deps: FishingDeps) {
           deps.camState.shake = Math.max(deps.camState.shake, ev.low ? 0.1 : 0.18);
         } else if (ev.type === 'sounding') {
           toast('It’s sounding — diving for the bottom!');
+        } else if (ev.type === 'shock') {
+          deps.rodVM.kick(ev.mag);
         }
       }
       visuals.updateHooked(t, dt, next.running, next.shake, next.deep, next.airborne);
 
       const fT = $('fT');
-      if (fT) { fT.style.width = clamp(next.tension, 0, 1) * 100 + '%'; fT.className = next.tension > 0.82 ? 'hot' : next.tension < 0.08 ? 'slack' : ''; }
+      if (fT) { fT.style.width = clamp(next.tension, 0, 1) * 100 + '%'; fT.className = next.tension > next.limit * 0.8 ? 'hot' : next.tension < 0.08 ? 'slack' : ''; }
       setText('fLine', Math.round(next.dist) + ' m');
       const fStam = $('fStam'); if (fStam) fStam.style.width = next.stam * 100 + '%';
 
       if (next.outcome === 'landed') { land(); return; }
+      // The load vanishes the instant a fight ends badly: whip the rod back before reelIn hides it.
+      if (next.outcome !== 'fighting') deps.rodVM.recoil(next.tension);
       if (next.outcome === 'snapped') { lose('Snap! Too much pressure and the line parted.'); return; }
+      if (next.outcome === 'frayed') { lose('The leader chafed through — too long on the line.'); return; }
+      if (next.outcome === 'pulled') { lose('The hook pulled free.'); return; }
       if (next.outcome === 'slack') { lose('Slack line — the fish shook the hook.'); return; }
       if (next.outcome === 'spooled') { lose('Spooled! Chase the big ones with the boat next time.'); return; }
       if (next.outcome === 'mangrove') { lose('Cut off in the mangroves.'); return; }

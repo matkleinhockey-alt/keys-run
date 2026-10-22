@@ -5,12 +5,21 @@
 import * as THREE from 'three';
 import { clamp, lerp } from '../../core/math.js';
 import { F } from './state.js';
+import type { BoatModel } from '../../entities/boat/model.js';
+import { aimFlex, applyFlex, bendTarget, createFlex, kickFlex, lineTarget, recoilFlex, stepFlex, worldRodFor } from './rod-bend.js';
 
 export interface RodViewModel {
   group: THREE.Group;
   tip: THREE.Object3D;
-  update(dt: number, fpOn: boolean, reeling: boolean, actionHeld: boolean): void;
+  /** `model` is the boat's third-person rod, flexed by the same solver. */
+  update(dt: number, fpOn: boolean, reeling: boolean, actionHeld: boolean, model?: BoatModel): void;
   whip(): void;
+  /** A transient load hit the line (bolt, head shake, jump landing): tip yanks down. */
+  kick(mag: number): void;
+  /** The load just vanished (hook pulled, line parted): tip whips back past straight. */
+  recoil(load: number): void;
+  /** Where the line is tied: the first-person tip, or the third-person rod's *flexing* tip. */
+  lineTip(model: BoatModel, fpOn: boolean): THREE.Object3D;
 }
 
 export function createRodViewModel(camera: THREE.Camera): RodViewModel {
@@ -87,23 +96,47 @@ export function createRodViewModel(camera: THREE.Camera): RodViewModel {
   s0.add(cuff2);
 
   let whipT = 0;
+  const flex = createFlex();
+  const aim = new THREE.Vector3();
+  let lift = 0;
+  let worldFlex: ReturnType<typeof createFlex> | null = null;
 
-  function update(dt: number, fpOn: boolean, reeling: boolean, actionHeld: boolean): void {
+  function update(dt: number, fpOn: boolean, reeling: boolean, actionHeld: boolean, model?: BoatModel): void {
+    // The third-person rod flexes whether or not the camera is first-person: it is what you see from
+    // the boat camera, and a kick landing while the view is toggled must not be lost.
+    if (model) {
+      const wr = worldRodFor(model);
+      worldFlex = wr.flex;
+      lineTarget(aim);
+      aimFlex(wr.flex, model.rodPivot, aim.x, aim.y, aim.z, dt);
+      stepFlex(wr.flex, dt, bendTarget(wr.flex));
+      applyFlex(wr.segs, wr.flex, wr.weights);
+    }
     group.visible = fpOn;
     if (!fpOn) return;
-    let bend = 0.01;
-    if (F.state === 'fight' && F.fight) bend = clamp(F.fight.tension, 0, 1.1) * 0.15 + F.fight.shake * 0.08 * Math.sin(performance.now() * 0.045);
-    else if (F.state === 'bite') bend = 0.09;
-    else if (F.state === 'nibble' && F.dipT > 0) bend = 0.045;
-    segs.forEach((s, i) => { if (i > 0) s.rotation.x = lerp(s.rotation.x, -bend, Math.min(1, dt * 10)); });
-    let rx = -1.15 + (F.charging ? F.charge * 0.7 : 0);
+    lineTarget(aim);
+    aimFlex(flex, base, aim.x, aim.y, aim.z, dt);
+    stepFlex(flex, dt, bendTarget(flex));
+    applyFlex(segs, flex);
+    const fight = F.state === 'fight' ? F.fight : null;
+    // Pumping: under load with the handle still, the rod is held up and leans on the fish; when the
+    // handle turns the tip drops to take in line. Alternating the two is the pump-and-wind.
+    const liftTarget = fight ? (reeling || actionHeld ? 0 : clamp(fight.tension, 0, 1) * 0.3) : 0;
+    lift = lerp(lift, liftTarget, Math.min(1, dt * 6));
+    let rx = -1.15 - lift + (F.charging ? F.charge * 0.7 : 0);
     if (whipT > 0) {
       whipT = Math.max(0, whipT - dt / 0.35);
       rx -= 0.45 * Math.sin(whipT * Math.PI);
     }
     base.rotation.x = lerp(base.rotation.x, rx, Math.min(1, dt * 14));
+    base.rotation.y = lerp(base.rotation.y, 0.16 + (fight ? flex.ux * 0.12 * clamp(fight.tension, 0, 1) : 0), Math.min(1, dt * 8));
     if (reeling || (F.state === 'fight' && actionHeld)) handle.rotation.x -= dt * 22;
   }
 
-  return { group, tip, update, whip: () => { whipT = 1; } };
+  return {
+    group, tip, update, whip: () => { whipT = 1; },
+    kick: (mag) => { kickFlex(flex, mag); if (worldFlex) kickFlex(worldFlex, mag); },
+    recoil: (load) => { recoilFlex(flex, load); if (worldFlex) recoilFlex(worldFlex, load); },
+    lineTip: (model, fpOn) => (fpOn ? tip : worldRodFor(model).tip),
+  };
 }

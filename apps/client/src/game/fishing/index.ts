@@ -69,15 +69,14 @@ export function createFishing(deps: FishingSystemDeps): FishingSystem {
 
   function update(dt: number, t: number, boat: BoatState, sw: number, ch: number): void {
     logic.update(dt, t, boat, sw, ch);
-    rodVM.update(dt, deps.fp.on, F.reeling, logic.actionInput.held);
+    rodVM.update(dt, deps.fp.on, F.reeling, logic.actionInput.held, deps.getModel());
   }
 
   function render(t: number, boat: BoatState, sw: number, ch: number): void {
     if (!lineOut()) { visuals.fishLine.visible = false; deps.getModel().rodPivot.visible = fishingActive() && !deps.fp.on; return; }
     deps.getModel().rodPivot.visible = fishingActive() && !deps.fp.on;
     const model = deps.getModel();
-    const tipSrc = deps.fp.on ? rodVM.tip : model.rodTip;
-    tipSrc.getWorldPosition(tipWorld);
+    rodVM.lineTip(model, deps.fp.on).getWorldPosition(tipWorld);
     visuals.drawLine(t, boat, sw, ch, tipWorld);
   }
 

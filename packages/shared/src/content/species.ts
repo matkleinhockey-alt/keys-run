@@ -70,14 +70,14 @@ export const SPECIES: Record<string, SpeciesDef> = {
 
 export const ZONE_TABLE: Record<string, Array<[string, number]>> = {
   'Creek':[['snook',5],['redfish',3],['tarpon',2],['mangrove',3],['jackcrevalle',2],['ladyfish',2]],
-  'Oil Rig':[['amberjack',6],['blackfin',3],['cobia',3],['grouper',1.5],['gag',1.2],['barracuda',2],['kingfish',2.5],['mahi',1.5],['wahoo',1.5],['yellowfin',.8]],
-  'Weedline':[['mahi',8],['tripletail',3],['blackfin',2],['graytrigger',2],['wahoo',1],['sailfish',1],['jackcrevalle',1.5]],
+  'Oil Rig':[['amberjack',6],['blackfin',3],['cobia',3],['grouper',1.5],['gag',1.2],['barracuda',2],['kingfish',2.5],['mahi',1.5],['wahoo',1.5],['yellowfin',1.2],['sailfish',.4],['goliath',.5],['bullshark',.35]],
+  'Weedline':[['mahi',8],['tripletail',3],['blackfin',2],['graytrigger',2],['wahoo',2],['sailfish',1.6],['jackcrevalle',1.5],['yellowfin',.7],['marlin',.3]],
   'Flats':[['bonefish',5],['permit',2],['barracuda',3],['tarpon',1],['ladyfish',2],['lemonshark',.8],['blacktip',1],['palometa',1.5]],
   'Backcountry':[['snook',4],['redfish',4],['trout',5],['tarpon',2],['ladyfish',3],['jackcrevalle',2],['tripletail',.8],['bullshark',.6]],
   'Bridge':[['tarpon',5],['mangrove',4],['snook',2],['sheepshead',3],['jackcrevalle',2],['goliath',.6],['bullshark',.6],['lookdown',2],['bluerunner',2.5]],
-  'Hawk Channel':[['mangrove',4],['yellowtail',3],['mutton',2],['redgrouper',1.2],['gag',.8],['barracuda',2],['cero',2],['pompano',1.5],['cobia',1],['jackcrevalle',1.5],['graytrigger',1.5],['bluerunner',3],['lanesnapper',2.5],['spanishmack',2.5],['lookdown',1]],
-  'Reef':[['yellowtail',5],['mutton',3],['hogfish',3],['grouper',2.5],['gag',2],['redgrouper',2],['barracuda',2],['cero',2.5],['kingfish',2],['lionfish',1.5],['graytrigger',2],['goliath',.4],['schoolmaster',3],['lanesnapper',2.5],['vermilion',2.5],['bluerunner',2.5],['spanishmack',1.5]],
-  'Offshore':[['mahi',6],['blackfin',4],['wahoo',2],['sailfish',2],['marlin',1.3],['blackmarlin',.5],['swordfish',1.1],['yellowfin',.8],['albacore',.3],['bluefin',.2],['kingfish',1.5],['amberjack',1.5],['cobia',.5],['hammerhead',.3],['skipjack',3],['bigeye',.5]]
+  'Hawk Channel':[['mangrove',4],['yellowtail',3],['mutton',2],['redgrouper',1.2],['gag',.8],['barracuda',2],['cero',2],['pompano',1.5],['cobia',1],['jackcrevalle',1.5],['graytrigger',1.5],['bluerunner',3],['lanesnapper',2.5],['spanishmack',2.5],['lookdown',1],['tarpon',.5],['amberjack',.5],['kingfish',1.2],['blacktip',.3]],
+  'Reef':[['yellowtail',5],['mutton',3],['hogfish',3],['grouper',2.5],['gag',2],['redgrouper',2],['barracuda',2],['cero',2.5],['kingfish',2],['lionfish',1.5],['graytrigger',2],['goliath',.5],['amberjack',.8],['cobia',.6],['lemonshark',.25],['schoolmaster',3],['lanesnapper',2.5],['vermilion',2.5],['bluerunner',2.5],['spanishmack',1.5]],
+  'Offshore':[['mahi',6],['blackfin',4],['wahoo',2],['sailfish',2],['marlin',1.3],['blackmarlin',.6],['swordfish',1.1],['yellowfin',.8],['albacore',.3],['bluefin',.4],['kingfish',1.5],['amberjack',1.5],['cobia',.5],['hammerhead',.5],['skipjack',3],['bigeye',.7]]
 };
 
 /** Species that make a reel-screaming "sounder" run worth announcing (legacy index.html:2662). */

@@ -66,7 +66,7 @@ describe('stepFight', () => {
     // reachable in practice during an air window — see fight.ts's startFight jump roll — so
     // this exercises stepFight's slack bookkeeping in isolation rather than waiting on rng).
     const rng = mulberry32(7);
-    const params = fightParamsFor('tarpon', 60, 3);
+    const params = fightParamsFor('mutton', 12, 3);
     // Open water (0,2000) — well off Marathon Key — so the mangrove/landH check never fires
     // and only the slack bookkeeping under test can end the fight.
     const env: FightEnv = { boatX: 0, boatZ: 1990 };
@@ -75,7 +75,7 @@ describe('stepFight', () => {
       running: false, runT: 5, runAng: 0, pull: params.str,
       slackT: 0, overT: 0, shake: 0, shakeT: 5,
       jumpQ: 0, airborne: true, airT: 5, // airborne holds the tension target at .05, below slack cutoff
-      deep: 0, deepT: 0, dist: 10, outcome: 'fighting', events: [],
+      deep: 0, deepT: 0, dist: 10, lineSpeed: 0, spoolR: 0.045, t: 0, abrasion: 0, hookHold: 1, limit: 1, slipping: false, outcome: 'fighting', events: [],
     };
     const { state: final, steps } = run(state, params, env, rng, () => false, 1000);
     expect(final.outcome).toBe('slack');
@@ -90,7 +90,7 @@ describe('stepFight', () => {
       running: false, runT: 999, runAng: 0, pull: params.str,
       slackT: 0, overT: 0, shake: 0, shakeT: 999,
       jumpQ: 0, airborne: false, airT: 0,
-      deep: 0, deepT: 0, dist: params.maxLine + 50, outcome: 'fighting', events: [],
+      deep: 0, deepT: 0, dist: params.maxLine + 50, lineSpeed: 0, spoolR: 0.045, t: 0, abrasion: 0, hookHold: 1, limit: 1, slipping: false, outcome: 'fighting', events: [],
     };
     const next = stepFight(state, { reeling: false }, params, BOAT, rng, DT);
     expect(next.outcome).toBe('spooled');
@@ -106,7 +106,7 @@ describe('stepFight', () => {
       running: false, runT: 999, runAng: 0, pull: params.str,
       slackT: 0, overT: 0, shake: 0, shakeT: 999,
       jumpQ: 0, airborne: false, airT: 0,
-      deep: 0, deepT: 0, dist: 50, outcome: 'fighting', events: [],
+      deep: 0, deepT: 0, dist: 50, lineSpeed: 0, spoolR: 0.045, t: 0, abrasion: 0, hookHold: 1, limit: 1, slipping: false, outcome: 'fighting', events: [],
     };
     const next = stepFight(state, { reeling: false }, params, { boatX: -170, boatZ: 0 }, rng, DT);
     expect(next.outcome).toBe('mangrove');

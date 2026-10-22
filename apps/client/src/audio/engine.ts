@@ -136,6 +136,10 @@ export interface ReelAudioState {
   lineSpeed?: number;
   /** Effective spool radius, m, from `FightState.spoolR` — shrinks through a long run. */
   spoolR?: number;
+  /** Line load as a fraction of the line's rating, from `FightState.tension`. A clutch slipping at
+   * 15% of rating and one at 60% are the same line speed and not the same sound: the second is
+   * strained, higher and louder. Omitted (spear fights, harnesses) = a neutral mid value. */
+  tension?: number;
 }
 
 export interface AudioFrameInputs {
@@ -702,6 +706,7 @@ export function createAudioEngine() {
     }
 
     const drag = clamp01((reelState.drag - 1) / 4);
+    const strain = clamp01(reelState.tension ?? 0.4);
     const spoolR = Math.max(0.012, reelState.spoolR ?? 0.045);
     // Fall back to the old mode behaviour when the caller has no line speed to give (a spear
     // fight, a test harness) so this never goes silent on a path that used to make noise.
@@ -722,9 +727,9 @@ export function createAudioEngine() {
     let gain: number, noise: number, pitch: number;
     if (payingOut) {
       // Drag slipping: strained and loud, and it bites harder with a tighter drag.
-      gain = (0.014 + 0.022 * fused) * (0.75 + 0.5 * drag);
+      gain = (0.014 + 0.022 * fused) * (0.75 + 0.5 * drag) * (0.8 + 0.5 * strain);
       noise = (0.020 + 0.030 * fused) * (0.8 + 0.4 * drag);
-      pitch = 2300 + 1500 * fused + 450 * drag;
+      pitch = 2300 + 1500 * fused + 450 * drag + 600 * strain;
     } else if (speed > 0.03) {
       // Retrieve: the handle's own pawl. Lower, softer, unhurried.
       gain = 0.008 + 0.010 * fused;

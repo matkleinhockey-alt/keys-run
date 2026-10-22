@@ -24,6 +24,7 @@ import { BOATS, COOLER_CAP, SPEED_SCALE } from '@keysrun/shared/content/boats';
 import { zoneAt, depthAt, landH, nearHump } from '@keysrun/shared/world/depth';
 import { chainZ } from '@keysrun/shared/world/chain';
 import { chooseFish, fightParamsFor, startFight, stepFight } from '@keysrun/shared/sim/fight';
+import { TACKLE, tackleById } from '@keysrun/shared/content/tackle';
 import { airBurnRate, AIR_MAX, SURFACE_REFILL_RATE } from '@keysrun/shared/sim/diver';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -116,106 +117,189 @@ for (const zone of ZONES) {
 }
 const anyZone = new Set(ZONES.flatMap((z) => [...speciesOf(z)]));
 
-// ---- C. The fight: win rate and cause of loss, by drag setting (the ONLY "gear" knob) -------
-// Bot policy = the same bang-bang the existing capture-fishing.mjs uses (reel while tension is
-// safe, ease off once hot), plus the "bow to the fish" rule the game tells the player itself:
-// don't reel while airborne. The boat is stationary (a real player can chase a spooling fish with
-// the throttle), so spool/mangrove rates here are an UPPER bound on what a skilled player loses.
-function fightOnce(key, weight, drag, bob = { x: 0, z: 0 }, thr = 0.78, easeInAir = true) {
-  const params = fightParamsFor(key, weight, drag);
-  // chooseFish puts the fish ~11 m off the bobber; the boat sits at the bobber's position so
-  // depth/land checks (mangrove outcome) see real water, not the world origin.
-  let s = startFight(params, bob.x + 11, bob.z, rng);
+// ---- C. The fight: who wins, why they lose, and does any drag setting dominate? -------------
+// The boat sits at the bobber and the fish starts CAST_M metres away. The original harness used
+// 11 m (chooseFish's spawn offset), which is NOT what a player faces: casts are 12-85 m, so a
+// real fight starts 20-60 m out. CAST_M=11 reproduces the old numbers exactly; the default 35 is
+// a typical cast. The boat is stationary (a real player can chase a spooling fish with the
+// throttle), so spool/mangrove rates here are an UPPER bound on what a skilled player loses.
+const CAST_M = +(process.env.CAST_M ?? 35);
+const TACKLE_ID = process.env.TACKLE ?? 'mono30';
+const TK = tackleById(TACKLE_ID);
+const DT = 1 / 30;
+const withDrag = (d) => (typeof d === 'number' ? { drag: d } : d);
+
+/** Player models. Each is (state, params, ctx) -> boolean reel; `react` is how often a human
+ * re-decides (reaction + key travel). The first five are the ORIGINAL policies, unchanged, so the
+ * before/after table is like for like; `angler`/`expert` are what a competent human does. */
+const POLICIES = {
+  hold: { react: 0, f: () => true },
+  bangbang: { react: 0, f: (s) => s.tension < 0.78 && !s.airborne },
+  sloppy: { react: 0.35, f: (s) => s.tension < 0.9 },
+  slow: { react: 0.6, f: (s) => s.tension < 0.78 && !s.airborne },
+  timid: { react: 0, f: (s) => s.tension < 0.4 && !s.airborne },
+  // Paying attention (250 ms): feather through jumps, never crank a fresh running fish, pump a
+  // resting one, back off before the bar gets near the line's current (chafed) limit.
+  angler: {
+    react: 0.25,
+    f: (s) => {
+      const lim = s.limit ?? 1;
+      if (s.airborne) return s.tension < 0.12;
+      if (s.tension > lim * 0.7) return false;
+      if (s.running) return s.stam < 0.5 && s.tension < lim * 0.45;
+      return s.tension < lim * 0.65;
+    },
+  },
+  // Same rules at 100 ms plus it reads the fish: tightens the drag as the fish tires.
+  expert: {
+    react: 0.1,
+    drag: (s, base) => (s.stam < 0.35 ? Math.min(5, base + 1) : s.stam > 0.8 ? Math.max(1, base - 0.5) : base),
+    f: (s) => {
+      const lim = s.limit ?? 1;
+      if (s.airborne) return s.tension < 0.12;
+      if (s.tension > lim * 0.74) return false;
+      if (s.running) return s.stam < 0.5 && s.tension < lim * 0.5;
+      return s.tension < lim * 0.7;
+    },
+  },
+};
+
+function fight(key, weight, dragSpec, bob, policyName = 'angler', tk = TK) {
+  const pol = POLICIES[policyName];
+  const { drag: base } = withDrag(dragSpec);
+  const params = fightParamsFor(key, weight, base, tk);
+  let s = startFight(params, bob.x + CAST_M, bob.z, rng);
   const env = { boatX: bob.x, boatZ: bob.z };
-  const dt = 1 / 30;
-  let t = 0;
-  while (s.outcome === 'fighting' && t < 600) {
-    const reeling = s.tension < thr && !(easeInAir && s.airborne);
-    s = stepFight(s, { reeling }, params, env, rng, dt);
-    t += dt;
+  let t = 0, held = true, nextDecide = 0, drag = base, peak = 0;
+  while (s.outcome === 'fighting' && t < 900) {
+    if (t >= nextDecide) { held = pol.f(s, params); drag = pol.drag ? pol.drag(s, base) : base; nextDecide = t + pol.react; }
+    s = stepFight(s, { reeling: held, drag }, params, env, rng, DT);
+    t += DT; if (s.tension > peak) peak = s.tension;
   }
-  return { outcome: s.outcome === 'fighting' ? 'timeout' : s.outcome, t };
+  return { outcome: s.outcome === 'fighting' ? 'timeout' : s.outcome, t, abrasion: s.abrasion };
 }
-// How much does skill matter? Same fights, five player models. `sloppy`/`slow` re-decide only
-// every N seconds (reaction time + key travel), which is the realistic failure mode for a human.
-function fightPolicy(key, weight, drag, bob, policy) {
-  const params = fightParamsFor(key, weight, drag);
-  let s = startFight(params, bob.x + 11, bob.z, rng);
-  const env = { boatX: bob.x, boatZ: bob.z };
-  const dt = 1 / 30; let t = 0, held = true, nextDecide = 0;
-  while (s.outcome === 'fighting' && t < 600) {
-    if (t >= nextDecide) {
-      if (policy === 'hold') held = true;
-      else if (policy === 'bangbang') held = s.tension < 0.78 && !s.airborne;
-      else if (policy === 'sloppy') { held = s.tension < 0.9; nextDecide = t + 0.35; } // 350 ms reaction, ignores the jump advice
-      else if (policy === 'slow') { held = s.tension < 0.78 && !s.airborne; nextDecide = t + 0.6; } // 600 ms reaction
-      else if (policy === 'timid') held = s.tension < 0.4 && !s.airborne; // never trusts the line
-    }
-    s = stepFight(s, { reeling: held }, params, env, rng, dt); t += dt;
+const fightOnce = (key, weight, drag, bob) => fight(key, weight, drag, bob, 'angler');
+
+const OUTCOMES = ['landed', 'snapped', 'frayed', 'pulled', 'slack', 'spooled', 'mangrove', 'timeout'];
+const pct = (o, n) => Object.fromEntries(OUTCOMES.filter((k) => o[k]).map((k) => [k + 'Pct', r1(100 * o[k] / n)]));
+const rollZoneMix = (n, zones = ZONES) => {
+  const out = [];
+  for (const zone of zones) {
+    const bob = sampleBobber(zone); if (!bob || bob.nominal) continue;
+    for (let i = 0; i < n; i++) out.push({ bob, zone, ...chooseFish(zone, bob, { hotspot: false, hump: null }, rng) });
   }
-  return s.outcome === 'fighting' ? 'timeout' : s.outcome;
-}
+  return out;
+};
+
+// Same five original player models as the first harness, drag 3 (the default), zone-weighted mix.
+const mix = rollZoneMix(300);
 const fightByPolicy = {};
-for (const policy of ['bangbang', 'sloppy', 'slow', 'timid', 'hold']) {
-  const o = {}; let n = 0;
-  for (const zone of ZONES) {
-    const bob = sampleBobber(zone); if (!bob || bob.nominal) continue; // nominal = no real open water (flats): odds only, no fights
-    for (let i = 0; i < 300; i++) {
-      const f = chooseFish(zone, bob, { hotspot: false, hump: null }, rng);
-      const r = fightPolicy(f.key, f.weight, 3, bob, policy);
-      o[r] = (o[r] ?? 0) + 1; n++;
-    }
+// 'contested' = fish whose fresh-run pull is >= 0.25 line ratings on this tackle (mahi and up). The
+// zone mix is mostly small reef fish that no sane player loses, which flattens every skill gap; the
+// contested subset is where skill is actually decided.
+const contested = (f) => fightParamsFor(f.key, f.weight, 3, TK).pullN >= 0.25;
+const nContested = mix.filter(contested).length;
+for (const policy of ['bangbang', 'sloppy', 'slow', 'timid', 'hold', 'angler', 'expert']) {
+  const o = {}, oc = {};
+  for (const f of mix) {
+    const r = fight(f.key, f.weight, 3, f.bob, policy); o[r.outcome] = (o[r.outcome] ?? 0) + 1;
+    if (contested(f)) oc[r.outcome] = (oc[r.outcome] ?? 0) + 1;
   }
-  fightByPolicy[policy] = Object.fromEntries(Object.entries(o).map(([k, v]) => [k + 'Pct', r1(100 * v / n)]));
+  fightByPolicy[policy] = { n: mix.length, ...Object.fromEntries(Object.entries(pct(o, mix.length)).sort()), contested: { n: nContested, ...Object.fromEntries(Object.entries(pct(oc, nContested)).sort()) } };
 }
+// By zone and tackle for the attentive player at drag 3: what does the starter outfit get you where,
+// and what does each rung of the ladder buy? (the economy seam: this is what a tackle upgrade is worth)
+const fightByZoneTackle = {};
+for (const tk of TACKLE) {
+  fightByZoneTackle[tk.id] = {};
+  for (const zone of ZONES) {
+    const fs_ = mix.filter((f) => f.zone === zone); if (!fs_.length) continue;
+    let win = 0, secs = 0;
+    for (const f of fs_) { const r = fight(f.key, f.weight, 3, f.bob, 'angler', tk); if (r.outcome === 'landed') { win++; secs += r.t; } }
+    fightByZoneTackle[tk.id][zone] = `${r1(100 * win / fs_.length)}% in ${r1(secs / Math.max(1, win))}s`;
+  }
+}
+// The mix is dominated by small reef fish, which is what a player mostly catches. The trophy
+// view re-rolls with a size bias so "a big one on light tackle" is measured, not assumed.
 const fightByDrag = {};
 for (const drag of [1, 2, 3, 4, 5]) {
-  const o = { landed: 0, snapped: 0, slack: 0, spooled: 0, mangrove: 0, timeout: 0 };
-  let tLand = 0, n = 0;
-  for (const zone of ZONES) {
-    const bob = sampleBobber(zone);
-    if (!bob || bob.nominal) continue; // nominal = no real open water (flats): odds only, no fights
-    for (let i = 0; i < 400; i++) {
-      const f = chooseFish(zone, bob, { hotspot: false, hump: null }, rng);
-      const r = fightOnce(f.key, f.weight, drag, bob);
-      o[r.outcome]++; n++;
-      if (r.outcome === 'landed') tLand += r.t;
-    }
+  const o = {}; let tLand = 0, n = 0;
+  for (const f of mix) {
+    const r = fight(f.key, f.weight, drag, f.bob); o[r.outcome] = (o[r.outcome] ?? 0) + 1; n++;
+    if (r.outcome === 'landed') tLand += r.t;
   }
-  fightByDrag[drag] = { n, winPct: r1(100 * o.landed / n), ...Object.fromEntries(Object.entries(o).filter(([k]) => k !== 'landed').map(([k, v]) => [k + 'Pct', r1(100 * v / n)])), avgFightSecWhenLanded: r1(tLand / Math.max(1, o.landed)) };
+  fightByDrag[drag] = { n, winPct: r1(100 * (o.landed ?? 0) / n), ...pct(o, n), avgFightSecWhenLanded: r1(tLand / Math.max(1, o.landed ?? 0)) };
 }
-// Win rate by species at the default drag (3): which fish are a wall, as data. Fought over the
-// reef's open water so geography (mangrove/land) doesn't contaminate a species comparison.
+
+// Per-species, per-drag, one attentive player: zone-agnostic size roll, fought in the reef's open
+// water. This is the dominance check. `tied` = every drag whose win rate is within 1.5 standard
+// errors of the best, i.e. indistinguishable from it at this sample size: an honest argmax must
+// not be decided by tie-breaking, which is how the original harness reported drag 1 "best" 49/49.
+const SP_N = +(process.env.SP_N ?? 200);
+const speciesDrag = {};
+const strictBest = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+const tiedBest = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
 const fightBySpecies = {};
+const bobReef = sampleBobber('Offshore') ?? sampleBobber('Reef');
 for (const key of Object.keys(SPECIES)) {
   const S = SPECIES[key];
-  let win = 0, t = 0; const lose = {};
-  const N = 120;
-  for (let i = 0; i < N; i++) {
-    const w = S.min + (S.max - S.min) * Math.pow(rng(), 1.8); // zone-agnostic size roll
-    const r = fightOnce(key, w, 3, sampleBobber('Reef'));
-    if (r.outcome === 'landed') { win++; t += r.t; } else lose[r.outcome] = (lose[r.outcome] ?? 0) + 1;
-  }
-  fightBySpecies[key] = { winPct: Math.round(100 * win / N), avgSec: r1(t / Math.max(1, win)), losses: lose, str: S.str, maxLb: S.max, mult: S.mult };
-}
-// Does a different drag change the answer per species? If one setting wins everything the knob
-// is a solved puzzle rather than a progression axis.
-const bestDragPerSpecies = {};
-for (const key of Object.keys(SPECIES)) {
-  const S = SPECIES[key]; let best = -1, bestD = 3;
+  const weights = Array.from({ length: SP_N }, () => S.min + (S.max - S.min) * Math.pow(rng(), 1.8));
+  const row = {}; let bestW = -1, bestD = 0;
   for (const d of [1, 2, 3, 4, 5]) {
-    let win = 0;
-    for (let i = 0; i < 60; i++) {
-      const w = S.min + (S.max - S.min) * (0.5 + 0.5 * rng());
-      if (fightOnce(key, w, d, sampleBobber('Reef')).outcome === 'landed') win++;
+    let win = 0, tw = 0; const lose = {};
+    for (const w of weights) {
+      const r = fight(key, w, d, bobReef);
+      if (r.outcome === 'landed') { win++; tw += r.t; } else lose[r.outcome] = (lose[r.outcome] ?? 0) + 1;
     }
-    if (win > best) { best = win; bestD = d; }
+    row[d] = { winPct: r1(100 * win / SP_N), sec: r1(tw / Math.max(1, win)), lose };
+    if (win > bestW) { bestW = win; bestD = d; }
   }
-  bestDragPerSpecies[key] = bestD;
+  const se = (p) => Math.sqrt(Math.max(p * (1 - p), 0.0025) / SP_N);
+  const bp = bestW / SP_N;
+  const tied = [1, 2, 3, 4, 5].filter((d) => row[d].winPct / 100 >= bp - 1.5 * se(bp)).map(Number);
+  // Tie-break by the shorter fight, never by index: ties are the common case for small fish and the
+  // original harness's first-wins rule is what made drag 1 'best' for 49/49.
+  bestD = tied.reduce((a, d) => (row[d].sec > 0 && row[d].sec < (row[a].sec || Infinity) ? d : a), tied[0]);
+  const spread = Math.max(...[1, 2, 3, 4, 5].map((d) => row[d].winPct)) - Math.min(...[1, 2, 3, 4, 5].map((d) => row[d].winPct));
+  const decisive = spread >= 10;
+  speciesDrag[key] = { bestDrag: bestD, tied, decisive, spread: r1(spread), winByDrag: Object.fromEntries([1, 2, 3, 4, 5].map((d) => [d, row[d].winPct])), secByDrag: Object.fromEntries([1, 2, 3, 4, 5].map((d) => [d, row[d].sec])), loseByDrag: Object.fromEntries([1, 2, 3, 4, 5].map((d) => [d, row[d].lose])) };
+  if (decisive) strictBest[bestD]++; for (const d of tied) tiedBest[d]++;
+  fightBySpecies[key] = { winPct3: row[3].winPct, avgSec3: row[3].sec, losses3: row[3].lose, str: S.str, maxLb: S.max, mult: S.mult };
 }
-const dragHistogram = {};
-for (const d of Object.values(bestDragPerSpecies)) dragHistogram[d] = (dragHistogram[d] ?? 0) + 1;
+// A drag "dominates" if it is in the tied-best set for every species AND strictly shortens fights
+// without costing wins. Report the plain facts: per drag, in how many species it is (tied-)best,
+// and the mean win rate across species.
+const decisiveCount = Object.values(speciesDrag).filter((v) => v.decisive).length;
+const dragSummary = {};
+for (const d of [1, 2, 3, 4, 5]) {
+  const ws = Object.values(speciesDrag).map((r) => r.winByDrag[d]);
+  const ss = Object.values(speciesDrag).map((r) => r.secByDrag[d]).filter((x) => x > 0);
+  dragSummary[d] = { strictBestSpecies: strictBest[d], tiedBestSpecies: tiedBest[d], meanWinPct: r1(ws.reduce((a, b) => a + b, 0) / ws.length), meanFightSec: r1(ss.reduce((a, b) => a + b, 0) / ss.length), worstSpeciesWinPct: Math.min(...ws), decisiveSpecies: decisiveCount };
+}
+const bestDragPerSpecies = Object.fromEntries(Object.entries(speciesDrag).map(([k, v]) => [k, v.bestDrag]));
+const dragHistogram = { ...strictBest }; // decisive species only (win-rate spread across drags >= 10 points)
 
+// Trophy view: top-decile size of each big-game species on light vs heavy tackle, attentive player.
+const tackleView = {};
+{
+  const BIG = ['tarpon', 'amberjack', 'yellowfin', 'wahoo', 'sailfish', 'marlin', 'bluefin', 'goliath', 'hammerhead', 'cobia', 'snook', 'mahi', 'permit'];
+  for (const tk of TACKLE) {
+    const row = {};
+    for (const key of BIG) {
+      const S = SPECIES[key]; let ord = 0, tro = 0; const N = 80;
+      for (let i = 0; i < N; i++) {
+        if (fight(key, S.min + (S.max - S.min) * (0.15 + 0.35 * rng()), 3, bobReef, 'angler', tk).outcome === 'landed') ord++;
+        if (fight(key, S.min + (S.max - S.min) * (0.85 + 0.15 * rng()), 3, bobReef, 'angler', tk).outcome === 'landed') tro++;
+      }
+      row[key] = `${Math.round(100 * ord / N)}/${Math.round(100 * tro / N)}`;
+    }
+    tackleView[tk.id] = row;
+  }
+}
+if (process.env.FIGHT_ONLY) {
+  console.log(JSON.stringify({ CAST_M, TACKLE_ID, fightByPolicy, fightByDrag, fightByZoneTackle, dragSummary, dragHistogram, speciesDrag, tackleView }, null, 1));
+  process.exit(0);
+}
 // ---- D. Session simulation: what does N minutes of play look like, and is anything new? ----
 // Cast cycle in SIMULATED seconds, from game/fishing/update.ts: cast flight 0.5+0.9*power, bite
 // timer rand(4,10), nibbles 1-3 x ~1.2 s, a 1.4 s strike window, the fight, then the catch card
@@ -302,9 +386,10 @@ dive.unit = 'seconds of air from full at constant depth/exertion';
 const report = {
   note: 'simulated seconds, never wall clock', spawn: SPAWN, firstZone, boatSpeeds, zoneStats,
   speciesReachableByRod: anyZone.size, totalSpecies: Object.keys(SPECIES).length,
-  fightByDrag, fightByPolicy, fightBySpecies, bestDragHistogram: dragHistogram, bestDragPerSpecies, sessions, discovery, economy, dive,
+  castM: CAST_M, tackle: TACKLE_ID, fightByZoneTackle, fightByDrag, fightByPolicy, fightBySpecies, dragSummary, speciesDrag, tackleView,
+  bestDragHistogram: dragHistogram, bestDragPerSpecies, sessions, discovery, economy, dive,
 };
 fs.mkdirSync(path.dirname(OUT), { recursive: true });
 fs.writeFileSync(OUT, JSON.stringify(report, null, 2));
-console.log(JSON.stringify({ firstZone, boatSpeeds, zoneStats, speciesReachableByRod: anyZone.size, fightByDrag, fightByPolicy, bestDragHistogram: dragHistogram, sessions, discovery, economy, dive }, null, 1));
+console.log(JSON.stringify({ firstZone, boatSpeeds, zoneStats, speciesReachableByRod: anyZone.size, castM: CAST_M, fightByDrag, fightByPolicy, dragSummary, bestDragHistogram: dragHistogram, tackleView, sessions, discovery, economy, dive }, null, 1));
 console.log('wrote', OUT);

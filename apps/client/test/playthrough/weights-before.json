@@ -1,0 +1,270 @@
+{
+  "n": 2500,
+  "shared": "/private/tmp/claude-501/-Users-matthewklein-keys-run/bbbf26d3-7daf-4651-a7ae-5f4b6eae4af4/scratchpad/old/packages/shared/dist",
+  "zones": {
+    "Hawk Channel": {
+      "hooked": {
+        "n": 2500,
+        "mean": 7.9,
+        "p50": 4.7,
+        "p90": 18.8,
+        "p99": 50.4,
+        "max": 89.5
+      },
+      "hookedTrophyPct": 8.8,
+      "hookedOver100lbPct": 0,
+      "hookedTop": [
+        "mangrove 13.2%",
+        "bluerunner 10.4%",
+        "yellowtail 9.8%",
+        "spanishmack 8.2%",
+        "lanesnapper 8.1%",
+        "mutton 7.2%"
+      ],
+      "mono30": {
+        "winPct": 99.9,
+        "landed": {
+          "n": 2497,
+          "mean": 7.8,
+          "p50": 4.7,
+          "p90": 18.4,
+          "p99": 50.2,
+          "max": 89.5
+        },
+        "landedTrophyPct": 8.8,
+        "landedOver100lbPct": 0,
+        "trophyConversionPct": 99.1,
+        "over100ConversionPct": 0,
+        "trophiesLostBy": {
+          "mangrove": 2
+        }
+      },
+      "braid80": {
+        "winPct": 99.8,
+        "landed": {
+          "n": 2495,
+          "mean": 7.8,
+          "p50": 4.7,
+          "p90": 18.2,
+          "p99": 50.2,
+          "max": 89.5
+        },
+        "landedTrophyPct": 8.8,
+        "landedOver100lbPct": 0,
+        "trophyConversionPct": 99.5,
+        "over100ConversionPct": 0,
+        "trophiesLostBy": {
+          "mangrove": 1
+        }
+      }
+    },
+    "Reef": {
+      "hooked": {
+        "n": 2500,
+        "mean": 11.8,
+        "p50": 5.2,
+        "p90": 26.6,
+        "p99": 78.1,
+        "max": 476.9
+      },
+      "hookedTrophyPct": 9,
+      "hookedOver100lbPct": 0.9,
+      "hookedTop": [
+        "yellowtail 13.4%",
+        "schoolmaster 7.8%",
+        "hogfish 7.4%",
+        "mutton 6.8%",
+        "vermilion 6.6%",
+        "grouper 6.1%"
+      ],
+      "mono30": {
+        "winPct": 100,
+        "landed": {
+          "n": 2500,
+          "mean": 11.8,
+          "p50": 5.2,
+          "p90": 26.6,
+          "p99": 78.1,
+          "max": 476.9
+        },
+        "landedTrophyPct": 9,
+        "landedOver100lbPct": 0.9,
+        "trophyConversionPct": 100,
+        "over100ConversionPct": 100,
+        "trophiesLostBy": {}
+      },
+      "braid80": {
+        "winPct": 100,
+        "landed": {
+          "n": 2500,
+          "mean": 11.8,
+          "p50": 5.2,
+          "p90": 26.6,
+          "p99": 78.1,
+          "max": 476.9
+        },
+        "landedTrophyPct": 9,
+        "landedOver100lbPct": 0.9,
+        "trophyConversionPct": 100,
+        "over100ConversionPct": 100,
+        "trophiesLostBy": {}
+      }
+    },
+    "Offshore (Gulf Stream)": {
+      "hooked": {
+        "n": 2500,
+        "mean": 92.6,
+        "p50": 37.6,
+        "p90": 251.2,
+        "p99": 714.9,
+        "max": 900
+      },
+      "hookedTrophyPct": 13.3,
+      "hookedOver100lbPct": 21.3,
+      "hookedTop": [
+        "mahi 18.9%",
+        "blackfin 13.4%",
+        "wahoo 10.9%",
+        "sailfish 10.3%",
+        "skipjack 9.8%",
+        "marlin 7.6%"
+      ],
+      "mono30": {
+        "winPct": 100,
+        "landed": {
+          "n": 2500,
+          "mean": 92.6,
+          "p50": 37.6,
+          "p90": 251.2,
+          "p99": 714.9,
+          "max": 900
+        },
+        "landedTrophyPct": 13.3,
+        "landedOver100lbPct": 21.3,
+        "trophyConversionPct": 100,
+        "over100ConversionPct": 100,
+        "trophiesLostBy": {}
+      },
+      "braid80": {
+        "winPct": 100,
+        "landed": {
+          "n": 2500,
+          "mean": 92.6,
+          "p50": 37.6,
+          "p90": 251.2,
+          "p99": 714.9,
+          "max": 900
+        },
+        "landedTrophyPct": 13.3,
+        "landedOver100lbPct": 21.3,
+        "trophyConversionPct": 100,
+        "over100ConversionPct": 100,
+        "trophiesLostBy": {}
+      }
+    },
+    "Weedline (hotspot)": {
+      "hooked": {
+        "n": 2500,
+        "mean": 26.3,
+        "p50": 20.3,
+        "p90": 55,
+        "p99": 100,
+        "max": 100
+      },
+      "hookedTrophyPct": 22.1,
+      "hookedOver100lbPct": 1.2,
+      "hookedTop": [
+        "mahi 26.8%",
+        "graytrigger 16.7%",
+        "blackfin 15.4%",
+        "jackcrevalle 14.3%",
+        "tripletail 10%",
+        "sailfish 9.2%"
+      ],
+      "mono30": {
+        "winPct": 100,
+        "landed": {
+          "n": 2500,
+          "mean": 26.3,
+          "p50": 20.3,
+          "p90": 55,
+          "p99": 100,
+          "max": 100
+        },
+        "landedTrophyPct": 22.1,
+        "landedOver100lbPct": 1.2,
+        "trophyConversionPct": 100,
+        "over100ConversionPct": 100,
+        "trophiesLostBy": {}
+      },
+      "braid80": {
+        "winPct": 100,
+        "landed": {
+          "n": 2500,
+          "mean": 26.3,
+          "p50": 20.3,
+          "p90": 55,
+          "p99": 100,
+          "max": 100
+        },
+        "landedTrophyPct": 22.1,
+        "landedOver100lbPct": 1.2,
+        "trophyConversionPct": 100,
+        "over100ConversionPct": 100,
+        "trophiesLostBy": {}
+      }
+    },
+    "Oil Rig (hotspot)": {
+      "hooked": {
+        "n": 2500,
+        "mean": 44.2,
+        "p50": 34.1,
+        "p90": 90,
+        "p99": 205.3,
+        "max": 220
+      },
+      "hookedTrophyPct": 21.7,
+      "hookedOver100lbPct": 7.5,
+      "hookedTop": [
+        "amberjack 18%",
+        "barracuda 13.8%",
+        "wahoo 11.1%",
+        "grouper 10.6%",
+        "mahi 9.8%",
+        "gag 8.1%"
+      ],
+      "mono30": {
+        "winPct": 100,
+        "landed": {
+          "n": 2500,
+          "mean": 44.2,
+          "p50": 34.1,
+          "p90": 90,
+          "p99": 205.3,
+          "max": 220
+        },
+        "landedTrophyPct": 21.7,
+        "landedOver100lbPct": 7.5,
+        "trophyConversionPct": 100,
+        "over100ConversionPct": 100,
+        "trophiesLostBy": {}
+      },
+      "braid80": {
+        "winPct": 100,
+        "landed": {
+          "n": 2500,
+          "mean": 44.2,
+          "p50": 34.1,
+          "p90": 90,
+          "p99": 205.3,
+          "max": 220
+        },
+        "landedTrophyPct": 21.7,
+        "landedOver100lbPct": 7.5,
+        "trophyConversionPct": 100,
+        "over100ConversionPct": 100,
+        "trophiesLostBy": {}
+      }
+    }
+  }
+}

@@ -5,15 +5,15 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  spoolRadiusFor, startFight, stepFight,
+  spoolRadiusFor, startFight, stepFight, fightParamsFor,
   SPOOL_ARBOR_R, SPOOL_EMPTY_AT, SPOOL_FULL_R,
   type FightParams, type FightEnv,
 } from '../src/sim/fight.js';
 import { mulberry32 } from '../src/rng/index.js';
 
 const PARAMS: FightParams = {
-  key: 'mutton', weight: 12, str: 0.8, lenM: 1.2, maxLine: 190,
-  jump: false, billfish: false, sounder: false, kingfish: false, drag: 3,
+  ...fightParamsFor('mutton', 12, 3), str: 0.8, lenM: 1.2, maxLine: 190,
+  jump: false, billfish: false, sounder: false, kingfish: false,
 };
 /** Open water off Sombrero Reef. (0,0) is on Vaca Key — a fish there breaks off in the mangroves
  * on the first tick (`landH > 0.2` in stepFight) and every lineSpeed assertion reads 0. */
