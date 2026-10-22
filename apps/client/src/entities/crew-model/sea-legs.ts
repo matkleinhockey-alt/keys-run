@@ -209,6 +209,16 @@ export interface SeaLegsRig {
   foot: THREE.Object3D[];
   leftArm: THREE.Object3D | null;
   rightArm: THREE.Object3D | null;
+  /** The elbows — needed only to know which way the upper arm is actually POINTING right now,
+   * which is the one thing a fixed rotation cannot know. See the cheer block in `applySeaLegs`. */
+  leftForeArm: THREE.Object3D | null;
+  rightForeArm: THREE.Object3D | null;
+  /** The hands — the forearm's own child, so the same "which way is this bone actually pointing"
+   * trick works on the elbow. Without straightening the elbow the upper arm goes overhead and the
+   * clip's bend folds the hand straight back down to shoulder height (measured: hands stayed
+   * 0.12 m BELOW the head with the upper arms already vertical). */
+  leftHand: THREE.Object3D | null;
+  rightHand: THREE.Object3D | null;
   /** Last frame's clip pose (`pre`) and what we turned it into (`post`), per edited bone. See
    * `restoreClipPose`. */
   applied: Map<THREE.Object3D, { pre: THREE.Quaternion; post: THREE.Quaternion }>;
@@ -240,6 +250,10 @@ export function createSeaLegsRig(root: THREE.Object3D): SeaLegsRig {
     foot: [...req('LeftFoot'), ...req('RightFoot')],
     leftArm: findBone(root, 'LeftArm'),
     rightArm: findBone(root, 'RightArm'),
+    leftForeArm: findBone(root, 'LeftForeArm'),
+    rightForeArm: findBone(root, 'RightForeArm'),
+    leftHand: findBone(root, 'LeftHand'),
+    rightHand: findBone(root, 'RightHand'),
     applied: new Map(),
   };
 }
@@ -292,6 +306,31 @@ interface Edit { bone: THREE.Object3D; delta: THREE.Quaternion; orig: THREE.Quat
 const _edits: Edit[] = [];
 const _pool: Edit[] = [];
 
+const _armDir = new THREE.Vector3();
+const _armWant = new THREE.Vector3();
+const _armQ = new THREE.Quaternion();
+const _ident = new THREE.Quaternion();
+
+/**
+ * Rotates `arm` so it points up and out by `amount` (0..1), whatever it was doing.
+ *
+ * `elbow.position` is the upper arm's own direction in its own bone space (a bone points at its
+ * child), so carrying it through the arm's root-space rotation gives where the arm is ACTUALLY
+ * aimed this frame. The delta that takes that onto the target direction is then the same final
+ * pose for every figure, which a fixed angle can never be.
+ */
+function raiseArm(
+  arm: THREE.Object3D | null, elbow: THREE.Object3D | null, side: 1 | -1, amount: number, root: THREE.Object3D,
+): void {
+  if (!arm || !elbow) return;
+  rootSpaceQuat(arm, root, _armQ);
+  _armDir.copy(elbow.position).normalize().applyQuaternion(_armQ);
+  if (_armDir.lengthSq() < 1e-8) return;
+  _armWant.set(side * CHEER_DIR_OUT, 1, CHEER_DIR_FWD).normalize();
+  _armQ.setFromUnitVectors(_armDir, _armWant);
+  queue(arm, _ident.identity().slerp(_armQ, amount), root);
+}
+
 function queue(bone: THREE.Object3D | null, delta: THREE.Quaternion, root: THREE.Object3D): void {
   if (!bone) return;
   const e = _pool[_edits.length] ?? (_pool[_edits.length] = { bone, delta: new THREE.Quaternion(), orig: new THREE.Quaternion() });
@@ -312,8 +351,25 @@ function bodyRot(ax: number, az: number, out: THREE.Quaternion): THREE.Quaternio
  * mixer.update and after dance.ts sets the root's own rotation. `restRotY` is the slot's yaw —
  * the body frame is the deck rotated by it, not the root (whose lean is cosmetic).
  * `armWeight` scales the arm secondary motion down while the clip is driving the arms hard.
+ *
+ * `cheer` (0..1) is a deliberate pose rather than secondary motion: both arms go overhead. It is
+ * applied on top of, and independently of, `armWeight` — a celebration is the crew choosing to put
+ * their hands up, so it must not be scaled away by how hard the dance clip happens to be swinging
+ * their arms at that moment.
  */
-export function applySeaLegs(rig: SeaLegsRig, s: SeaLegsState, restRotY: number, dt: number, armWeight: number): void {
+/**
+ * How far out from straight up a cheering arm sits, as a direction in body space: hands apart and
+ * slightly forward, not two rigid poles. (0,1,0) would be anatomically impossible and read as a
+ * mannequin.
+ */
+const CHEER_DIR_OUT = 0.34, CHEER_DIR_FWD = 0.16;
+/** How far the elbow straightens, 0..1 of the way to a locked-out arm. Not 1: nobody cheers with
+ * their arms rigid, and a little bend left in reads as a person rather than a goalpost. */
+const CHEER_ELBOW = 0.82;
+/** How much a cheering figure also leans back and tips its head up, radians at full cheer. */
+const CHEER_LEAN = 0.17;
+
+export function applySeaLegs(rig: SeaLegsRig, s: SeaLegsState, restRotY: number, dt: number, armWeight: number, cheer = 0): void {
   const root = rig.root;
   const parent = root.parent;
   if (!parent) return;
@@ -342,9 +398,11 @@ export function applySeaLegs(rig: SeaLegsRig, s: SeaLegsState, restRotY: number,
   const spineShare = [0.35, 0.65, 0.9];
   rig.spine.forEach((b, i) => {
     const chest = i === rig.spine.length - 1 ? s.softChest.x : 0;
-    queue(b, bodyRot(torsoFwd * spineShare[i] + chest, -side * spineShare[i], d), root);
+    queue(b, bodyRot(torsoFwd * spineShare[i] + chest - cheer * CHEER_LEAN * spineShare[i], -side * spineShare[i], d), root);
   });
-  const headFwd = fwd + (s.targetFwd - fwd) * HEAD_STABILISE + s.softChest.x * 0.5;
+  // Hands up is a whole-body thing: the chest opens and the chin comes up, or it reads as a
+  // figure holding two invisible shopping bags over its head.
+  const headFwd = fwd + (s.targetFwd - fwd) * HEAD_STABILISE + s.softChest.x * 0.5 - cheer * CHEER_LEAN * 2;
   const headSide = side + (s.targetSide - side) * HEAD_STABILISE;
   queue(rig.neck, bodyRot((torsoFwd + headFwd) * 0.5 + s.softChest.x, -(side + headSide) * 0.5, d), root);
   queue(rig.head, bodyRot(headFwd, -headSide, d), root);
@@ -358,6 +416,21 @@ export function applySeaLegs(rig: SeaLegsRig, s: SeaLegsState, restRotY: number,
   // moves both the same way.
   queue(rig.leftArm, d.setFromAxisAngle(_axisZ, armUp + armSwing), root);
   queue(rig.rightArm, d.setFromAxisAngle(_axisZ, -armUp + armSwing), root);
+  // Hands up. This has to be a rotation ONTO a direction, not a fixed angle added to whatever the
+  // clip happened to be doing: a constant worked out to a different final pose for every figure,
+  // because each one is at a different point in the dance. Measured, with a fixed 2.95 rad, two
+  // figures on the same deck went to +0.17 and −0.08 relative to their own heads — one raised,
+  // one pushed further down. Rotating the arm's ACTUAL current direction onto "up and out" is the
+  // same pose for everyone whatever they were mid-way through.
+  // Upper arms first, then the elbows: `queue` snapshots each bone's pre-edit root-space
+  // rotation, and the apply loop puts parents in place before children solve, so a forearm aimed
+  // at the same direction lands straight above the shoulder rather than inheriting the bend.
+  if (cheer > 0.001) {
+    raiseArm(rig.leftArm, rig.leftForeArm, 1, cheer, root);
+    raiseArm(rig.rightArm, rig.rightForeArm, -1, cheer, root);
+    raiseArm(rig.leftForeArm, rig.leftHand, 1, cheer * CHEER_ELBOW, root);
+    raiseArm(rig.rightForeArm, rig.rightHand, -1, cheer * CHEER_ELBOW, root);
+  }
 
   // Parents were queued before children, so each parent's new rotation is in place by the time
   // its child solves for a local rotation that lands it at `delta * orig` in body space.

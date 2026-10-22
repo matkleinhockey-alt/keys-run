@@ -77,9 +77,17 @@ const AMBIENT_LINES: readonly string[] = [
   'I don’t even fish, I own the fish',
   'I’m at a conference in Toronto right now… really important stuff…',
   'can I bring Dan on your boat?',
+  'spare the portabello',
 ];
 const TAUNT_LINE = 'you suck at this braowww';
 const HIT_LINE = 'AYO— that’s assault braowww';
+/**
+ * The second half of the hit: he climbs away, and halfway up he decides he had somewhere better
+ * to be. Delayed rather than appended to `HIT_LINE` because the joke is the recovery — an
+ * immediate "anyway" is a sentence, a beat later it is a man saving face in mid-air.
+ */
+const HIT_EXIT_LINE = 'fine — I’m going to Milan with 2 beautiful women anyway';
+const HIT_EXIT_DELAY_S = 1.9;
 const RETURN_LINE = 'I’m back. I’m an executive, you can’t ban me';
 
 /** The slice of the diver `update` needs — see this module's header on why he changes orbit. */
@@ -133,6 +141,8 @@ export function createCaelen(scene: THREE.Scene, deps: CaelenDeps): Caelen {
   let away = 0;
   /** Seconds left of the visible departure climb. */
   let leaveT = 0;
+  /** Seconds until his parting line lands; 0 = nothing pending. See `HIT_EXIT_LINE`. */
+  let exitLineT = 0;
   /** Live capsule, kept in sync by `update` so `resolveSpearShot` never has to re-derive it. */
   let hx = 0, hy = 0, hz = 0;
   const projV = new THREE.Vector3();
@@ -156,6 +166,10 @@ export function createCaelen(scene: THREE.Scene, deps: CaelenDeps): Caelen {
         // Still sulking. He keeps flying for `LEAVE_FLIGHT_S` first (climbing away on the heading
         // he was hit on) so the exit is legible, then blinks out for the rest of the two minutes.
         away -= dt;
+        if (exitLineT > 0) {
+          exitLineT -= dt;
+          if (exitLineT <= 0) say(HIT_EXIT_LINE, 3.2);
+        }
         if (leaveT > 0) {
           leaveT -= dt;
           r += dt * 14; h += dt * 7;
@@ -167,7 +181,7 @@ export function createCaelen(scene: THREE.Scene, deps: CaelenDeps): Caelen {
         }
         if (away <= 0) {
           // Back, with a parting shot. Reset the orbit so he doesn't reappear a kilometre out.
-          away = 0; leaveT = 0;
+          away = 0; leaveT = 0; exitLineT = 0;
           r = 12; h = 8; a = Math.random() * 6.28; swoop = 0;
           B.px = null; B.py = null; B.pz = null; // don't bank wildly through the teleport
           setPresent(true);
@@ -234,6 +248,7 @@ export function createCaelen(scene: THREE.Scene, deps: CaelenDeps): Caelen {
         say(HIT_LINE, 2.4);
         away = CAELEN_AWAY_S;
         leaveT = LEAVE_FLIGHT_S;
+        exitLineT = HIT_EXIT_DELAY_S;
         return 'hit';
       }
       const near = CAELEN_RADIUS + CAELEN_NEAR_MISS;

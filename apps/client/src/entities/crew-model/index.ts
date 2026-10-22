@@ -40,7 +40,7 @@ import type { QualityTier } from '../../core/quality.js';
 import { rand } from '../../core/math.js';
 import { loadCrewAsset, TEMPLATE_HEIGHT_M, type CrewAsset } from './asset.js';
 import { placementsFor } from './placements.js';
-import { createAnimatedFigure, updateFigure, type AnimatedFigure, type CrewMotionInput } from './dance.js';
+import { createAnimatedFigure, updateFigure, startCheer, type AnimatedFigure, type CrewMotionInput } from './dance.js';
 import { createFallbackBeatSource, type BeatSource } from './beat.js';
 
 // Medium keeps the single most-important slot per boat (placements.ts orders each boat's list
@@ -68,6 +68,19 @@ export interface CrewSystem {
    * this frame is set. Advances every current figure's AnimationMixer and lean overlay — see
    * dance.ts. Cheap no-op when there are no figures (Low tier, or before the glTF resolves). */
   update(dt: number, simTime: number, motion: CrewMotionInput): void;
+  /**
+   * Everyone on deck puts their hands up for `seconds`. A no-op when there is nobody aboard
+   * (Low tier, or before the glTF arrives), which is deliberate: the caller should not have to
+   * know whether the crew exists to be allowed to celebrate.
+   */
+  cheer(seconds?: number): void;
+  /**
+   * VERIFICATION ONLY: each figure's hand height above its own feet, metres. A raised-arm POSE is
+   * the one thing a screenshot of this game cannot settle — the crew are small on a deck seen from
+   * a chase camera, and at this sandbox's ~3 fps a 4.5 s cheer can be over before a shot lands.
+   * This is the number the pose actually means.
+   */
+  debugHandLift(): number[];
 }
 
 export function createCrewSystem(
@@ -146,6 +159,32 @@ export function createCrewSystem(
     setQuality(newTier) {
       tier = newTier;
       rebuild();
+    },
+    cheer(seconds = 4.5) {
+      for (const f of figures) startCheer(f, seconds);
+    },
+    debugHandLift() {
+      // The HAND, not `seaLegs.leftArm`. `leftArm` is the shoulder joint: rotating a bone moves
+      // its children, never its own origin, so measuring there reads a raised arm as no change at
+      // all (measured: 1.248 -> 1.168, which is the shoulder riding the body's own lean).
+      const p = new THREE.Vector3(), q = new THREE.Vector3();
+      const named = (root: THREE.Object3D, name: string): THREE.Object3D | null => {
+        let hit: THREE.Object3D | null = null;
+        root.traverse((o) => { if (!hit && o.name.replace(/^mixamorig:?/, '') === name) hit = o; });
+        return hit;
+      };
+      const r = new THREE.Vector3();
+      return figures.map((f) => {
+        const hand = named(f.object, 'LeftHand');
+        const foot = f.seaLegs.foot[0];
+        if (!hand || !foot) return NaN;
+        (hand as THREE.Object3D).getWorldPosition(p); foot.getWorldPosition(q);
+        // Measured against the HEAD, not an absolute height: "hands up" means the hands are above
+        // the head, and figures differ in size and in where the dance clip has them standing.
+        const head = f.seaLegs.head;
+        if (head) { head.getWorldPosition(r); return +(p.y - r.y).toFixed(3); }
+        return +(p.y - q.y).toFixed(3);
+      });
     },
     update(dt, simTime, motion) {
       for (const f of figures) updateFigure(f, simTime, dt, motion, beatSource);

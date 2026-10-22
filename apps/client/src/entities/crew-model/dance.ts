@@ -56,11 +56,22 @@ export interface AnimatedFigure {
   /** The body's response to the deck moving under it — see sea-legs.ts. */
   seaLegs: SeaLegsRig;
   seaLegsState: SeaLegsState;
+  /** Seconds of celebration left. Set by `startCheer`; counts down in `updateFigure`. */
+  cheerLeft: number;
+  /** Total length of the cheer that is running, so the envelope knows where it is in it. */
+  cheerSpan: number;
+  /** Smoothed 0..1 hands-up amount actually applied, so the arms rise and fall instead of
+   * snapping to and from overhead. */
+  cheer: number;
 }
 
 /** Call after `object` is at its slot position — sea-legs.ts keeps its feet on that deck height. */
 export function createAnimatedFigure(object: THREE.Object3D, mixer: THREE.AnimationMixer, action: THREE.AnimationAction, restRotY: number): AnimatedFigure {
-  return { object, mixer, action, restRotY, drive: 0, seaLegs: createSeaLegsRig(object), seaLegsState: createSeaLegsState() };
+  return {
+    object, mixer, action, restRotY, drive: 0,
+    seaLegs: createSeaLegsRig(object), seaLegsState: createSeaLegsState(),
+    cheerLeft: 0, cheerSpan: 0, cheer: 0,
+  };
 }
 
 // Same "fast" threshold entities/life/deck-party.ts (feat/audio-life) uses for its own party —
@@ -84,9 +95,23 @@ function behaviorFor(motion: CrewMotionInput, beat: BeatSource): CrewBehavior {
   return beat.isPlaying() ? 'dancing' : 'idle';
 }
 
+/**
+ * Put this figure's hands up for `seconds`. Used when the deck has something to celebrate — see
+ * index.ts's `cheer`. Re-calling it restarts the cheer rather than extending it, so a second
+ * reason to celebrate reads as a fresh one.
+ */
+export function startCheer(f: AnimatedFigure, seconds: number): void {
+  f.cheerLeft = seconds;
+  f.cheerSpan = seconds;
+}
+
+/** Seconds the arms take to go up, and to come back down. Up is quicker: a cheer is a reaction. */
+const CHEER_RISE_S = 0.22, CHEER_FALL_S = 0.75;
+
 export function updateFigure(f: AnimatedFigure, simTime: number, dt: number, motion: CrewMotionInput, beat: BeatSource): void {
   const behavior = behaviorFor(motion, beat);
-  const targetDrive = behavior === 'dancing' ? 1 : 0;
+  // A celebrating deck dances, whatever the boat is doing — that is the point of celebrating.
+  const targetDrive = behavior === 'dancing' || f.cheerLeft > 0 ? 1 : 0;
   f.drive += (targetDrive - f.drive) * Math.min(1, dt * DRIVE_SMOOTH_RATE);
 
   // Ease timeScale to/from 0 instead of toggling `action.paused` — the action keeps its `.time`
@@ -109,7 +134,20 @@ export function updateFigure(f: AnimatedFigure, simTime: number, dt: number, mot
   // Whatever the clip is doing, the deck is still moving under it: balance, knees and the soft
   // secondary motion go on top (sea-legs.ts). The clip drives the arms hard mid-dance, so the
   // arms' share of that eases off as the dance comes in.
-  applySeaLegs(f.seaLegs, f.seaLegsState, f.restRotY, dt, 1 - 0.6 * f.drive);
+  // Hands up, if there is something to cheer. The envelope is asymmetric (see CHEER_RISE_S):
+  // arms snap up and come down slowly, which is what a real celebration looks like and what
+  // keeps a short cheer from reading as a twitch.
+  if (f.cheerLeft > 0) {
+    f.cheerLeft = Math.max(0, f.cheerLeft - dt);
+    const elapsed = f.cheerSpan - f.cheerLeft;
+    const target = Math.min(1, elapsed / CHEER_RISE_S) * Math.min(1, f.cheerLeft / CHEER_FALL_S);
+    f.cheer += (target - f.cheer) * Math.min(1, dt * 14);
+  } else if (f.cheer > 0.001) {
+    f.cheer += (0 - f.cheer) * Math.min(1, dt * 6);
+  } else {
+    f.cheer = 0;
+  }
+  applySeaLegs(f.seaLegs, f.seaLegsState, f.restRotY, dt, 1 - 0.6 * f.drive, f.cheer);
 }
 
 // ---------------------------------------------------------------------------------------------

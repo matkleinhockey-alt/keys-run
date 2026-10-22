@@ -99,6 +99,11 @@ export interface HandgunDeps {
   /** Called on the way in: reel in an idle line so fishing never holds a reference to a boat nobody is working. */
   prepare(): void;
   toast(msg: string): void;
+  /**
+   * Caelen is down. The deck reacts — see game/world.ts's wiring. Optional so the gun does not
+   * depend on there being a crew aboard to shoot him.
+   */
+  onCaelenDown?(): void;
   /** The player's inventory; rounds are `handgun.ammo`, upgrades read from `mods`. */
   gear: GearPort;
   fishWorld: Pick<FishWorld, 'spearTargetsNear'>;
@@ -462,6 +467,7 @@ export function createHandgunSystem(deps: HandgunDeps): HandgunSystem {
         f.caelenHit = true;
         tally.caelen++; tally.hits++;
         hud.flashHit(); deps.audio.gunHitTick(); hud.setScore(tally.fish, tally.birds, tally.caelen);
+        deps.onCaelenDown?.();
       }
     } else if (!f.caelenTaunted && distSq <= near * near) {
       f.caelenTaunted = true;

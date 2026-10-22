@@ -90,6 +90,18 @@ const DT = 1 / 30;
  * gun's muzzle — same small gap `debugSyntheticTarget`'s own comment calls out) sits a little
  * behind the real shaft origin. */
 const SPEAR_QUERY_RADIUS = SPEAR_RANGE_MAX + 6; // MAX: the long gun reaches 24 m, not 18
+
+/**
+ * What the deck says when Caelen finally gets what is coming to him. He spends the whole game
+ * telling you that you suck at this, so the crew are not sorry, and rolling between a few lines
+ * stops the moment going stale the second time it happens.
+ */
+const CAELEN_DOWN_CHEERS: readonly string[] = [
+  'The whole boat erupts — "FINAAALLY! He\'s reallly annoying."',
+  'Hands up all round the deck — "Finaaally. That bird was reallly annoying."',
+  'Cheering on deck — "FINAAALLY! Nobody liked him. Nobody."',
+  'The deck goes up — "Finaaally! He\'s been reallly annoying since Islamorada."',
+];
 /** How close (m) a *missed* shaft has to pass a real fish to spook it and its school (Problem 2 —
  * see the near-miss detection in `frame()`'s fixed-step loop, below). Added on top of the fish's
  * own capsule radius, same shape as `SPEAR_QUERY_RADIUS`'s margin above the gun's own `ax..bz`
@@ -280,6 +292,13 @@ export function initWorld(wrap: HTMLElement): World {
   // that already exists — every (re)build, sync or from the async glTF arriving later, re-runs
   // applyToSubtree on just the new crew group so their materials get the CSM cascade setup too.
   const crewSystem = createCrewSystem(quality.tier, (group) => shadows.applyToSubtree(group));
+  // VERIFICATION HOOK ONLY (same spirit as __shopDebug/__casinoDebug): a cheer normally needs a
+  // bird shot out of the sky, which is a slow thing to arrange in a harness running at ~3 fps and
+  // tells you nothing about the POSE if the window closes before the screenshot lands.
+  (window as unknown as { __crewDebug?: unknown }).__crewDebug = {
+    cheer: (seconds?: number) => crewSystem.cheer(seconds),
+    handLift: () => crewSystem.debugHandLift(),
+  };
   crewSystem.attachTo(model, boatSpec);
 
   // 12c. underwater world (docs/ARCHITECTURE.md "The underwater world" → "Rendering") — marine
@@ -600,6 +619,11 @@ export function initWorld(wrap: HTMLElement): World {
     // release a real cast on the Space keyup that arrives after the pistol is out. reelIn clears it.
     prepare: () => { if (FishF.charging || (FishF.state !== 'idle' && FishF.state !== 'caught')) fishing.reelIn(); },
     toast, gear: econ.gear, fishWorld, life, audio: audio.engine, particles,
+    // Caelen is down. Nobody aboard liked him.
+    onCaelenDown() {
+      crewSystem.cheer();
+      toast(CAELEN_DOWN_CHEERS[Math.floor(Math.random() * CAELEN_DOWN_CHEERS.length)]);
+    },
   });
 
   // Problem 2 (fish react to being shot at): speargun.isActive()/getFightState() are the only
