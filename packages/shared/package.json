@@ -38,6 +38,10 @@
       "types": "./dist/world/frenzy.d.ts",
       "default": "./dist/world/frenzy.js"
     },
+    "./world/pirates": {
+      "types": "./dist/world/pirates.d.ts",
+      "default": "./dist/world/pirates.js"
+    },
     "./waves": {
       "types": "./dist/waves/index.d.ts",
       "default": "./dist/waves/index.js"

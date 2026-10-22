@@ -18,7 +18,7 @@
  */
 import { clamp, lerp, rand } from '../core/math.js';
 import type { Boat } from '@keysrun/shared/content/boats';
-import type { RemoteEngineSource, GullSite, PartySite } from './interfaces.js';
+import type { RemoteEngineSource, GullSite, PartySite, PirateSite } from './interfaces.js';
 
 // ---------------------------------------------------------------------------------------------
 // Engine voice profiles (legacy index.html:3063-3066)
@@ -157,6 +157,8 @@ export interface AudioFrameInputs {
   gullSites?: readonly GullSite[];
   /** Moored party boats within earshot — see `updateParties`. */
   parties?: readonly PartySite[];
+  /** The pirates' sloop while it is here (null/absent while away) — see `updatePirates`. */
+  pirates?: PirateSite | null;
 }
 
 export function createAudioEngine() {
@@ -947,6 +949,214 @@ export function createAudioEngine() {
     }
   }
 
+  // -------------------------------------------------------------------------------------------
+  // The pirates (entities/life/pirates.ts)
+  //
+  // A sailboat has no engine, so none of `updateTraffic`'s machinery applies and none is given.
+  // What carries across water, in the order you hear it as they close:
+  //   ~800 m  a ship's bell, two strokes every eight seconds or so — the herald; a bell is the one
+  //           thing on a wooden boat that is both loud and narrow-band enough to survive wind
+  //   ~300 m  a squeezebox shanty in D minor, jig time, with a drone and a stomp on the beat
+  //   ~190 m  timber: the long groans of a hull working in a swell, plus the odd knock
+  //   any     a hail when somebody speaks (a vowel-glide through two formant filters; there is no
+  //           speech synthesis here and none is wanted — "AH-hoy" is a pitch and two resonances)
+  // All of it is synthesized and positional through `audPanner`, no samples, same as the party
+  // boats' kick drum. One voice (a panner and a song bus) exists while the boat does and is torn
+  // down the frame it leaves, so the 29 minutes between visits allocate nothing.
+  // -------------------------------------------------------------------------------------------
+
+  const PIRATE_BELL_EARSHOT = 850;
+  const PIRATE_SONG_EARSHOT = 300;
+  const PIRATE_GROAN_EARSHOT = 190;
+  /** One eighth note of the jig, seconds (dotted-quarter = 76 BPM). */
+  const SHANTY_EIGHTH = 0.26;
+  /** [semitones above D4, length in eighths]. Four bars of 6/8 then a bar's rest before the repeat. */
+  const SHANTY: ReadonlyArray<readonly [number, number]> = [
+    [0, 1], [3, 1], [7, 1], [7, 2], [5, 1],
+    [3, 1], [5, 1], [7, 1], [10, 2], [7, 1],
+    [12, 1], [10, 1], [7, 1], [5, 2], [3, 1],
+    [5, 1], [3, 1], [0, 1], [0, 3],
+  ];
+
+  interface PirateVoice {
+    p: PannerNode;
+    song: GainNode;
+    hailSeen: number;
+    bellT: number;
+    groanT: number;
+    /** AudioContext time the next note starts, and which note it is. */
+    noteT: number;
+    noteI: number;
+    /** Eighths elapsed in the current bar, for the drone and the stomp. */
+    barPos: number;
+  }
+  let pirateVoice: PirateVoice | null = null;
+
+  function disposePirateVoice(v: PirateVoice): void {
+    try { v.song.disconnect(); v.p.disconnect(); } catch { /* already gone */ }
+  }
+
+  /** Two bell strokes, each the usual inharmonic partials of a small cast bell. */
+  function pirateBell(x: number, z: number, vol: number): void {
+    const pos: [number, number, number] = [x, 5, z];
+    const partials: ReadonlyArray<readonly [number, number, number]> = [[1, 1, 2.6], [2.76, 0.55, 1.7], [5.4, 0.3, 1.0], [8.93, 0.16, 0.6]];
+    for (const dly of [0, 0.55]) {
+      setTimeout(() => {
+        for (const [r, g, dur] of partials) audBurst({ tone: 860 * r, dur, gain: 0.3 * g * vol, att: 0.003, wave: 'sine', pos, ref: 90 });
+      }, dly * 1000);
+    }
+  }
+
+  /** A long groan of working timber, with a knock. Sawtooth through a narrow bandpass is a
+   * stick-slip squeal; the pitch wanders through it the way a spar does as it unloads. */
+  function pirateGroan(x: number, z: number, vol: number): void {
+    if (!ready || !on || !ctx) return;
+    const c = ctx, t = c.currentTime, dur = rand(0.7, 1.7);
+    const o = c.createOscillator(), bp = c.createBiquadFilter(), g = c.createGain();
+    const p = audPanner(); p.refDistance = 22;
+    audPos(p, x + rand(-3, 3), 1.5, z + rand(-3, 3));
+    o.type = 'sawtooth';
+    const f0 = rand(70, 130);
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.linearRampToValueAtTime(f0 * rand(1.1, 1.5), t + dur * 0.4);
+    o.frequency.linearRampToValueAtTime(f0 * 0.8, t + dur);
+    bp.type = 'bandpass'; bp.frequency.value = rand(280, 520); bp.Q.value = 7;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.5 * vol, t + dur * 0.35); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(bp); bp.connect(g); g.connect(p);
+    o.start(t); o.stop(t + dur + 0.05);
+    setTimeout(() => { try { p.disconnect(); } catch { /* already gone */ } }, (dur + 0.3) * 1000);
+    if (Math.random() < 0.5) audBurst({ freq: 260, freqTo: 120, dur: 0.12, gain: 0.35 * vol, pos: [x, 1, z], ref: 18 });
+  }
+
+  /** "AH-hoy": a gruff sawtooth pair through two formant bandpasses that glide from /a/ to /oi/.
+   * `voice` 0 is the captain (low), 1 the mate (higher, rougher). */
+  function pirateHail(x: number, z: number, voice: 0 | 1, vol: number): void {
+    if (!ready || !on || !ctx) return;
+    const c = ctx, t = c.currentTime, dur = 0.95;
+    const f0 = voice === 0 ? 108 : 168;
+    const o = c.createOscillator(), o2 = c.createOscillator(), env = c.createGain();
+    const b1 = c.createBiquadFilter(), b2 = c.createBiquadFilter(), g1 = c.createGain(), g2 = c.createGain();
+    const p = audPanner(); p.refDistance = 26;
+    audPos(p, x, 5, z);
+    o.type = 'sawtooth'; o2.type = 'square';
+    for (const osc of [o, o2]) {
+      const k = osc === o ? 1 : 1.004;
+      osc.frequency.setValueAtTime(f0 * 0.9 * k, t);
+      osc.frequency.linearRampToValueAtTime(f0 * 1.28 * k, t + 0.26);
+      osc.frequency.linearRampToValueAtTime(f0 * 1.05 * k, t + 0.62);
+      osc.frequency.linearRampToValueAtTime(f0 * 0.82 * k, t + dur);
+    }
+    const vow = voice === 0 ? 1 : 1.18;
+    b1.type = 'bandpass'; b1.Q.value = 5;
+    b1.frequency.setValueAtTime(680 * vow, t); b1.frequency.setValueAtTime(680 * vow, t + 0.34);
+    b1.frequency.linearRampToValueAtTime(500 * vow, t + 0.5); b1.frequency.linearRampToValueAtTime(400 * vow, t + 0.85);
+    b2.type = 'bandpass'; b2.Q.value = 6;
+    b2.frequency.setValueAtTime(1100 * vow, t); b2.frequency.setValueAtTime(1100 * vow, t + 0.34);
+    b2.frequency.linearRampToValueAtTime(900 * vow, t + 0.5); b2.frequency.linearRampToValueAtTime(2100 * vow, t + 0.85);
+    g1.gain.value = 1.5; g2.gain.value = 0.9;
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(0.4 * vol, t + 0.06);
+    env.gain.setValueAtTime(0.4 * vol, t + 0.62);
+    env.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(b1); o2.connect(b1); o.connect(b2); o2.connect(b2);
+    b1.connect(g1); b2.connect(g2); g1.connect(env); g2.connect(env); env.connect(p);
+    o.start(t); o2.start(t); o.stop(t + dur + 0.05); o2.stop(t + dur + 0.05);
+    audBurst({ type: 'highpass', freq: 3000, dur: 0.06, gain: 0.08 * vol, pos: [x, 5, z], ref: 18 }); // the breath before the "h"
+    setTimeout(() => { try { p.disconnect(); } catch { /* already gone */ } }, (dur + 0.3) * 1000);
+  }
+
+  /** One squeezebox note: a detuned sawtooth pair through a lowpass, into the song bus. */
+  function shantyNote(v: PirateVoice, hz: number, at: number, len: number): void {
+    const c = ctx!;
+    const g = c.createGain(), lp = c.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 1700; lp.Q.value = 0.8;
+    g.gain.setValueAtTime(0, at);
+    g.gain.linearRampToValueAtTime(0.1, at + 0.03);
+    g.gain.setValueAtTime(0.085, at + Math.max(0.04, len - 0.07));
+    g.gain.linearRampToValueAtTime(0, at + len);
+    lp.connect(g); g.connect(v.song);
+    for (const cents of [-7, 7]) {
+      const o = c.createOscillator();
+      o.type = 'sawtooth'; o.frequency.value = hz; o.detune.value = cents;
+      o.connect(lp); o.start(at); o.stop(at + len + 0.02);
+    }
+  }
+
+  function shantyDrone(v: PirateVoice, hz: number, at: number, len: number): void {
+    const c = ctx!;
+    const g = c.createGain(), lp = c.createBiquadFilter(), o = c.createOscillator();
+    lp.type = 'lowpass'; lp.frequency.value = 320;
+    o.type = 'sawtooth'; o.frequency.value = hz;
+    g.gain.setValueAtTime(0, at); g.gain.linearRampToValueAtTime(0.07, at + 0.05); g.gain.linearRampToValueAtTime(0, at + len);
+    o.connect(lp); lp.connect(g); g.connect(v.song);
+    o.start(at); o.stop(at + len + 0.02);
+  }
+
+  function updatePirates(dt: number, site: PirateSite | null | undefined, lx: number, lz: number): void {
+    if (!site || !ready || !ctx) {
+      if (pirateVoice) { disposePirateVoice(pirateVoice); pirateVoice = null; }
+      return;
+    }
+    const d = Math.hypot(site.x - lx, site.z - lz);
+    if (d > PIRATE_BELL_EARSHOT + 150) {
+      if (pirateVoice) { disposePirateVoice(pirateVoice); pirateVoice = null; }
+      return;
+    }
+    let v = pirateVoice;
+    if (!v) {
+      const p = audPanner();
+      p.refDistance = 40;
+      const song = ctx.createGain();
+      song.gain.value = 0;
+      song.connect(p);
+      v = pirateVoice = { p, song, hailSeen: site.hail, bellT: rand(0.5, 2.5), groanT: rand(0.5, 2), noteT: 0, noteI: 0, barPos: 0 };
+    }
+    const now = ctx.currentTime;
+    audPos(v.p, site.x, 4, site.z);
+
+    if (site.hail !== v.hailSeen) {
+      v.hailSeen = site.hail;
+      if (d < 520) pirateHail(site.x, site.z, site.voice, clamp(1.1 - d / 700, 0.35, 1));
+    }
+
+    v.bellT -= dt;
+    if (v.bellT <= 0) {
+      v.bellT = rand(7, 10);
+      if (d < PIRATE_BELL_EARSHOT) pirateBell(site.x, site.z, 1);
+    }
+
+    v.groanT -= dt;
+    if (v.groanT <= 0) {
+      v.groanT = rand(1.3, 4);
+      if (d < PIRATE_GROAN_EARSHOT) pirateGroan(site.x, site.z, clamp(1 - d / PIRATE_GROAN_EARSHOT, 0.2, 1));
+    }
+
+    // The song bus follows distance like the party bed does: squared, so the last 100 m is where
+    // it comes into focus.
+    const near = clamp(1 - d / PIRATE_SONG_EARSHOT, 0, 1);
+    v.song.gain.setTargetAtTime(site.singing ? near * near : 0, now, 0.3);
+    if (site.singing && near > 0) {
+      // Lookahead scheduling: frames can be 300 ms apart (the software-GL sandbox) and a note
+      // must never start late, so notes are placed on the AudioContext clock 0.7 s ahead.
+      if (v.noteT < now - 0.3) { v.noteT = now + 0.05; v.noteI = 0; v.barPos = 0; }
+      while (v.noteT < now + 0.7) {
+        const [semi, eighths] = SHANTY[v.noteI];
+        const len = eighths * SHANTY_EIGHTH;
+        shantyNote(v, 293.66 * Math.pow(2, semi / 12), v.noteT, len * 0.94);
+        if (v.barPos === 0) shantyDrone(v, v.noteI % 8 < 4 ? 73.42 : 110, v.noteT, 6 * SHANTY_EIGHTH);
+        if (near > 0.25 && (v.barPos === 0 || v.barPos === 3)) {
+          const stomp = Math.max(0, v.noteT - now);
+          setTimeout(() => audBurst({ tone: 90, toneTo: 45, dur: 0.12, gain: 0.35 * near, att: 0.002, pos: [site.x, 1, site.z], ref: 20 }), stomp * 1000);
+        }
+        v.noteT += len;
+        v.barPos += eighths;
+        if (v.barPos >= 6) v.barPos -= 6;
+        v.noteI++;
+        if (v.noteI >= SHANTY.length) { v.noteI = 0; v.barPos = 0; v.noteT += 6 * SHANTY_EIGHTH; }
+      }
+    }
+  }
+
   /** Drop any remote-engine bookkeeping whose id wasn't present in this frame's
    * traffic/racer/buddy/ghost lists at all (as opposed to merely far away, which `updateTraffic`
    * already disposes) — e.g. a traffic boat that's been despawned/recycled. Call once per frame
@@ -977,6 +1187,7 @@ export function createAudioEngine() {
     updateGhosts(input.ghosts, input.dt);
     updateGulls(input.dt, input.gullSites, input.listener.x, input.listener.z);
     updateParties(input.dt, input.parties, input.listener.x, input.listener.z);
+    updatePirates(input.dt, input.pirates, input.listener.x, input.listener.z);
 
     const liveIds = new Set<string>();
     if (input.buddy) liveIds.add(input.buddy.id);
@@ -1002,6 +1213,7 @@ export function createAudioEngine() {
     player?.dispose();
     for (const v of partyVoices.values()) disposePartyVoice(v);
     partyVoices.clear();
+    if (pirateVoice) { disposePirateVoice(pirateVoice); pirateVoice = null; }
     for (const sy of remoteSynths.values()) sy.dispose();
     remoteSynths.clear();
     try { ctx?.close(); } catch { /* already closed */ }

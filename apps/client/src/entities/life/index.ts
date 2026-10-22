@@ -6,7 +6,8 @@
  * Owns: go-fast racers (racers.ts), ambient boat traffic (traffic.ts), pelican flocks
  * (pelicans.ts), hotspots/weedlines/rigs (hotspots.ts), the fishing buddy (buddy.ts), Luigi mode
  * (luigi.ts), Caelen (caelen.ts), the moored party boats off the beaches (party-boats.ts), and
- * driving the player's own boat's deck party/pole/shower (deck-party.ts) plus the idle animation
+ * the pirates' old wooden sloop that calls by every ~30 minutes (pirates.ts — nothing exists
+ * while it is away), and driving the player's own boat's deck party/pole/shower (deck-party.ts) plus the idle animation
  * (blink/head-sway/hair-whip) for every human riding the
  * player's boat — `entities/boat/model.ts` builds `captain`/`crew`/`party` directly (not through
  * a `HumanRegistry`), so nothing else calls their `update()` every frame.
@@ -37,11 +38,12 @@ import { createFishingBuddy, type FishingBuddy } from './buddy.js';
 import { createLuigiMode, type LuigiMode } from './luigi.js';
 import { createCaelen, type Caelen, type CaelenDiverInput, type CaelenShotResult } from './caelen.js';
 import { createPartyBoats, type PartyBoats } from './party-boats.js';
+import { createPirates, type Pirates, type PirateLootSource } from './pirates.js';
 import { updateParty } from './deck-party.js';
 import type { BoatModel, BoatBuildDeps } from '../boat/model.js';
 import type { LightMatEntry } from '../../core/time-of-day.js';
 import type { ParticleSystem } from '../../world/particles.js';
-import type { RemoteEngineSource, PartySite } from '../../audio/interfaces.js';
+import type { RemoteEngineSource, PartySite, PirateSite } from '../../audio/interfaces.js';
 
 export interface LifeDeps extends BoatBuildDeps {
   lightMats: LightMatEntry[];
@@ -56,6 +58,12 @@ export interface LifeDeps extends BoatBuildDeps {
    * callout and Caelen's spoken line. */
   hypeCallout(): void;
   sayCaelenLine(): void;
+  /** The player's wallet and cooler, for the pirates' appraisal. Optional: without it they still
+   * come, and judge you broke. */
+  pirateLoot?(): PirateLootSource | null;
+  /** Unix-seconds clock for the pirates' schedule; defaults to the wall clock. Injectable so
+   * nothing ever has to wait thirty minutes. */
+  pirateNowS?(): number;
 }
 
 export interface LifeFrameInputs {
@@ -89,6 +97,8 @@ export interface LifeSystems {
   /** Moored party boats within earshot, for `audio/engine.ts`'s `updateParties` — pass straight
    * into `audio.update`'s `parties`. */
   partySites(): readonly PartySite[];
+  /** The pirate sloop for `audio/engine.ts`'s `updatePirates`, or null while they are away. */
+  pirateSite(): PirateSite | null;
   isLuigiOn(): boolean;
   toggleBuddy(): void;
   isBuddyOn(): boolean;
@@ -114,6 +124,16 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
   const luigi: LuigiMode = createLuigiMode({ hypeCallout: deps.hypeCallout, particles: deps.particles });
   const caelen: Caelen = createCaelen(scene, { sayCaelenLine: deps.sayCaelenLine });
   const partyBoats: PartyBoats = createPartyBoats(scene);
+  const pirates: Pirates = createPirates(scene, { loot: deps.pirateLoot, nowS: deps.pirateNowS });
+  // DEV/VERIFICATION HOOK ONLY — the schedule is 30 wall-clock minutes, which nothing here can
+  // wait out (the sandbox renders ~3 fps and measures in simulated seconds). Registered here, not
+  // in world.ts, so the contested file needs no extra lines. No normal code path reads it.
+  if (typeof window !== 'undefined') {
+    (window as unknown as { __pirateDebug?: unknown }).__pirateDebug = {
+      summon: (distM?: number) => pirates.summon(distM),
+      state: () => pirates.debug(),
+    };
+  }
 
   return {
     update(inputs) {
@@ -126,6 +146,7 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
       buddy.update(dt, t, boat, playerBoatId, camera, viewport, deps.particles);
       caelen.update(dt, t, boat, camera, viewport, inputs.diver ?? null);
       partyBoats.update(dt, t, camera.position, deps.particles, deps.currentTodK);
+      pirates.update(dt, t, boat, camera, viewport, deps.particles, deps.currentTodK());
 
       // the player's own deck party/pole/shower, plus idle animation for every human aboard
       // (captain/crew/party aren't in a HumanRegistry — see this module's header).
@@ -148,6 +169,7 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
       nearRig: (x, z) => hotspotWorld.nearRig(x, z),
     },
     partySites(): readonly PartySite[] { return partyBoats.sites(); },
+    pirateSite(): PirateSite | null { return pirates.site(); },
     isLuigiOn(): boolean { return luigi.isOn(); },
     toggleBuddy(): void { buddy.toggle(); },
     isBuddyOn(): boolean { return buddy.isOn(); },
@@ -164,6 +186,7 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
       luigi.dispose();
       caelen.dispose();
       partyBoats.dispose();
+      pirates.dispose();
       buddy.dispose();
     },
   };
