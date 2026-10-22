@@ -185,10 +185,14 @@ export interface Rig extends GullSite {
   told: boolean;
 }
 
+/** The four platforms' (x, dz-from-chain) sites, exported so test/wrecks.test.ts can assert a wreck
+ * never overlaps one. */
+export const RIG_SITES: ReadonlyArray<readonly [number, number]> = [[-3250, 2950], [-900, 3150], [1550, 2800], [3350, 3100]];
+
 /** legacy `RIGS` (index.html:2091-2129): 4 fixed offshore platforms — no randomness at all, so
  * no `hashCell` treatment is needed (see this module's header). */
 function spawnRigs(scene: THREE.Scene, lightMats: LightMatEntry[]): Rig[] {
-  const spots: ReadonlyArray<readonly [number, number]> = [[-3250, 2950], [-900, 3150], [1550, 2800], [3350, 3100]];
+  const spots = RIG_SITES;
   const steel = new THREE.MeshStandardMaterial({ color: 0xc9a227, roughness: 0.55, metalness: 0.4 });
   const rust = new THREE.MeshStandardMaterial({ color: 0x7a4a2a, roughness: 0.8, metalness: 0.2 });
   const deckM = new THREE.MeshStandardMaterial({ color: 0x6b7178, roughness: 0.7, metalness: 0.3 });

@@ -31,6 +31,7 @@ import * as THREE from 'three';
 import { createRacerFleet, type RacerFleet } from './racers.js';
 import { createTrafficFleet, type TrafficFleet } from './traffic.js';
 import { createPelicanFlocks, type PelicanFlocks } from './pelicans.js';
+import { createWrecks, type Wrecks } from './wrecks.js';
 import type { SpotQuery } from '../../game/fishing/spot.js';
 import { createHotspotWorld, type HotspotWorld, type GullSite } from './hotspots.js';
 import { createFishingBuddy, type FishingBuddy } from './buddy.js';
@@ -123,6 +124,10 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
   // The dog belongs to the player, not to the hull, so it is built here once and re-parents
   // itself to whatever boat model it is handed — switching boats rebuilds the model entirely.
   const dog: Dog = createDog({ bark: deps.dogBark });
+  const wrecks: Wrecks = createWrecks(scene);
+  // DEV/VERIFICATION HOOK ONLY (same convention as __fishDebug): where the wrecks are and which
+  // draw tier / chart state each is in. No normal code path reads it.
+  (globalThis as unknown as { __wreckDebug?: unknown }).__wreckDebug = () => wrecks.debug();
 
   return {
     update(inputs) {
@@ -137,6 +142,7 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
       // A fish coming over the gunwale is the dog's whole day.
       dog.update(dt, t, model, boatLen, boat, fishCaught);
       partyBoats.update(dt, t, camera.position, deps.particles, deps.currentTodK);
+      wrecks.update(dt, camera.position, boat, inputs.diver ?? null);
 
       // the player's own deck party/pole/shower, plus idle animation for every human aboard
       // (captain/crew/party aren't in a HumanRegistry — see this module's header).
@@ -157,6 +163,7 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
       nearHotspot: (x, z) => hotspotWorld.nearHotspot(x, z),
       nearWeed: (x, z) => hotspotWorld.nearWeed(x, z),
       nearRig: (x, z) => hotspotWorld.nearRig(x, z),
+      nearWreck: (x, z) => wrecks.nearWreck(x, z),
     },
     partySites(): readonly PartySite[] { return partyBoats.sites(); },
     isLuigiOn(): boolean { return luigi.isOn(); },
@@ -177,6 +184,7 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
       caelen.dispose();
       partyBoats.dispose();
       dog.dispose();
+      wrecks.dispose();
       buddy.dispose();
     },
   };

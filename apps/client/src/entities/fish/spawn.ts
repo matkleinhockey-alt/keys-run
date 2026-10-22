@@ -39,9 +39,11 @@
  * `zoneAt`'s seven real zones, not zones themselves — see creatures.ts's `ZONE_LIFE` doc comment.
  */
 import { hashCell, weightedPick } from '@keysrun/shared/rng';
-import { VIS, ZONE_LIFE, type CreatureVis } from '@keysrun/shared/content/creatures';
+import { VIS, ZONE_LIFE, isCatchable, type CreatureVis } from '@keysrun/shared/content/creatures';
 import { depthAt, zoneAt, WB, HUMPS, type Zone } from '@keysrun/shared/world/depth';
 import { shoreInfo, chainZ } from '@keysrun/shared/world/chain';
+import { holdPoints, type Wreck } from '@keysrun/shared/world/wrecks';
+import { wreckSizeT } from '@keysrun/shared/sim/fight';
 import { memberScale } from './school.js';
 import type { FishMember, SchoolState } from './types.js';
 
@@ -56,6 +58,7 @@ const SALT = {
   ROAM_GATE: 9601, ROAM_SPECIES: 9602, ROAM_COUNT: 9603, ROAM_OFFSET_X: 9604, ROAM_OFFSET_Z: 9605, ROAM_HEADING: 9606,
   NEAR_GATE: 9701, NEAR_SPECIES: 9702, NEAR_COUNT: 9703, NEAR_OFFSET_X: 9704, NEAR_OFFSET_Z: 9705,
   NEAR_HEADING: 9706, NEAR_ANCHOR_R: 9707, NEAR_BIG: 9708,
+  WRECK_SPECIES: 9801, WRECK_COUNT: 9802, WRECK_HEADING: 9803, WRECK_TROPHY: 9810, WRECK_TAIL: 9820,
 } as const;
 
 /**
@@ -155,7 +158,7 @@ function chunkCenter(cx: number, cz: number): [number, number] {
 
 /** Deterministic per-member offsets, scale and VAT swim-phase — shared by residents and roamers
  * so both are equally reproducible given the same (seed, cellX, cellZ, species). */
-function buildMembers(seed: number, cx: number, cz: number, V: CreatureVis, count: number, originX: number, originZ: number): FishMember[] {
+function buildMembers(seed: number, cx: number, cz: number, V: CreatureVis, count: number, originX: number, originZ: number, wreck = false): FishMember[] {
   const members: FishMember[] = [];
   for (let i = 0; i < count; i++) {
     const ang = hashCell(seed, cx, cz, SALT.MEMBER_ANG + i) * Math.PI * 2;
@@ -168,11 +171,17 @@ function buildMembers(seed: number, cx: number, cz: number, V: CreatureVis, coun
     // difference invisible, and the point here is that the difference be *readable* at a glance
     // without being a cartoon. Across a species with a 4x weight spread (tarpon, 40-160 lb) that
     // is a 1.59x length difference, which is plainly visible alongside its schoolmates.
-    const sizeU = hashCell(seed, cx, cz, SALT.MEMBER_SCALE + i);
-    // Widened from cbrt(0.55 + 1.35u). That was the honest cube-root mapping of a species'
-    // weight range, but within one school it spans only 1.5x in length, and at the distance you
-    // actually pick a target that is not a readable difference — the whole point is being able to
-    // say "that one" at a glance. 2.0x reads clearly and is still a shape a fish can be.
+    // On a wreck the size comes from the SAME function the rod's weight roll uses (`wreckSizeT`,
+    // sim/fight.ts), fed by this fish's own hashes: the big fish a diver sees holding on the steel
+    // are drawn from exactly the distribution a cast there promises, and since `sizeU` is also the
+    // spearable weight (index.ts `pushSchoolTargets`), the one you can see is the one you can spear.
+    const u = hashCell(seed, cx, cz, SALT.MEMBER_SCALE + i);
+    const sizeU = wreck ? wreckSizeT(u, hashCell(seed, cx, cz, SALT.WRECK_TROPHY + i), hashCell(seed, cx, cz, SALT.WRECK_TAIL + i)) : u;
+    // Widened from cbrt(0.55 + 1.35u). That was the honest cube-root mapping of a species' weight
+    // range, but within one school it spans only 1.5x in length, and at the distance you actually
+    // pick a target that is not a readable difference — the whole point is being able to say
+    // "that one" at a glance. 2.0x reads clearly and is still a shape a fish can be. It applies to
+    // wreck fish too, so a goliath over the steel is unmistakably the big one.
     const baseScale = VSC * Math.cbrt(0.35 + 2.3 * sizeU);
     members.push({
       ox: Math.cos(ang) * r, oz: Math.sin(ang) * r, oy, swimPhase, sizeU,
@@ -194,6 +203,8 @@ export interface ResidentSpec {
   heading: number;
   diveTimerSeed: number;
   members: FishMember[];
+  /** Set on wreck schools only - see `SchoolAnchor.hold`. */
+  hold?: { h: number; r: number };
 }
 
 /**
@@ -235,7 +246,7 @@ export function instantiateResident(spec: ResidentSpec, cx: number, cz: number):
     cx: spec.anchorX, cz: spec.anchorZ, heading: spec.heading,
     phase: spec.heading * 17.3, turn: 0, flee: 0, fleeHeading: spec.heading, bowRide: 0,
     glide: 0, dive: 0, diveTimer: 6 + 8 * spec.diveTimerSeed, diveTarget: 0,
-    anchor: { x: spec.anchorX, z: spec.anchorZ, r: spec.anchorR },
+    anchor: { x: spec.anchorX, z: spec.anchorZ, r: spec.anchorR, ...(spec.hold ? { hold: spec.hold } : {}) },
     resident: true,
     members: spec.members,
   };
@@ -444,4 +455,73 @@ export function instantiateNearField(spec: ResidentSpec, cellX: number, cellZ: n
     resident: true,
     members: spec.members,
   };
+}
+
+// --- wreck layer ----------------------------------------------------------
+//
+// Schools holding on a shipwreck (shared/world/wrecks.ts). This is a fourth placement source for
+// the same `SchoolState` + `anchor` machinery the resident layers use, not a new spawner: a wreck's
+// hold points become anchors, `stepSchool` tethers each school to its patch exactly as it does for
+// a coral head, and render/LOD/spear targeting are untouched.
+//
+// Why a separate source at all: the habitat tables key off `zoneAt`/depth, and a wreck is a
+// handful of metres of steel in a stretch of ordinary sand - no 18 m cell roll would reliably put
+// a grouper on it, and the whole point is that you can *count on* the big ones being there. So
+// each hold point rolls its own species from `WRECK_RESIDENTS` (structure-holders only, no
+// baitfish cloud), hashed from (wreck index, hold index) - position-derived, the same school every
+// time for every client.
+//
+// Mid-water hunters take the points on the hull's axis (they hang over the steel); bottom
+// species take the `lee` points beside it, where scour leaves a hole to sit in. Putting a
+// bottom-hugging goliath on the axis would have put it inside the hull.
+
+/** Species that can hold at a point of this label, by `VIS` level. */
+function wreckPool(w: Wreck, label: string, table: ReadonlyArray<readonly [string, number]>): Array<readonly [string, number]> {
+  const out: Array<readonly [string, number]> = [];
+  for (const [k, wt] of table) {
+    const V = VIS[k];
+    if (!V || !isCatchable(k)) continue;
+    // `- 1`: a species whose floor is the wreck's own depth would be flagged by stepSchool's
+    // look-ahead as "too shallow" the moment it drifted a metre up the slope and start turning away.
+    if (w.seaDepth - 1 < V.dMin || w.seaDepth > V.dMax) continue;
+    if ((label === 'lee') !== (V.level === 'bottom')) continue;
+    out.push([k, wt]);
+  }
+  return out;
+}
+
+/** Pure: the schools holding on `w`, one per hold point (fewer if a point has no species that fits
+ * the depth). Twice with the same arguments gives equal results - test/wreck-fish.test.ts. */
+export function wreckSchoolsFor(seed: number, w: Wreck, table: ReadonlyArray<readonly [string, number]>): ResidentSpec[] {
+  const out: ResidentSpec[] = [];
+  // Species already holding on this wreck are down-weighted for the next point (x0.25, not
+  // excluded): five schools of the same fish read as a rolling error, and amberjack - the species
+  // the wreck is about - should not lose out to a second school of jacks by luck. Points are
+  // visited in `holdPoints` order, which is fixed, so this stays deterministic.
+  const used = new Set<string>();
+  holdPoints(w).forEach((hp, i) => {
+    const pool = wreckPool(w, hp.label, table).map(([k, wt]) => [k, used.has(k) ? wt * 0.25 : wt] as const);
+    if (pool.length === 0) return;
+    const cx = 1000 + w.index, cz = i;
+    const type = weightedPick(() => hashCell(seed, cx, cz, SALT.WRECK_SPECIES), pool);
+    const V = VIS[type];
+    if (!V) return;
+    used.add(type);
+    const count = V.school[0] + Math.floor(hashCell(seed, cx, cz, SALT.WRECK_COUNT) * (V.school[1] - V.school[0] + 1));
+    const heading = hashCell(seed, cx, cz, SALT.WRECK_HEADING) * Math.PI * 2;
+    const members = buildMembers(seed, cx, cz, V, count, hp.x, hp.z, true);
+    out.push({
+      type, V, anchorX: hp.x, anchorZ: hp.z, anchorR: hp.r, heading,
+      diveTimerSeed: hashCell(seed, cx, cz, SALT.WRECK_HEADING + 1), members,
+      hold: { h: hp.h, r: hp.hr },
+    });
+  });
+  return out;
+}
+
+/** Builds the live school for hold point `i` of wreck `w`. */
+export function instantiateWreckSchool(spec: ResidentSpec, w: Wreck, i: number): SchoolState {
+  const st = instantiateResident(spec, 1000 + w.index, i);
+  st.id = `wreck:${w.id}:${i}`;
+  return st;
 }

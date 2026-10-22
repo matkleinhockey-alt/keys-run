@@ -1,7 +1,8 @@
 /**
  * The nautical-chart minimap: a static base chart baked once (buff land, blue shallows fading
  * to white deep water, depth contours, soundings, a lat/long graticule, compass rose and scale
- * bar), redrawn each frame with the dynamic overlay (own boat, marina anchors, golf flags).
+ * bar), redrawn each frame with the dynamic overlay (own boat, marina anchors, golf flags, and the
+ * shipwrecks the player has found - see wreckSymbol and entities/life/wreck-chart.ts).
  *
  * Ported from legacy/index.html:3782-3863. Dynamic overlays for out-of-scope systems — oil rig
  * platforms, weedlines, bird hotspots, the fishing buddy, traffic/racer boats, multiplayer
@@ -11,6 +12,7 @@
 import { chainZ, islandWorld, VACA } from '@keysrun/shared/world/chain';
 import { landH, depthAt, WORLD, WB, OLDBR, HUMPS, MARINAS, GOLF } from '@keysrun/shared/world/depth';
 import type { BoatState } from '@keysrun/shared/sim/boat';
+import { chartedWrecks } from '../entities/life/wreck-chart.js';
 
 const MS = 512;
 const MW = WORLD.size;
@@ -141,11 +143,44 @@ export function createMinimap(): Minimap {
     mctx.stroke();
   }
 
+  /**
+   * The chart symbol for a wreck (INT 1 K 20-21), centred on (0,0) in canvas px: a hull lying over
+   * on its side with a leaning mast, and a wavy waterline under it. A wreck with less than 20 m
+   * (66 ft) over it is a danger to surface navigation and gets the dotted danger circle; the deep
+   * ones are the plain symbol, as on a real chart. Drawn in chart ink (near-black navy, and the
+   * compass rose's magenta for the danger ring) so it reads as a printed symbol, not a game pin,
+   * and with a pale halo on the label so it stays legible over the contour lines.
+   */
+  function wreckSymbol(dangerous: boolean, ft: number): void {
+    mctx.save();
+    mctx.lineWidth = 1.4; mctx.lineJoin = 'round'; mctx.lineCap = 'round';
+    if (dangerous) {
+      mctx.strokeStyle = 'rgba(120,40,60,.85)'; mctx.setLineDash([2, 2.4]);
+      mctx.beginPath(); mctx.arc(0, 0, 11, 0, 6.283); mctx.stroke(); mctx.setLineDash([]);
+    }
+    mctx.strokeStyle = 'rgba(20,28,45,.95)'; mctx.fillStyle = 'rgba(20,28,45,.95)';
+    mctx.save(); mctx.rotate(-0.38);
+    mctx.beginPath(); mctx.moveTo(-8, 0); mctx.lineTo(8, 0); mctx.lineTo(5.2, 4.2); mctx.lineTo(-5.2, 4.2); mctx.closePath(); mctx.fill();
+    mctx.beginPath(); mctx.moveTo(-2.5, 0); mctx.lineTo(-3.4, -7); mctx.moveTo(3, 0); mctx.lineTo(3.9, -5); mctx.stroke();
+    mctx.restore();
+    mctx.beginPath(); mctx.moveTo(-9, 7.5); mctx.quadraticCurveTo(-6, 5.2, -3, 7.5); mctx.quadraticCurveTo(0, 9.8, 3, 7.5); mctx.quadraticCurveTo(6, 5.2, 9, 7.5); mctx.stroke();
+    mctx.font = 'italic 9px Georgia, serif'; mctx.textAlign = 'center'; mctx.lineWidth = 2.6;
+    mctx.strokeStyle = 'rgba(250,252,255,.85)'; mctx.strokeText('Wk ' + ft, 0, 20);
+    mctx.fillText('Wk ' + ft, 0, 20);
+    mctx.restore();
+  }
+
   function drawMap(t: number, boat: BoatState, remotes?: readonly MinimapContact[]): void {
     mctx.drawImage(mapBase, 0, 0);
     const toM = (x: number, z: number): [number, number] => [(x - WORLD.x0) / MW * MS, (z - WORLD.z0) / MW * MS];
     mctx.font = '13px sans-serif'; mctx.textAlign = 'center';
     MARINAS.forEach((M) => { const [x, y] = toM(M.sx, M.sz + M.dir * 24); mctx.fillStyle = '#7a1f3d'; mctx.fillText('⚓', x, y + 4); });
+    // Wrecks you have found (entities/life/wreck-chart.ts: charted on first approach, not given).
+    // Drawn before the contacts and the own-boat so neither can hide under a wreck.
+    for (const w of chartedWrecks()) {
+      const [x, y] = toM(w.x, w.z);
+      mctx.save(); mctx.translate(x, y); wreckSymbol(w.seaDepth < 20, Math.round(w.seaDepth * 3.28)); mctx.restore();
+    }
     GOLF.forEach((G) => { const w = islandWorld(G.I, G.lx, G.lz), [x, y] = toM(w[0], w[1]); mctx.fillText('⛳', x, y + 4); });
 
     // Other players first, so a remote contact can never obscure your own boat when two players

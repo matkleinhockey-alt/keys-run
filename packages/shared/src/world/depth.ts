@@ -262,6 +262,7 @@ export function zoneAt(x: number, z: number): Zone {
 
 export const ZONE_DESC: Record<string, string> = {
   'Oil Rig': 'Oil rig',
+  Wreck: 'Shipwreck',
   Weedline: 'Weedline',
   Creek: 'Mangrove creek',
   Flats: 'Skinny-water flats',

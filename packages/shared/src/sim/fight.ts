@@ -116,6 +116,26 @@ export function pickSpecies(zone: Zone | (string & {}), bob: { x: number; z: num
 export const TROPHY_TAIL_P = 0.05;
 
 /**
+ * Where a fish sits in its species' weight range (0..1) when it lives on a wreck - the ONE
+ * function both the rod (`rollWeight`) and the underwater schools (`FishMember.sizeU`, built in
+ * entities/fish/spawn.ts) use, so the fish you can see holding on a wreck are drawn from exactly
+ * the distribution a cast there promises. Three uniforms in: the body, and a trophy roll.
+ *
+ * Why not just shift the reef roll up (`hotspot` x1.2): that left a wreck cast looking like a
+ * slightly better reef cast. A wreck is where fish *stay* for years and get old, so the floor is
+ * raised (nothing under a quarter of the range lives there) and the shape is flat instead of
+ * piled at the bottom (`u^0.9` against the reef's `u^1.8`), with a heavier lifetime-fish tail.
+ * Numbers measured against Reef and Oil Rig in apps/client/test/playthrough-weights.mjs.
+ */
+export const WRECK_SIZE_FLOOR = 0.25;
+export const WRECK_TROPHY_P = 0.2;
+export function wreckSizeT(body: number, trophy: number, tail: number): number {
+  let t = WRECK_SIZE_FLOOR + (1 - WRECK_SIZE_FLOOR) * Math.pow(body, 0.9);
+  if (trophy < WRECK_TROPHY_P) t = Math.max(t, 0.8 + 0.2 * Math.pow(tail, 0.7));
+  return Math.min(1, t);
+}
+
+/**
  * legacy `chooseFish`'s weight roll (index.html:2657), plus a trophy tail.
  *
  * Why the tail: the legacy shape `rng^1.8` piles mass at the bottom of every species' range and
@@ -127,8 +147,9 @@ export const TROPHY_TAIL_P = 0.05;
  * and none of them special, and which on the old sim just inflated scores because every hooked
  * fish was landed. The fight model is what makes these earned: see `FightParams.pullN`.
  */
-export function rollWeight(key: string, bob: { x: number; z: number }, hotspot: boolean, rng: Rng): number {
+export function rollWeight(key: string, bob: { x: number; z: number }, hotspot: boolean, rng: Rng, wreck = false): number {
   const S = SPECIES[key];
+  if (wreck) return +(S.min + (S.max - S.min) * wreckSizeT(rng(), rng(), rng())).toFixed(1);
   const of = offshoreF(bob.x, bob.z);
   let t = Math.min(1, Math.pow(rng(), 1.8 - 1.2 * of) * (hotspot ? 1.2 : 1) * (1 + 0.3 * of));
   if (rng() < TROPHY_TAIL_P * (hotspot ? 1.8 : 1) * (1 + of)) t = Math.max(t, 0.8 + 0.2 * Math.pow(rng(), 0.7));
@@ -150,7 +171,7 @@ export interface HookedFish {
 /** legacy `chooseFish()` (index.html:2655-2660), fully: species, weight, and spawn position. */
 export function chooseFish(zone: Zone | (string & {}), bob: { x: number; z: number }, opts: ChooseFishOpts, rng: Rng): HookedFish {
   const key = pickSpecies(zone, bob, opts, rng);
-  const weight = rollWeight(key, bob, opts.hotspot, rng);
+  const weight = rollWeight(key, bob, opts.hotspot, rng, zone === 'Wreck');
   const a = rng() * Math.PI * 2;
   return { key, weight, x: bob.x + Math.cos(a) * 11, z: bob.z + Math.sin(a) * 11, ofx: Math.cos(a) * 1.3, ofz: Math.sin(a) * 1.3 };
 }
