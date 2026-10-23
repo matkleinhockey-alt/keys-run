@@ -189,8 +189,10 @@ const ROUTES: Record<string, () => Path> = {
   hawk1: () => chainRoute(450, 1000), hawk2: () => chainRoute(620, 1150), hawk3: () => chainRoute(800, 950),
   off1: () => chainRoute(1900, 2700), off2: () => chainRoute(2300, 3200), off3: () => chainRoute(1750, 2150),
   reef: () => chainRoute(1200, 1320), bay: () => chainRoute(-700, -1150),
-  harbor: () => pointRoute([[-1560, chainZ(-1560) + 300], [-1100, chainZ(-1100) + 315], [-680, chainZ(-680) + 305], [-1100, chainZ(-1100) + 295]]),
-  west: () => pointRoute([[1800, -2660], [2110, -2660], [2110, -2200], [1880, -2300]]),
+  // harbor and west: laps of Boot Key Harbor's channel and the water off Brickell, kept clear of
+  // the real island outlines (world/coast-data.ts)
+  harbor: () => pointRoute([[-1650, chainZ(-1650) + 120], [-1150, chainZ(-1150) + 130], [-980, chainZ(-980) + 158], [-1150, chainZ(-1150) + 170]]),
+  west: () => pointRoute([[1750, -2600], [2000, -2560], [1960, -2250], [1780, -2300]]),
   bayE: () => pointRoute([[3080, -2660], [3600, -2660], [3600, -1960], [3080, -1960]]),
   bayN: () => pointRoute([[-900, chainZ(-900) - 520], [200, chainZ(200) - 560], [900, chainZ(900) - 520], [200, chainZ(200) - 700], [-900, chainZ(-900) - 680]]),
   beach: () => pointRoute([[2500, -1480], [3200, -1470], [4000, -1480], [4000, -1420], [3200, -1410], [2500, -1420]]),

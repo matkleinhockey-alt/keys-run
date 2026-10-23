@@ -7,7 +7,7 @@
  * whole game (and later, server) is built on; do not "improve" the maths here.
  */
 
-import { chainZ, islandLocal, shoreInfo, VACA, KCB, type Island } from './chain.js';
+import { chainZ, islandBox, islandDist, islandE, islandLocal, islands, shoreInfo, VACA, KCB, type Island } from './chain.js';
 import { clamp, lerp } from '../internal/math.js';
 
 export const WORLD = { x0: -4300, z0: -3100, size: 8600 };
@@ -68,10 +68,11 @@ export interface GolfCourse {
   name: string;
 }
 
-// golf: Sombrero Country Club on Vaca Key, the par-3 at Key Colony Beach.
+// golf: Sombrero Country Club on Vaca Key, the par-3 at Key Colony Beach. Placed where the real
+// outlines have the most land under them; landH fills the rest (see inFill).
 export const GOLF: GolfCourse[] = [
-  { I: VACA, lx: 300, lz: -30, ra: 290, rb: 150, holes: 4, name: 'Sombrero Country Club' },
-  { I: KCB, lx: 0, lz: 0, ra: 175, rb: 72, holes: 3, name: 'Key Colony Beach golf' },
+  { I: VACA, lx: 330, lz: 100, ra: 290, rb: 150, holes: 4, name: 'Sombrero Country Club' },
+  { I: KCB, lx: -30, lz: 30, ra: 175, rb: 72, holes: 3, name: 'Key Colony Beach golf' },
 ];
 
 export interface Runway {
@@ -82,8 +83,8 @@ export interface Runway {
   w: number;
 }
 
-// Airport runway on Vaca Key.
-export const RUNWAY: Runway = { I: VACA, lx0: 700, lx1: 1420, lz: -150, w: 34 };
+// Airport runway on Vaca Key, along the widest run of the real island east of the golf course.
+export const RUNWAY: Runway = { I: VACA, lx0: 700, lx1: 1420, lz: 80, w: 34 };
 
 /** True if the island-local point (lx,lz) on island I lies on a golf course or the runway. */
 export function onCourse(I: Island, lx: number, lz: number): boolean {
@@ -107,18 +108,67 @@ export interface Marina {
 export const MARINAS: Marina[] = (
   [
     ['Boot Key Harbor City Marina', VACA, -900, 1],
-    ['Burdines Waterfront', VACA, -1380, 1],
+    ['Burdines Waterfront', VACA, -1400, 1], // clear of the canal fingers at -1380
     ['Faro Blanco Marina', VACA, -1560, -1],
     ['Keys Fisheries', VACA, -600, -1],
   ] as Array<[string, Island, number, number]>
 ).map(([name, I, sx, dir]) => {
-  let sz = I.z;
+  // march from the island's middle out to sea; the shore is where it leaves land for good water
+  let sz = I.z, land = false;
   for (let k = 0; k < 1200; k++) {
-    const z = I.z + dir * k * 0.5, l = islandLocal(I, sx, z);
-    if (Math.hypot(l[0] / I.a, l[1] / I.b) >= 1.03) { sz = z; break; }
+    const z = I.z + dir * k * 0.5, e = islandE(I, sx, z);
+    if (e < 1) land = true;
+    else if (land && e >= 1.03) { sz = z; break; }
   }
   return { name, isl: I, sx, sz, dir, ex: sx, ez: sz + dir * 48 };
 });
+
+/**
+ * The town is built on fill. Real Vaca is cut by finger canals, and the pad (world/town.ts: PAD, in
+ * the frame of MARINAS[0]) is wider than some of the land under it, so landH raises the ground
+ * across the pad's footprint (see inFill). Kept here rather than read from town.ts, which imports
+ * this module; town.test.ts checks this box still covers PAD.
+ */
+export const TOWN_FILL = { u0: -112, u1: 112, v0: 14, v1: 180 } as const;
+
+/**
+ * US-1 runs along chainZ (world/bridge.ts in the client). The real outlines do not follow that
+ * parabola exactly: on Vaca the line leaves the land for a lagoon or a few metres of Florida Bay,
+ * and on Fat Deer/Crawl it cuts across canal mouths. So each key the highway crosses gets a fill
+ * causeway along the line, from its first to its last solid land on it, US1_HALF metres either side
+ * — the road stays a road across its own key, and the channels between keys stay bridges.
+ */
+export const US1_HALF = 9;
+const US1_KEYS = ['Little Duck Key', "Knight's Key", 'Marathon (Vaca Key)', 'Fat Deer Key', 'Crawl Key', 'Grassy Key'];
+const US1_RUNS: ReadonlyArray<readonly [number, number]> = US1_KEYS.map((name) => {
+  const I = islands.find((J) => J.name === name)!, b = islandBox(I);
+  let x0 = Infinity, x1 = -Infinity;
+  for (let x = b.x0; x <= b.x1; x += 2) {
+    if (islandDist(I, x, chainZ(x)) < -4) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); }
+  }
+  return [x0, x1] as const;
+}).filter(([a, b]) => b > a);
+
+/** True on US-1's causeway fill (see US1_RUNS). */
+export function onUS1Fill(x: number, z: number): boolean {
+  if (Math.abs(z - chainZ(x)) > US1_HALF) return false;
+  for (const [a, b] of US1_RUNS) if (x >= a && x <= b) return true;
+  return false;
+}
+
+/** Made ground: US-1's causeways, the town pad, the golf courses and the airfield (runway, apron and terminal, see
+ * world/islands.ts buildRunway), which sit flat across the canals the real outlines have. */
+function inFill(x: number, z: number): boolean {
+  if (onUS1Fill(x, z)) return true;
+  const M = MARINAS[0], u = M.dir * (x - M.sx), v = M.dir * (M.sz - z);
+  if (u >= TOWN_FILL.u0 && u <= TOWN_FILL.u1 && v >= TOWN_FILL.v0 && v <= TOWN_FILL.v1) return true;
+  for (const G of GOLF) {
+    const [lx, lz] = islandLocal(G.I, x, z);
+    if (Math.hypot((lx - G.lx) / G.ra, (lz - G.lz) / G.rb) < 1.03) return true;
+  }
+  const [lx, lz] = islandLocal(RUNWAY.I, x, z);
+  return lx > RUNWAY.lx0 - 30 && lx < RUNWAY.lx1 + 30 && lz > RUNWAY.lz - RUNWAY.w / 2 - 4 && lz < RUNWAY.lz + 95;
+}
 
 export interface Creek {
   name: string;
@@ -174,13 +224,15 @@ export function creekDist(x: number, z: number): number {
 /** Ground height: beaches slope into the water, creeks carve through, golf courses/runway are graded flat. */
 export function landH(x: number, z: number): number {
   const s = shoreInfo(x, z), e = s.e;
-  if (e > 1.08) return -2;
+  if (e > 1.08) return inFill(x, z) ? 1.6 : -2;
   let h = -1.2 + 2.85 * ssX(1.07, 0.9, e);
-  if (e < 0.92) h += 0.25 * (Math.sin(x * 0.021) * Math.cos(z * 0.017) + Math.sin(x * 0.0063 + z * 0.0081)) * ssX(0.92, 0.72, e);
+  // the real keys are flat (1-2 m): a gentler roll than the mainland's, which keeps legacy's
+  if (e < 0.92) h += (s.isl?.coast ? 0.15 : 0.25) * (Math.sin(x * 0.021) * Math.cos(z * 0.017) + Math.sin(x * 0.0063 + z * 0.0081)) * ssX(0.92, 0.72, e);
   const l = islandLocal(s.isl as Island, x, z);
   if (onCourse(s.isl as Island, l[0], l[1])) h = Math.min(h, 1.85);
   const cd = creekDist(x, z);
   if (cd < 10) h = Math.min(h, lerp(-1.6, h, ssX(-2, 10, cd)));
+  if (inFill(x, z)) h = Math.max(h, 1.6);
   return h;
 }
 

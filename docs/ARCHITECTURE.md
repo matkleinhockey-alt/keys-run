@@ -30,6 +30,12 @@ Quality bar: shippable on Steam.
 
 Preserve these. Roughly 45% of the legacy file lifts with only type annotations added.
 
+One deliberate departure: island **shorelines** are real OpenStreetMap outlines now, not
+legacy's ellipses (`packages/shared/src/world/coast-data.ts`, baked by
+`scripts/coast/bake.py`; data © OpenStreetMap contributors, ODbL). Each outline is fitted onto
+its island's legacy footprint, so the layout does not move; `depthAt`/`landH` stay pure and
+match legacy bit for bit away from the shores (see `test/depth.test.ts`).
+
 ## Repository layout
 
 ```

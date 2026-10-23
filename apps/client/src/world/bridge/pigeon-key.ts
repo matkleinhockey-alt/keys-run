@@ -14,12 +14,29 @@
  * merged into `createBridge()`'s returned group.
  */
 import * as THREE from 'three';
-import { chainZ } from '@keysrun/shared/world/chain';
+import { getIsland } from '@keysrun/shared/world/chain';
 import { landH } from '@keysrun/shared/world/depth';
 import { grainTex, normalTex } from '../../core/textures.js';
 
-const KEY_X = -2650;
-const KEY_BASE_Z = chainZ(KEY_X) - 62; // matches the island's own ISL_DEF offset in chain.ts
+const KEY = getIsland('Pigeon Key')!;
+const KEY_X = KEY.x;
+const KEY_BASE_Z = KEY.z; // the island's own footprint centre (ISL_DEF in chain.ts)
+
+// The real (OpenStreetMap) outline is a wedge, not the old ellipse, and the cluster below was laid
+// out for the ellipse: anything that would stand in the water is walked toward this spot on the
+// key's broad north side (clear of the old bridge, which crosses the key ~4 m south of KEY_BASE_Z)
+// until its footprint is dry.
+const ANCHOR_X = KEY_X + 18, ANCHOR_Z = KEY_BASE_Z - 22;
+const dry = (x: number, z: number, r: number): boolean =>
+  [[0, 0], [r, r], [r, -r], [-r, r], [-r, -r]].every(([dx, dz]) => landH(x + dx, z + dz) > 1.1);
+function settle(x: number, z: number, r: number): [number, number] {
+  for (let k = 0; k < 40 && !dry(x, z, r); k++) {
+    const dx = ANCHOR_X - x, dz = ANCHOR_Z - z, l = Math.hypot(dx, dz);
+    if (l < 1.5) break;
+    x += (dx / l) * 1.5; z += (dz / l) * 1.5;
+  }
+  return [x, z];
+}
 
 // Hand-placed (not random-scattered — this is one specific named landmark, not a generic
 // island): a loose row along the key's south-central ground, clear of the old bridge (world dz
@@ -62,6 +79,11 @@ export function createPigeonKey(): THREE.Group {
       pos.setY(i, Math.max(landH(x, z), 1.15) + 0.04);
     }
     g.translate(cx, 0, cz);
+    // only over the key itself (the rectangle overhangs the real outline's water); translated, so world xz
+    const ix = g.index!.array, keep: number[] = [];
+    const wet = (v: number) => landH(pos.getX(v), pos.getZ(v)) < 1.0;
+    for (let i = 0; i < ix.length; i += 3) if (!wet(ix[i]) && !wet(ix[i + 1]) && !wet(ix[i + 2])) keep.push(ix[i], ix[i + 1], ix[i + 2]);
+    g.setIndex(keep);
     g.computeVertexNormals();
     const lawn = new THREE.Mesh(g, new THREE.MeshStandardMaterial({
       color: 0x4f9a3f, roughness: 0.95, map: grainTex([20, 12], 0.85, 1.05),
@@ -80,7 +102,7 @@ export function createPigeonKey(): THREE.Group {
   const walls = new THREE.InstancedMesh(wallGeo, wallMat, BUILDINGS.length);
   const roofs = new THREE.InstancedMesh(roofGeo, roofMat, BUILDINGS.length);
   BUILDINGS.forEach((b, i) => {
-    const x = KEY_X + b.dx, z = KEY_BASE_Z + b.dz, y = Math.max(landH(x, z), 1.2);
+    const [x, z] = settle(KEY_X + b.dx, KEY_BASE_Z + b.dz, Math.max(b.w, b.d) / 2), y = Math.max(landH(x, z), 1.2);
     dummy.position.set(x, y + b.h / 2, z); dummy.rotation.set(0, b.rot, 0); dummy.scale.set(b.w, b.h, b.d); dummy.updateMatrix();
     walls.setMatrixAt(i, dummy.matrix);
     dummy.position.set(x, y + b.h + 0.6, z); dummy.rotation.set(0, b.rot, 0); dummy.scale.set(b.w * 0.95, 1.2, b.d * 1.25); dummy.updateMatrix();
@@ -102,7 +124,7 @@ export function createPigeonKey(): THREE.Group {
   let fi = 0;
   const up = new THREE.Vector3();
   PALMS.forEach((p, i) => {
-    const x = KEY_X + p.dx, z = KEY_BASE_Z + p.dz, y = Math.max(landH(x, z), 1.1);
+    const [x, z] = settle(KEY_X + p.dx, KEY_BASE_Z + p.dz, 1), y = Math.max(landH(x, z), 1.1);
     dummy.position.set(x, y, z); dummy.rotation.set(p.tilt, 0, p.tilt * 0.6); dummy.scale.set(1, p.h, 1); dummy.updateMatrix();
     trunks.setMatrixAt(i, dummy.matrix);
     up.set(0, 6.4 * p.h, 0).applyEuler(new THREE.Euler(p.tilt, 0, p.tilt * 0.6));

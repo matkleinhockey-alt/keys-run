@@ -12,9 +12,10 @@
 
 export const WORLD_SEED = 20240817;
 
-/** legacy `SPAWN` (index.html:367): open water in Boot Key Harbor, clear of the marinas. */
+/** Open water in Boot Key Harbor, clear of the marinas, bow west down the harbor's open mouth.
+ * Legacy's `SPAWN` (index.html:367) had dz 305, which the real Boot Key outline now crowds. */
 export const SPAWN_X = -1150;
-export const SPAWN_DZ = 305;
+export const SPAWN_DZ = 150;
 export const SPAWN_H = Math.PI / 2;
 
 /** One salt per independent scatter attribute. Grouped by system; values just need to be distinct. */

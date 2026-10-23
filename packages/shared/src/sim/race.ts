@@ -40,7 +40,7 @@ export const MARATHON_COURSE: readonly CourseBuoy[] = [
   // x=-1050) — checked against the real shoreInfo, not eyeballed. Pushed out into open Hawk
   // Channel water south of it.
   { x: -1350, dz: 900, name: 'Start / Finish' },
-  { x: -600, dz: 800, name: 'Hawk 1' },
+  { x: -600, dz: 900, name: 'Hawk 1' }, // Boot Key's real south shore reaches dz ~820 here
   { x: 250, dz: 900, name: 'Hawk 2' },
   { x: 1100, dz: 1080, name: 'East Turn' },
   { x: 1450, dz: 1330, name: 'Reef East' },

@@ -4,12 +4,19 @@
  * Ported faithfully from legacy/index.html lines 326-357 (plus the Miami island block it
  * depends on, lines 342-350, and the lookup helpers at 353-354). Every magic number, every
  * evaluation order, is preserved exactly — see docs/ARCHITECTURE.md and the Phase 0a task
- * notes. Do not "improve" the maths here.
+ * notes. Do not "improve" the maths here (the shorelines are the one deliberate departure; see below).
  *
  * x runs along the island chain (west = -x toward the Seven Mile Bridge, east = +x toward
  * Grassy Key). North (-z) is Florida Bay / the Gulf side; south (+z) is Hawk Channel,
  * Sombrero Reef and the Gulf Stream.
+ *
+ * Shorelines are no longer the legacy ellipses: every island but the mainland has its real
+ * OpenStreetMap outline (coast-data.ts, fitted onto the island's old footprint by
+ * scripts/coast/bake.py). The footprint itself (x, z, a, b, th, seed=11) is still legacy's and still
+ * places everything that is laid out in island-local coordinates.
  */
+import { buildCoast, coastDist, type Coast } from './coast.js';
+import { COAST_RINGS } from './coast-data.js';
 
 export const chainZ = (x: number): number => 0.000012 * x * x;
 
@@ -39,14 +46,16 @@ export interface Island {
   mainland?: boolean;
   miami?: boolean;
   noHouses?: boolean;
+  /** The real outline; absent for the procedural mainland, which keeps its ellipse. */
+  coast?: Coast;
 }
 
 export interface ShoreInfo {
-  /** Signed "distance" outside the nearest island's shoreline ellipse (legacy's `d`). */
+  /** Signed distance outside the nearest island's shore, metres (negative on land). */
   d: number;
   /** The nearest island, or null if (in principle) none exists. */
   isl: Island | null;
-  /** Normalized ellipse radius to the nearest island (legacy's `e`): <1 inside, >1 outside. */
+  /** The same distance on legacy's normalized scale (see `islandE`): <1 inside, >1 outside. */
   e: number;
 }
 
@@ -84,6 +93,7 @@ function buildIslands(): Island[] {
   MIAMI_ISL.forEach(([name, x, z, a, b]) => islands.push({
     name, x, z, a, b, th: 0, c: 1, s: 0, small: a < 150 && b < 150, miami: true, noHouses: MIAMI_NO_HOUSES.includes(name),
   }));
+  islands.forEach((I, i) => { const r = COAST_RINGS[i]; if (r) I.coast = buildCoast(r); });
   return islands;
 }
 
@@ -112,14 +122,44 @@ export function islandWorld(I: Island, lx: number, lz: number): [number, number]
   return [I.x + lx * I.c - lz * I.s, I.z + lx * I.s + lz * I.c];
 }
 
-/** Nearest-island shoreline query: distance outside the shore, the island itself, and the ellipse radius. */
+/**
+ * Legacy measured the shore on each ellipse's own scale: e = 1 on the shore, d = (e - 1) * (a + b) / 2.
+ * landH's beach and everything else keyed to `e` keep that meaning, with one change for the real
+ * outlines: the scale is capped at SHORE_SCALE metres, so a big island's beach is ~20 m wide instead
+ * of a tenth of the island (which on Vaca's ~100 m-wide stretches would have left no dry land).
+ */
+export const SHORE_SCALE = 120;
+
+function shoreScale(I: Island): number {
+  return I.coast ? Math.min((I.a + I.b) * 0.5, SHORE_SCALE) : (I.a + I.b) * 0.5;
+}
+
+/** Signed distance outside island I's shore, metres. */
+export function islandDist(I: Island, x: number, z: number): number {
+  if (I.coast) return coastDist(I.coast, x, z);
+  const l = islandLocal(I, x, z);
+  return (Math.hypot(l[0] / I.a, l[1] / I.b) - 1) * (I.a + I.b) * 0.5;
+}
+
+/** Island I's normalized shore radius at (x, z): <1 on land, 1 on the shore, >1 at sea. */
+export function islandE(I: Island, x: number, z: number): number {
+  if (!I.coast) { const l = islandLocal(I, x, z); return Math.hypot(l[0] / I.a, l[1] / I.b); }
+  return 1 + coastDist(I.coast, x, z) / shoreScale(I);
+}
+
+/** World-space box around island I's land. */
+export function islandBox(I: Island): { x0: number; z0: number; x1: number; z1: number } {
+  if (I.coast) return { x0: I.coast.x0, z0: I.coast.z0, x1: I.coast.x1, z1: I.coast.z1 };
+  const hx = Math.hypot(I.a * I.c, I.b * I.s), hz = Math.hypot(I.a * I.s, I.b * I.c);
+  return { x0: I.x - hx, z0: I.z - hz, x1: I.x + hx, z1: I.z + hz };
+}
+
+/** Nearest-island shoreline query: distance outside the shore, the island itself, and `e`. */
 export function shoreInfo(x: number, z: number): ShoreInfo {
-  let best = 1e9, bi: Island | null = null, be = 9;
+  let best = 1e9, bi: Island | null = null;
   for (const I of islands) {
-    const l = islandLocal(I, x, z);
-    const e = Math.hypot(l[0] / I.a, l[1] / I.b);
-    const d = (e - 1) * (I.a + I.b) * 0.5;
-    if (d < best) { best = d; bi = I; be = e; }
+    const d = islandDist(I, x, z);
+    if (d < best) { best = d; bi = I; }
   }
-  return { d: best, isl: bi, e: be };
+  return { d: best, isl: bi, e: bi ? islandE(bi, x, z) : 9 };
 }

@@ -15,6 +15,13 @@
       "when": 1792638066365,
       "tag": "0001_tag_and_release",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792781495653,
+      "tag": "0002_estates",
+      "breakpoints": true
     }
   ]
 }

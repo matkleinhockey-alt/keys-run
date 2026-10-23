@@ -173,6 +173,14 @@
     "./sim/troll": {
       "types": "./dist/sim/troll.d.ts",
       "default": "./dist/sim/troll.js"
+    },
+    "./content/estates": {
+      "types": "./dist/content/estates.d.ts",
+      "default": "./dist/content/estates.js"
+    },
+    "./content/estates-plat": {
+      "types": "./dist/content/estates-plat.d.ts",
+      "default": "./dist/content/estates-plat.js"
     }
   },
   "scripts": {

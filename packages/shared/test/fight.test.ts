@@ -99,16 +99,16 @@ describe('stepFight', () => {
   it("is losable: a fish that reaches land is cut off in the mangroves", () => {
     const rng = mulberry32(9);
     const params = fightParamsFor('snook', 10, 3);
-    // (-120,0) is the middle of Marathon (Vaca Key) — landH ≈ 1.33, well past the .2 cutoff.
+    // (-120,120) is on Marathon (Vaca Key)'s real outline — landH ≈ 1.7, well past the .2 cutoff.
     // See packages/shared/src/world/depth.ts's landH/shoreInfo.
     const state: FightState = {
-      x: -120, z: 0, tension: 0.3, stam: 1,
+      x: -120, z: 120, tension: 0.3, stam: 1,
       running: false, runT: 999, runAng: 0, pull: params.str,
       slackT: 0, overT: 0, shake: 0, shakeT: 999,
       jumpQ: 0, airborne: false, airT: 0,
       deep: 0, deepT: 0, dist: 50, lineSpeed: 0, spoolR: 0.045, t: 0, abrasion: 0, hookHold: 1, limit: 1, slipping: false, outcome: 'fighting', events: [],
     };
-    const next = stepFight(state, { reeling: false }, params, { boatX: -170, boatZ: 0 }, rng, DT);
+    const next = stepFight(state, { reeling: false }, params, { boatX: -170, boatZ: 120 }, rng, DT);
     expect(next.outcome).toBe('mangrove');
   });
 

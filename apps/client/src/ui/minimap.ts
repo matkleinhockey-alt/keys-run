@@ -111,7 +111,7 @@ export function createMinimap(): Minimap {
     for (let lo = lo0; lo <= lo1; lo += step) { const x = MX(lonX(lo)); c.beginPath(); c.moveTo(x, 0); c.lineTo(x, MS); c.stroke(); c.textAlign = 'center'; c.fillText(fm(lo) + 'W', x, MS - 3); }
     c.strokeStyle = 'rgba(30,40,55,.8)'; c.lineWidth = 2; c.strokeRect(1, 1, MS - 2, MS - 2);
     const land_: Array<[string, number, number]> = [['MARATHON', VACA.x, VACA.z - VACA.b - 60], ['Grassy Key', 3640, chainZ(3640) - 260], ['Key Colony Beach', 2050, chainZ(2050) + 500]];
-    const sea_: Array<[string, number, number]> = [['Boot Key Harbor', -1050, chainZ(-1050) + 300], ['Seven Mile Bridge', -3000, chainZ(-3000) - 110], ['Sombrero Reef', 250, chainZ(250) + 1340], ['HAWK CHANNEL', -2400, chainZ(-2400) + 900], ['FLORIDA BAY', -2600, -1300], ['STRAITS OF FLORIDA', 0, chainZ(0) + 3300]];
+    const sea_: Array<[string, number, number]> = [['Boot Key Harbor', -1250, chainZ(-1250) + 150], ['Seven Mile Bridge', -3000, chainZ(-3000) - 110], ['Sombrero Reef', 250, chainZ(250) + 1340], ['HAWK CHANNEL', -2400, chainZ(-2400) + 900], ['FLORIDA BAY', -2600, -1300], ['STRAITS OF FLORIDA', 0, chainZ(0) + 3300]];
     c.textAlign = 'center'; c.fillStyle = 'rgba(30,30,25,.9)'; c.font = '600 10px Georgia, serif';
     land_.forEach(([n, x, z]) => c.fillText(n, MX(x), MZ(z)));
     c.fillStyle = 'rgba(25,70,120,.9)'; c.font = 'italic 11px Georgia, serif';

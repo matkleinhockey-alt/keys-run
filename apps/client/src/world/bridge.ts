@@ -38,7 +38,7 @@
  */
 import * as THREE from 'three';
 import { chainZ, shoreInfo } from '@keysrun/shared/world/chain';
-import { landH, OLDBR, WB } from '@keysrun/shared/world/depth';
+import { landH, OLDBR, WB, onUS1Fill } from '@keysrun/shared/world/depth';
 import type { Piling } from '@keysrun/shared/sim/boat';
 import { grainTex, normalTex } from '../core/textures.js';
 import { barrierGeometry, archGeometry } from './bridge/profiles.js';
@@ -105,7 +105,8 @@ export function createBridge(): BridgeResult {
       const za = chainZ(xa) + dzOff, zb = chainZ(xb) + dzOff, mx = (xa + xb) / 2, mz = (za + zb) / 2;
       const ang = Math.atan2(zb - za, xb - xa), len = Math.hypot(xb - xa, zb - za);
       const sd = shoreInfo(mx, mz).d, lh = landH(mx, mz);
-      if (lh > 0.9 && sd < -4) { if (!old) roads.push({ mx, mz, ang, len, y: lh }); continue; }
+      // on a key (or its US-1 causeway fill, depth.ts) the highway is a road, not a bridge
+      if (lh > 0.9 && (sd < -4 || (!old && onUS1Fill(mx, mz)))) { if (!old) roads.push({ mx, mz, ang, len, y: lh }); continue; }
       if (old && sd < 1) continue;
       const baseH = old ? deckH : sd < 0 ? 5.6 : 2.6 + (deckH - 2.6) * ss0(0, 70, sd);
       const h = old ? baseH : baseH + humpBump(mx);

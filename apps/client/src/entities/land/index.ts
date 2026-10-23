@@ -40,7 +40,7 @@ import { makeHuman, type Human } from '../life/human.js';
 import { createOutfitSync, wardrobe } from '../life/outfit.js';
 import { createTown, type Town } from '../town/town.js';
 import { animateGait } from '../town/people.js';
-import { createLandController, type LandController, type LandMode } from './controller.js';
+import { createLandController, type LandController, type LandMode, type WalkableEstate } from './controller.js';
 import { updateLandCamera, cycleLandView } from './camera.js';
 import type { ShopPort } from '../../ui/gear.js';
 import { createLandHud, type LandHudHandles } from './hud.js';
@@ -85,6 +85,8 @@ export interface LandDeps {
   /** The biggest fish landed this run, hung on the dock with a crowd round it when you step ashore
    * (dock-celebration.ts). Omitted or null = nothing to show. */
   getRunBest?(): RunBest | null;
+  /** Your own Keys Run Estates lots: walkable, and their docks are somewhere to tie up. */
+  estates?(): readonly WalkableEstate[];
 }
 
 export interface LandSystem {
@@ -117,7 +119,7 @@ interface Snapshot {
 
 export function createLandSystem(deps: LandDeps): LandSystem {
   const { scene, camera } = deps;
-  const ctl: LandController = createLandController({ canvas: deps.canvas });
+  const ctl: LandController = createLandController({ canvas: deps.canvas, estates: deps.estates });
   const hud: LandHudHandles = createLandHud(deps.isTouch, deps.shop);
   const town: Town = createTown({ scene, lightMats: deps.lightMats, getTodK: deps.getTodK, onBuilt: deps.onBuilt });
 
@@ -198,6 +200,7 @@ export function createLandSystem(deps: LandDeps): LandSystem {
     const e = ctl.tryEnter(boat, deps.getHullLen());
     if (!e.ok) { deps.toast(e.reason); return; }
     const m = ctl.mooring!;
+    if (m.estate) { deps.toast(`Tied up at your own dock, ${m.marina}. WASD to walk your land, B to go back to the boat.`); return; }
     deps.toast(m.marina.startsWith('Boot Key Harbor City')
       ? 'Tied up at Boot Key Harbor City Marina. WASD to walk, drag to look, F to use things, B to go back to the boat.'
       : `Tied up at ${m.marina}. Nothing much here but the dock — Boot Key Harbor City Marina has the town. B to go back to the boat.`);
@@ -235,7 +238,8 @@ export function createLandSystem(deps: LandDeps): LandSystem {
       setBoatUI(true);
       ensureBody().group.visible = ctl.cam.mode === 'third';
       ensureRope().visible = true;
-      if (ctl.mooring) celebration.onAshore(deps.getRunBest?.() ?? null, ctl.mooring);
+      // The run's trophy goes up on the town dock; at your own estate the fish already hangs there.
+      if (ctl.mooring && !ctl.mooring.estate) celebration.onAshore(deps.getRunBest?.() ?? null, ctl.mooring);
     } else {
       // Put back exactly what we took. near/far/fov first, with a projection update, so a frame
       // never renders the boat with the walking camera's planes.
@@ -259,6 +263,7 @@ export function createLandSystem(deps: LandDeps): LandSystem {
 
   // ---------------------------------------------------------------- place names
   function placeFor(x: number, z: number): { place: string; sub: string } {
+    if (ctl.mooring?.estate && groundAt(x, z) === null) return { place: ctl.mooring.marina, sub: 'Your estate' };
     const inside = town.insideLot(x, z);
     if (inside) return { place: VENUES[LOTS.find((l) => l.id === inside)?.venue ?? 'bar'].name, sub: 'Boot Key Harbor City' };
     const g = groundAt(x, z);

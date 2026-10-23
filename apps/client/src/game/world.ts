@@ -86,6 +86,11 @@ import { createSplashScene, SPLASH_X, SPLASH_DZ, SPLASH_H, SPLASH_SEA_IDX } from
 
 import { createAudioSystem, type SurfaceTransitionSource, type ReelAudioState, type SpeakerSink } from '../audio/index.js';
 import { createLifeSystems } from '../entities/life/index.js';
+import { createEstateRegistry } from './estates/registry.js';
+import { createEstatesView } from '../entities/estates/index.js';
+import { mountEstatesPanel } from '../ui/estates/panel.js';
+import { parcelById, siteLayout } from '@keysrun/shared/content/estates';
+import type { WalkableEstate } from '../entities/land/controller.js';
 import { installWorldLife, BUDDY as legacyBuddyStub } from '../stubs.js';
 
 const DT = 1 / 30;
@@ -518,6 +523,7 @@ export function initWorld(wrap: HTMLElement): World {
   // `fishing` owns cast/wait/bite/fight and the first-person rod view; `catchFlow` is the one
   // shared landing path both it and entities/speargun (once the diver lands) feed into for the
   // catch card / cooler / weigh-in.
+  const estates = createEstateRegistry();
   const catchFlow = createCatchFlow({
     // Ice: a bag is spent when the first fish of a load is kept, and lifts the cooler cap.
     gear: econ.gear,
@@ -528,7 +534,9 @@ export function initWorld(wrap: HTMLElement): World {
     scene,
     getModel: () => model,
     getBoatSpec: () => ({ id: boatSpec.id, brand: boatSpec.brand, name: boatSpec.name }),
-    economy: econ,
+    // Every landed fish also goes to the estates registry: offline, your best fish decides whether
+    // your house is throwing the #1 party (signed in, the server's leaderboard does).
+    economy: { payForCatch: (key, weight) => { estates.noteCatch(key, weight); return econ.payForCatch(key, weight); } },
   });
   // Food/drink buffs. `inventory` is a stand-in holder until the shop agent's persisted inventory
   // lands: swap these two accessors for theirs and nothing else changes. Buff state is only ever
@@ -592,6 +600,31 @@ export function initWorld(wrap: HTMLElement): World {
   // and this file touches it only where marked `land.` below. See entities/land/index.ts's header.
   const casino = createCasinoSystem({ economy: econ, toast, audio: audio.engine }); // the Gaff & Gill's slots (game/casino)
   createGearScreen(econ.shop); // Tab / the Gear button: owned, carried, running, and what it adds up to
+  // Keys Run Estates (game/estates, ui/estates, rules in @keysrun/shared/content/estates): buy shore
+  // lots from the wallet, build on them, walk your own and tie up at its dock. The walkable list is
+  // re-derived only when the registry changes, so the land controller sees a stable array.
+  const estatesPanel = mountEstatesPanel(wrap, {
+    registry: estates,
+    wallet: { cash: econ.market.cash, debit: econ.debit, credit: econ.credit, subscribe: econ.market.subscribe },
+    playerPos: () => ({ x: stateBox.state.x, z: stateBox.state.z }),
+  });
+  let myEstates: readonly WalkableEstate[] = [];
+  const syncMyEstates = (): void => {
+    myEstates = estates.mine().flatMap((e) => { const p = parcelById(e.parcelId); return p ? [{ parcel: p, layout: siteLayout(p, e.build) }] : []; });
+  };
+  estates.subscribe(syncMyEstates);
+  syncMyEstates();
+  // What stands on every owned lot, and the #1 angler's party (entities/estates).
+  const estatesView = createEstatesView({
+    scene, registry: estates, onBuilt: (g) => shadows.applyToSubtree(g), clearScenery: islands.clearScenery,
+    boatFx: { particles, todK: tod.getK, bpm: audio.music.bpm },
+  });
+  void estates.refresh();
+  (window as unknown as { __estatesDebug?: unknown }).__estatesDebug = { // DEV/VERIFICATION ONLY
+    registry: estates, panel: estatesPanel, mine: () => myEstates,
+    /** Give the wallet `n` dollars and buy `id`: what the land office does, minus the clicking. */
+    async buy(id: string, n = 0): Promise<string> { if (n) econ.credit(n); return (await estates.buy(id, { cash: econ.market.cash, debit: econ.debit, credit: econ.credit })).message; },
+  };
   const land = createLandSystem({
     scene, camera, canvas: renderer.domElement, sky: sceneCtx.sky, sunDisc: sceneCtx.sunDisc, sunDir,
     camState, fpState, lightMats: tod.lightMats, getTodK: tod.getK, onBuilt: (g) => shadows.applyToSubtree(g),
@@ -605,6 +638,7 @@ export function initWorld(wrap: HTMLElement): World {
     toast, shop: econ.shop, gameRunning: () => game.running, casino,
     // F underwater opens treasure, not the dock (entities/land/index.ts's `diving` dep).
     diving: () => diver.mode === 'diver',
+    estates: () => myEstates,
   });
 
   // 13c-3. trolling (game/fishing/trolling.ts, rules in @keysrun/shared/sim/troll): outriggers
@@ -944,6 +978,7 @@ export function initWorld(wrap: HTMLElement): World {
     sw += (st.sw - sw) * k; ch += (st.ch - ch) * k;
 
     simTime += dt;
+    estates.update(dt);
     econ.tick(dt); // inventory clock + buff expiry, in simulated seconds (see game/economy/system.ts)
     // legacy `game.running && F.state!=='caught'` / `F.state==='fight'` / `lineOut()` — read
     // from *this* fixed step's starting fishing state, same one-frame-stale ordering as
@@ -1278,6 +1313,7 @@ export function initWorld(wrap: HTMLElement): World {
     // override above) is set, so terrain chunks stream around wherever the viewer actually ended
     // up — otherwise a debug-placed or just-submerged camera would sit over unbuilt seabed.
     land.update(clamped, simTime);
+    estatesView.update(clamped, simTime, camera.position);
     handgun.update(clamped, simTime);
     seafloor.update(camera.position);
     // Reef chunk residency follows the (now up-to-date) camera position — a no-op unless the

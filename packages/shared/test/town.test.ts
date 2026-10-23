@@ -8,7 +8,7 @@
  * instead of the player discovering a strip club on the seabed.
  */
 import { describe, expect, it } from 'vitest';
-import { MARINAS, landH, depthAt, creekDist } from '../src/world/depth.js';
+import { MARINAS, landH, depthAt, creekDist, TOWN_FILL } from '../src/world/depth.js';
 import { shoreInfo, VACA } from '../src/world/chain.js';
 import {
   TOWN_FRAME, TOWN_MARINA, PAD, PAD_Y, RAMP, DECK_TOP, LOTS, PALMS, LAMPS, BENCHES, CARS, SOLID_PROPS, INTERACTS,
@@ -64,6 +64,13 @@ describe('the frame', () => {
 });
 
 describe('the pad stands on Vaca Key, not in the sea', () => {
+  it('is all on the fill landH raises across the canals (depth.ts TOWN_FILL)', () => {
+    expect(TOWN_FILL.u0).toBeLessThanOrEqual(PAD.u0);
+    expect(TOWN_FILL.u1).toBeGreaterThanOrEqual(PAD.u1);
+    expect(TOWN_FILL.v0).toBeLessThanOrEqual(PAD.v0);
+    expect(TOWN_FILL.v1).toBeGreaterThanOrEqual(PAD.v1);
+  });
+
   const pts = samples(PAD.u0, PAD.u1, PAD.v0, PAD.v1, 24);
 
   it('is entirely on the island Marathon (Vaca Key)', () => {

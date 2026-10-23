@@ -31,6 +31,7 @@ import {
   uniqueIndex,
   real,
   serial,
+  boolean,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
@@ -222,4 +223,24 @@ export const tagEvents = pgTable('tag_events', {
   at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index('tag_events_tag_id_at_idx').on(t.tagId, t.at),
+]);
+
+/**
+ * Keys Run Estates: who owns which shore lot, and what they built on it. The parcels themselves
+ * (polygons, tiers, prices) are fixed data in packages/shared/src/content/estates-plat.ts, keyed by
+ * `parcel_id`; a lot with no row here is for sale (or a founding lot nobody has built on yet).
+ * The primary key is the whole "one owner per lot" rule: two buyers racing for a lot is an insert
+ * conflict, not a check-then-write.
+ */
+export const estates = pgTable('estates', {
+  parcelId: text('parcel_id').primaryKey(),
+  ownerId: uuid('owner_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  /** What was paid (0 for a founding lot), from the price table at the time of sale. */
+  price: integer('price').notNull(),
+  founding: boolean('founding').notNull().default(false),
+  build: jsonb('build').notNull(),
+  boughtAt: timestamp('bought_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('estates_owner_id_idx').on(t.ownerId),
 ]);

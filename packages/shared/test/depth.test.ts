@@ -3,23 +3,33 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { depthAt, landH, zoneAt, offshoreF, creekDist, nearBridge, nearHump, type Zone } from '../src/world/depth.js';
+import { shoreInfo } from '../src/world/chain.js';
+import { COAST_CAP } from '../src/world/coast.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const golden: any = JSON.parse(fs.readFileSync(path.join(HERE, 'golden.json'), 'utf8'));
 const allSamples = [...golden.grid, ...golden.points];
+/** The islands' shores are real outlines now, not legacy's ellipses (world/coast-data.ts), so the
+ * bit-for-bit oracle holds only where no shore reaches: well clear of both the old and the new one.
+ * That is still most of the sea — the depth bands, humps, channels, creeks, bridge and the mainland. */
+const awayFromShore = allSamples.filter((p) => p.shoreD > COAST_CAP + 20 && shoreInfo(p.x, p.z).d >= COAST_CAP);
 
 describe('world/depth: golden fidelity against legacy/index.html', () => {
-  it('depthAt matches legacy exactly, bit for bit', () => {
-    for (const p of allSamples) expect(depthAt(p.x, p.z)).toBe(p.depthAt);
+  it('still covers most of the golden samples away from the shores', () => {
+    expect(awayFromShore.length).toBeGreaterThan(allSamples.length * 0.75);
   });
 
-  it('landH matches legacy exactly, bit for bit', () => {
-    for (const p of allSamples) expect(landH(p.x, p.z)).toBe(p.landH);
+  it('depthAt matches legacy exactly, bit for bit, away from the shores', () => {
+    for (const p of awayFromShore) expect(depthAt(p.x, p.z)).toBe(p.depthAt);
   });
 
-  it('zoneAt matches legacy exactly', () => {
-    for (const p of allSamples) expect(zoneAt(p.x, p.z)).toBe(p.zoneAt);
+  it('landH matches legacy exactly, bit for bit, away from the shores', () => {
+    for (const p of awayFromShore) expect(landH(p.x, p.z)).toBe(p.landH);
+  });
+
+  it('zoneAt matches legacy exactly away from the shores', () => {
+    for (const p of awayFromShore) expect(zoneAt(p.x, p.z)).toBe(p.zoneAt);
   });
 
   it('offshoreF matches legacy exactly, bit for bit', () => {
