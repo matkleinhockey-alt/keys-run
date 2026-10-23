@@ -741,8 +741,12 @@ describe('the Gaff & Gill Casino', () => {
   it('shares its wall thickness with town.ts (casino.ts cannot import it without a cycle, so this is the guard)', () => {
     const back = CASINO_BOXES.find((b) => b.id === 'casino-bank-back')!;
     expect(back.v1).toBeCloseTo(lot.v1 - WALL_T, 9);
-    expect(CASINO_BOXES.find((b) => b.id === 'casino-bank-w')!.u0).toBeCloseTo(lot.u0 + WALL_T, 9);
     expect(CASINO_BOXES.find((b) => b.id === 'casino-bank-e')!.u1).toBeCloseTo(lot.u1 - WALL_T, 9);
+    // The WEST probe is the aquarium, not the west cabinet bank. The bank used to be flush to
+    // that wall and is now set `TANK_D` into the room, because the whole west wall is the tank
+    // and the machines stand in front of the glass. The aquarium is what touches the wall there
+    // now, so it is what can catch WALL_T drifting out of sync.
+    expect(CASINO_BOXES.find((b) => b.id === 'casino-aquarium')!.u0).toBeCloseTo(lot.u0 + WALL_T, 9);
   });
 
   it('has thirty cabinets, each inside the bank box that collides for it, none overlapping another', () => {

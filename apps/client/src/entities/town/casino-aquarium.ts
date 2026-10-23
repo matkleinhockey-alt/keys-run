@@ -1,11 +1,14 @@
 /**
- * The Gaff & Gill's aquarium wall: a 6.4 m built-in tank down the west wall, with fourteen fish
- * swimming in it.
+ * The Gaff & Gill's aquarium wall: the ENTIRE west wall of the casino is a built-in tank, with
+ * the reef's own species swimming in it.
  *
- * ## Why this is not the game's fish
- * `entities/fish/**` is the open ocean's system: schooling, hunger, flee responses, hook state, a
- * spatial hash, LOD rigs. None of that is visible through 12 mm of glass from three metres away,
- * and all of it costs. So this is a self-contained decoration with no simulation state at all:
+ * ## The fish are the real ones; the simulation is not
+ * The geometry comes from `entities/fish/geometry.ts` — the same lofts, the same per-species
+ * colours, the same countershading the ocean draws — so a player who has spent an hour looking at
+ * hogfish and yellowtail through a mask recognises every one of them through the glass. What it
+ * does NOT take is the fish SYSTEM: schooling, hunger, flee responses, hook state, a spatial hash,
+ * LOD rigs. None of that is visible through 12 mm of glass from three metres away, and all of it
+ * costs. So this stays a self-contained decoration with no simulation state at all:
  * every fish's position is a closed-form function of the clock (a figure-of-eight in plan, a slow
  * sine in depth), which means nothing to integrate, nothing to advance while the player is at sea,
  * and a fish that is in exactly the right place the first frame the player walks in.
@@ -15,8 +18,8 @@
  * existing `solid` batch (1,332 triangles), the hood lamp into `neon` (12) and the light it throws
  * on the carpet into `glow` (44) — all of that is zero extra draw calls. What it does add is three
  * meshes:
- *   - one InstancedMesh for the fish bodies (14 instances, tinted per fish with `setColorAt`),
- *   - one InstancedMesh for their tails, hinged at the peduncle so they can actually wag,
+ *   - one InstancedMesh PER SPECIES (seven of them, eight fish each) — a different species is a
+ *     different geometry, and that is the price of them being the real fish,
  *   - one additive pane for the glass.
  * Measured standing in front of it with test/capture-casino-aquarium.mjs's `cost` mode, against the
  * same three meshes hidden: +4 draw calls and +13k triangles, on a frame of 317 and 620k. (Four and
@@ -32,6 +35,9 @@
  * custom material in this room is a fourth program compiled for a decoration.)
  */
 import * as THREE from 'three';
+import { VIS } from '@keysrun/shared/content/creatures';
+import { ZONE_LIFE } from '@keysrun/shared/content/creatures';
+import { buildCreatureGeo } from '../fish/geometry.js';
 import { GeoBatch } from './batch.js';
 import { Zf } from './props.js';
 
@@ -59,6 +65,8 @@ interface Fish {
   y: number; vamp: number; vw: number;
   w: number; ph: number; xph: number; vph: number;
   len: number; beat: number; color: number;
+  /** Which real species this one is — a key into VIS / ZONE_LIFE. */
+  species: string;
 }
 
 /** Tropical-tank colours: the loud ones, because this is a casino and the glass is tinted. */
@@ -75,45 +83,7 @@ function mulberry(seed: number): () => number {
   };
 }
 
-/**
- * The fish model, nose at +x. Built in a frame where UP is +z and the thin lateral axis is +y —
- * that is the only way to get a laterally flattened body out of `GeoBatch.ball`, whose `sy` squashes
- * y and nothing else. The geometry is rotated upright at the end. (Post-scaling a built geometry in z
- * was the first attempt; it flattens the eyes into the skull along with everything else.)
- *
- * Vertex colours are near-white on purpose: the InstancedMesh multiplies them by a per-fish
- * `instanceColor`, so eight colours of fish cost one geometry and one material.
- */
-function fishBody(): THREE.BufferGeometry {
-  const b = new GeoBatch();
-  const FLAT = 0.44;
-  // nose to peduncle, as a row of tapering balls — the same idiom as the lobby fountain's marlin
-  const prof: ReadonlyArray<readonly [number, number]> = [[0.44, 0.05], [0.34, 0.1], [0.21, 0.13], [0.06, 0.135], [-0.1, 0.11], [-0.24, 0.07], [-0.33, 0.035]];
-  for (const [x, r] of prof) b.ball(x, 0, 0, r, 0xffffff, FLAT, 8);
-  for (const [x, r] of prof) if (r > 0.06) b.ball(x, 0, -r * 0.42, r * 0.66, 0xf0f6ff, FLAT, 6); // pale belly
-  b.box(0.0, 0, 0.17, 0.3, 0.014, 0.13, 0xe6eef4, { ry: 0.12 });     // dorsal
-  b.box(-0.12, 0, -0.13, 0.16, 0.012, 0.08, 0xe6eef4, { ry: -0.3 }); // anal fin
-  for (const sy of [-1, 1]) b.box(0.17, sy * 0.055, -0.03, 0.14, 0.01, 0.1, 0xdfe8ef, { ry: sy * 0.35, rz: sy * 0.2 }); // pectorals
-  for (const sy of [-1, 1]) {
-    b.ball(0.35, sy * 0.045, 0.045, 0.04, 0xffffff, 1, 6);
-    b.ball(0.362, sy * 0.058, 0.048, 0.021, 0x0e1620, 1, 5);
-  }
-  const g = b.build();
-  g.rotateX(-Math.PI / 2); // build-frame +z (up) -> +y, +y (lateral) -> -z
-  topLight(g);
-  return g;
-}
 
-/** The caudal fin, hinged at the origin and trailing off toward -x so a yaw about the origin wags it. */
-function fishTail(): THREE.BufferGeometry {
-  const b = new GeoBatch();
-  b.box(-0.05, 0, 0, 0.12, 0.05, 0.07, 0xffffff);                              // peduncle
-  for (const s of [1, -1]) b.box(-0.18, 0, s * 0.07, 0.2, 0.012, 0.15, 0xdbe6ee, { ry: s * 0.45 });
-  const g = b.build();
-  g.rotateX(-Math.PI / 2);
-  topLight(g);
-  return g;
-}
 
 /**
  * Bake a top-down shade into the vertex colours. The tank's material is unlit (`MeshBasicMaterial`),
@@ -184,7 +154,34 @@ export function buildAquarium(group: THREE.Object3D, tank: TankBox, y0: number, 
   for (let k = 0; k < 5; k++) glow.halo(x1 - 0.5, LIP - 0.12, z0 + len * (0.1 + k * 0.2), 0.6, 0x9ad8ff);
 
   // ---- the fish
-  const FISH = 14;
+  //
+  // THE SAME SPECIES THAT ARE IN THE OCEAN, built with the ocean's own geometry
+  // (`entities/fish/geometry.ts`), not invented shapes. A casino on the reef stocks its tank from
+  // the reef, and a player who has spent an hour looking at yellowtail and hogfish through a mask
+  // should recognise every one of them through the glass.
+  //
+  // `buildCreatureGeo` is pure geometry — a vertex-coloured loft with the species' own back/belly
+  // colours — so taking it costs nothing of the fish SYSTEM (no schooling, no hunger, no flee, no
+  // spatial hash, no LOD rigs, none of which is visible through 12 mm of glass). The swim BEND is
+  // the one thing left behind: the ocean's fish deform through a baked vertex-animation texture
+  // and a custom material, and compiling another program in this room for a decoration is the
+  // trade this file's header already refused. These yaw and roll on their own axis instead, which
+  // at tank distance reads as swimming.
+  //
+  // The list is the Reef table's own, filtered to things that belong in a tank: no sharks, no
+  // tarpon, nothing three metres long.
+  const TANK_SPECIES = (ZONE_LIFE.Reef ?? [])
+    .map(([k]) => k)
+    .filter((k) => {
+      const V = VIS[k];
+      return V && V.kind === 'fish' && V.len <= 0.85;
+    })
+    .slice(0, 7);
+  // Eight of each, not five. The tank is now twenty-three metres of glass rather than six, and
+  // five fish per species read as a half-empty display. Stocking density costs instances, not
+  // draw calls — the mesh count is one per SPECIES however many swim in it.
+  const FISH_PER_SPECIES = 8;
+  const FISH = TANK_SPECIES.length * FISH_PER_SPECIES;
   const xi0 = x0 + 0.26, xi1 = x1 - 0.22;      // the swimmable depth: 0.92 m between the rockwork and the glass
   const zi0 = z0 + 0.5, zi1 = z1 - 0.5;
   const yi0 = BED + 0.22, yi1 = LIP - 0.2;
@@ -206,22 +203,46 @@ export function buildAquarium(group: THREE.Object3D, tank: TankBox, y0: number, 
       len: 0.16 + rnd() * 0.26,
       beat: 5 + rnd() * 5,
       color: COLORS[i % COLORS.length],
+      species: TANK_SPECIES[i % TANK_SPECIES.length],
     });
   }
 
-  const bodyGeo = fishBody(), tailGeo = fishTail();
-  const mat = new THREE.MeshBasicMaterial({ vertexColors: true });
-  const bodies = new THREE.InstancedMesh(bodyGeo, mat, FISH);
-  const tails = new THREE.InstancedMesh(tailGeo, mat, FISH);
-  const c = new THREE.Color();
-  fish.forEach((f, i) => { c.setHex(f.color); bodies.setColorAt(i, c); tails.setColorAt(i, c); });
-  // One sphere over the whole tank: without it three.js culls by the unit fish model at the origin,
-  // which is 23 m away, so the tank would be empty until the camera happened to frame the town centre.
+  // One InstancedMesh PER SPECIES — a different species is a different geometry, and that is the
+  // price of them being the real fish. Seven draw calls rather than two, in a room that was
+  // already drawing three hundred, for the whole west wall.
+  //
+  // Unlit `MeshBasicMaterial` on purpose, shared by every species: the tank is a lit panel in a
+  // room with no lights (casino-interior.ts), and the species' own vertex colours already carry
+  // their countershading. `buildCreatureGeo` writes those into the geometry.
   const sphere = new THREE.Sphere(new THREE.Vector3((x0 + x1) / 2, (BED + LIP) / 2, zc), len / 2 + 1);
-  bodies.boundingSphere = sphere; tails.boundingSphere = sphere.clone();
-  for (const m of [bodies, tails]) { m.castShadow = false; m.receiveShadow = false; m.renderOrder = 1; }
-  // named so test/capture-casino-aquarium.mjs can toggle the three new draw calls and report the delta
-  bodies.name = 'aquarium-fish'; tails.name = 'aquarium-tails';
+  const mat = new THREE.MeshBasicMaterial({ vertexColors: true });
+  const speciesGeo: THREE.BufferGeometry[] = [];
+  const schools: Array<{ mesh: THREE.InstancedMesh; members: number[] }> = [];
+  TANK_SPECIES.forEach((key, si) => {
+    const V = VIS[key];
+    // 'coarse' is the ocean's own far-distance tier. A tank fish is a third of a metre across the
+    // room; the near tier's extra triangles would be invisible and there are thirty-five of them.
+    const geo = buildCreatureGeo(key, V, 'coarse');
+    // Normalised to unit length, because every species is a different real size and the tank's
+    // own per-fish `len` is what decides how big each one is in here.
+    geo.scale(1 / V.len, 1 / V.len, 1 / V.len);
+    // `buildCreatureGeo` already writes the species' own countershading into the vertex colours,
+    // but under an unlit material a fish is then a flat cut-out of it. This bakes the hood lamp
+    // in — the same top-down shade the tank's rockwork gets — for one pass at build time.
+    topLight(geo);
+    // The ocean's fish swim nose along -Z; this tank's paths were written for a nose along +X.
+    geo.rotateY(-Math.PI / 2);
+    speciesGeo.push(geo);
+    const members = fish.map((f, i) => (f.species === key ? i : -1)).filter((i) => i >= 0);
+    const mesh = new THREE.InstancedMesh(geo, mat, Math.max(1, members.length));
+    // One sphere over the whole tank: without it three.js culls by the unit fish model at the
+    // origin, 23 m away, so the tank would be empty until the camera framed the town centre.
+    mesh.boundingSphere = sphere.clone();
+    mesh.castShadow = false; mesh.receiveShadow = false; mesh.renderOrder = 1;
+    mesh.name = `aquarium-fish-${key}`;
+    schools.push({ mesh, members });
+    void si;
+  });
 
   // the glass: additive and barely there, so it reads as a sheen on the pane rather than a wall of
   // blue, and so it needs no depth sorting against the fish behind it
@@ -232,10 +253,10 @@ export function buildAquarium(group: THREE.Object3D, tank: TankBox, y0: number, 
   pane.renderOrder = 3;
   pane.name = 'aquarium-glass';
 
-  group.add(bodies, tails, pane);
+  for (const sc of schools) group.add(sc.mesh);
+  group.add(pane);
 
   const dummy = new THREE.Object3D();
-  const _m = new THREE.Matrix4();
 
   /** Where fish `f` is at time `t`, and which way it is pointing. Closed form, so `bank` below can
    * just ask again a moment later instead of keeping per-fish state. */
@@ -247,9 +268,15 @@ export function buildAquarium(group: THREE.Object3D, tank: TankBox, y0: number, 
   };
 
   const api: Aquarium = {
-    get tris() { return bodyGeo.index!.count / 3 * FISH + tailGeo.index!.count / 3 * FISH + 2; },
+    get tris() {
+      let n = 2;
+      for (const sc of schools) n += (sc.mesh.geometry.index?.count ?? 0) / 3 * Math.max(1, sc.members.length);
+      return n;
+    },
     update(t): void {
-      for (let i = 0; i < FISH; i++) {
+      for (const sc of schools) {
+        for (let si = 0; si < sc.members.length; si++) {
+        const i = sc.members[si];
         const f = fish[i];
         const yaw = sample(f, t, dummy.position);
         // bank and pitch from the path itself: re-sample a third of a second on and difference it.
@@ -261,23 +288,24 @@ export function buildAquarium(group: THREE.Object3D, tank: TankBox, y0: number, 
         while (d > Math.PI) d -= Math.PI * 2;
         while (d < -Math.PI) d += Math.PI * 2;
         dummy.rotation.set(Math.max(-0.7, Math.min(0.7, -d * 1.6)), yaw, Math.max(-0.5, Math.min(0.5, (_v3.y - y0s) * 2.2)), 'YXZ');
+        // The swim itself. The ocean's fish bend through a baked vertex-animation texture; these
+        // cannot (see the species note above), so the whole body yaws about its own centre on the
+        // tail-beat instead. It is not a bend, but at a third of a metre across a room it reads as
+        // one — and it keeps the tail doing the most of the moving, which is what the eye follows.
+        const sw = Math.sin(t * f.beat + f.ph) * (0.12 + 0.1 * Math.abs(Math.cos(f.w * t + f.ph)));
+        dummy.rotation.y += sw;
         dummy.scale.setScalar(f.len);
         dummy.updateMatrix();
-        bodies.setMatrixAt(i, dummy.matrix);
-        // The tail is a second instance hinged at the peduncle: body matrix, then a step back along
-        // the body's own -x to the hinge, then the wag. Amplitude rises with how fast this fish is
-        // going round the loop, so a fish cruising the long side beats harder than one turning.
-        const sw = Math.sin(t * f.beat + f.ph) * (0.3 + 0.35 * Math.abs(Math.cos(f.w * t + f.ph)));
-        _m.copy(dummy.matrix).multiply(_HINGE.makeTranslation(-0.33, 0, 0)).multiply(_WAG.makeRotationY(sw));
-        tails.setMatrixAt(i, _m);
+        sc.mesh.setMatrixAt(si, dummy.matrix);
+        }
+        sc.mesh.instanceMatrix.needsUpdate = true;
       }
-      bodies.instanceMatrix.needsUpdate = true;
-      tails.instanceMatrix.needsUpdate = true;
     },
     dispose(): void {
-      bodyGeo.dispose(); tailGeo.dispose(); paneGeo.dispose();
+      for (const g of speciesGeo) g.dispose();
+      paneGeo.dispose();
       mat.dispose(); paneMat.dispose();
-      bodies.dispose(); tails.dispose();
+      for (const sc of schools) sc.mesh.dispose();
     },
   };
   // Pose them once at build time. An InstancedMesh starts with identity matrices, and `update` only
@@ -289,5 +317,3 @@ export function buildAquarium(group: THREE.Object3D, tank: TankBox, y0: number, 
 }
 
 const _v3 = new THREE.Vector3();
-const _HINGE = new THREE.Matrix4();
-const _WAG = new THREE.Matrix4();

@@ -57,6 +57,8 @@ export interface Cabinet {
 
 const PITCH = 2.0;
 const DEPTH = 1.5;
+/** How far the aquarium wall stands into the room. Everything on the west wall is set off by it. */
+const TANK_D = 1.4;
 const STAND = 1.0;
 
 /** Machines the punters are playing, by cabinet id. */
@@ -80,9 +82,12 @@ function build(): Cabinet[] {
   }
   // Back bank, flush to the back wall, looking at the door.
   for (const cu of [-5, -3, -1, 1, 3, 5]) add(cu, 166 - WALL - DEPTH / 2, 0, -1);
-  // Side banks, flush to the side walls, looking into the room.
+  // Side banks, looking into the room. The EAST bank is flush to its wall; the WEST bank stands
+  // `TANK_D` off its own, because the whole west wall is now the aquarium and the machines are
+  // set in front of the glass. That is the picture the room wants — a row of slots backed by a
+  // lit reef — and it costs nothing but moving four cabinets a metre and a half.
   for (const cv of [156, 158, 160, 162]) {
-    add(-24 + WALL + DEPTH / 2, cv, 1, 0);
+    add(-24 + WALL + TANK_D + DEPTH / 2, cv, 1, 0);
     add(24 - WALL - DEPTH / 2, cv, -1, 0);
   }
   return out;
@@ -96,7 +101,7 @@ export const CASINO_BOXES: readonly InteriorBox[] = [
   box('casino-island-w', -16, -8, 152, 155),
   box('casino-island-e', 8, 16, 152, 155),
   box('casino-bank-back', -6, 6, 166 - WALL - DEPTH, 166 - WALL),
-  box('casino-bank-w', -24 + WALL, -24 + WALL + DEPTH, 155, 163),
+  box('casino-bank-w', -24 + WALL + TANK_D, -24 + WALL + TANK_D + DEPTH, 155, 163),
   box('casino-bank-e', 24 - WALL - DEPTH, 24 - WALL, 155, 163),
   // the change booth: a counter two metres thick against the east wall's front half, cashiers behind it
   box('casino-cage', 19, 21, 143, 151),
@@ -104,13 +109,17 @@ export const CASINO_BOXES: readonly InteriorBox[] = [
   box('casino-table', -21.5, -16.5, 144, 148),
   // the marlin fountain in the middle of the floor
   box('casino-fountain', -2.6, 2.6, 155.6, 160.4),
-  // The aquarium wall: a built-in tank on the WEST wall, in the only gap left there — the Go Fish
-  // table's collider stops at v 148 and the west cabinet bank starts at v 155, so the tank fills
-  // 148.6..155 and lands flush against the bank. Not the front of either side wall (the GO FISH
-  // sign is at v 146) and not the entrance hall, which must stay clear for 8 m inland of the door.
-  // 1.4 m deep, 0.1 m shallower than the bank it abuts, which keeps the aisle to the west island
-  // over 6 m wide and leaves every cabinet's stand spot more than a metre clear.
-  box('casino-aquarium', -24 + WALL, -24 + WALL + 1.4, 148.6, 155),
+  // THE AQUARIUM WALL — the whole west side of the room, end to end.
+  //
+  // It used to be a 6.4 m tank squeezed into the one gap between the Go Fish table and the west
+  // cabinet bank. Making it the entire wall meant deciding what happens to the things that were
+  // against that wall, and the answer is that they stand in FRONT of the glass: the cabinets moved
+  // `TANK_D` into the room (see `build` above), which is the better picture anyway.
+  //
+  // It stops 1 m short of the back wall and 1.5 m short of the front so the corners read as corners
+  // rather than the glass running into the brick. The entrance hall is untouched — that is a 2 m
+  // strip on the centreline, twenty-two metres away.
+  box('casino-aquarium', -24 + WALL, -24 + WALL + TANK_D, 141.5, 165),
   box('casino-pillar-w', -6.45, -5.55, 146, 147),
   box('casino-pillar-e', 5.55, 6.45, 146, 147),
 ];
