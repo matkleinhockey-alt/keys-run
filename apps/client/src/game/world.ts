@@ -43,6 +43,7 @@ import { createElectronics, type BoatReadout } from '../entities/boat/electronic
 import { applyBoatVisuals, sampleWaterHeight } from '../entities/boat/visuals.js';
 import { createBoatInput, bindBoatInput, type BoatStateBox } from '../entities/boat/input.js';
 import { createTrolling, type Trolling } from './fishing/trolling.js';
+import { createFishCam } from './fishing/fish-cam.js';
 import { createCamState, createFpState, updateCamera, cycleView, bindCameraPointerControls, snapChaseRig } from '../entities/camera.js';
 
 import { waterVelocity, type DiverEvent } from '@keysrun/shared/sim/diver';
@@ -550,7 +551,12 @@ export function initWorld(wrap: HTMLElement): World {
     fills: countOf(econ.shop.inventory(), 'dive.fill'),
   }));
   setDiverFillSpender(() => { econ.useConsumable('dive.fill'); });
+  // A two-second cut to the water the moment a fish is on — see game/fishing/fish-cam.ts for
+  // why it fires on the hookset rather than on the bite.
+  const fishCam = createFishCam();
+
   const fishing = createFishing({
+    onHookset: (x, z) => fishCam.trigger(x, z),
     getModifiers: () => buffs.mods,
     // Rod, reel, bait and leader. Without this the rod is permanently the stock outfit no matter
     // what the tackle store sold you.
@@ -1222,6 +1228,20 @@ export function initWorld(wrap: HTMLElement): World {
       // for entities/fish visual verification. Unset in every normal run, so this is a no-op outside
       // of test scripts. Applied after updateCamera so it wins for this frame instead of being
       // immediately overwritten.
+      // The fish cam, if one is running. Placed after `updateCamera` and before the debug
+      // override for the same reason that one is: it has to win for this frame rather than be
+      // recomputed away, and a verification script that pins the camera must still beat it.
+      // A broken-off fish is not worth filming, and a catch card is its own moment.
+      if (fishCam.active() && FishF.state !== 'fight') fishCam.cancel();
+      if (fishCam.active()) {
+        const col = fishWorld.waterColumnAt(FishF.fx, FishF.fz, simTime);
+        const shot = { fx: FishF.fx, fz: FishF.fz, surfaceY: col.surf, floorY: col.floor, bx: stateBox.state.x, bz: stateBox.state.z };
+        // REAL dt, not `clamped`: the physics clamp runs slower than the wall below 20 fps, and
+        // on this sandbox's ~3 fps a 2.3 s shot would last the better part of twenty seconds.
+        // Same trap the start screen's splash hit — see SplashScene.frame.
+        if (fishCam.update(dt, shot)) fishCam.apply(camera, shot);
+      }
+
       const camOverride = (window as unknown as {
         __fishDebugCamera?: { x: number; y: number; z: number; lookX: number; lookY: number; lookZ: number };
       }).__fishDebugCamera;
@@ -1375,6 +1395,9 @@ export function initWorld(wrap: HTMLElement): World {
     /** Verification-only: does THIS hull carry outriggers? Tower boats only. */
     hasRiggers: () => ({ boat: boatSpec.id, riggers: !!model.setOutriggers }),
     trollStrikeNow: () => trolling.debugStrikeNow(stateBox.state),
+    fishCam: () => fishCam.debug(),
+    /** Verification-only: a long fish-cam shot on the fish currently on, so it can be looked at. */
+    fishCamHold: (seconds: number) => { fishCam.cancel(); fishCam.trigger(FishF.fx, FishF.fz, seconds); },
     /** Verification-only: what is on the end of the line right now. */
     fightInfo: () => (FishF.fight
       ? { key: FishF.key, weight: +FishF.weight.toFixed(1), jumper: !!FishF.fightParams?.jump, canJump: !!(FishF.fightParams?.jump || FishF.fightParams?.kingfish), jumpQ: FishF.fight.jumpQ, airborne: FishF.fight.airborne }

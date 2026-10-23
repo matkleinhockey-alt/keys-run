@@ -20,6 +20,8 @@ export { F, lineOut, fishingActive } from './state.js';
 export type { LandedFish } from './update.js';
 
 export interface FishingSystemDeps {
+  /** See FishingDeps.onHookset — the fish-cam trigger. */
+  onHookset?(x: number, z: number): void;
   scene: THREE.Scene;
   camera: THREE.Camera;
   getModel(): BoatModel;
@@ -69,6 +71,7 @@ export function createFishing(deps: FishingSystemDeps): FishingSystem {
   const visuals = createFishingVisuals(deps.scene);
   const rodVM = createRodViewModel(deps.camera);
   const logic = createFishingLogic({
+    onHookset: deps.onHookset,
     scene: deps.scene,
     getModel: deps.getModel,
     camera: deps.camera,

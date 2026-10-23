@@ -39,6 +39,9 @@ export interface LandedFish {
 }
 
 export interface FishingDeps {
+  /** Fired the instant a fish is ON — the hookset, whether from the strike window or a trolling
+   * strike. game/world.ts turns it into the fish cam (game/fishing/fish-cam.ts). */
+  onHookset?(x: number, z: number): void;
   scene: THREE.Scene;
   getModel(): BoatModel;
   camera: THREE.Camera;
@@ -183,6 +186,7 @@ export function createFishingLogic(deps: FishingDeps) {
     setText('fSub', 'It’s running! Hold ▼ to reel, ease off when the bar runs red.');
     deps.particles.splash(F.fx, F.fz, 30, 1.5);
     deps.camState.shake = Math.max(deps.camState.shake, 0.3);
+    deps.onHookset?.(F.fx, F.fz);
   }
 
   function lose(msg: string): void { reelIn(msg); }
