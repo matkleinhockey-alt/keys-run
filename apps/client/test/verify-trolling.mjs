@@ -1,5 +1,5 @@
 /**
- * Trolling (7), end to end in the real game: the outriggers swing out, the boat holds seven knots
+ * Trolling (+), end to end in the real game: the outriggers swing out, the boat holds seven knots
  * on its own, the spread accrues fishing credit, a strike puts the rod STRAIGHT into a fight with
  * no cast and no strike window, the fish clears the water, and toggling it off stows the poles.
  *
@@ -33,8 +33,8 @@ await p.evaluate(() => window.__fishDebug.teleport(1200, 2600, 0));
 await sleep(5000);
 ok(!(await T()).on, 'starts off', JSON.stringify(await T()));
 
-await p.keyboard.press('Digit7'); await sleep(2000);
-ok((await T()).on, 'key 7 turns trolling on');
+await p.keyboard.press('Equal'); await sleep(2000);
+ok((await T()).on, 'the + key turns trolling on');
 await sleep(9000);
 const r1 = await T();
 ok(r1.rig > 0.5, 'the outriggers swing out', `rig=${r1.rig}`);
@@ -77,7 +77,7 @@ if (struck) {
   ok(airborne && got.canJump, 'the fish clears the water off the hookup', JSON.stringify(got));
 }
 // turning it off stows the gear
-await p.keyboard.press('Digit7'); await sleep(9000);
+await p.keyboard.press('Equal'); await sleep(9000);
 ok((await T()).rig < 0.5, 'turning it off stows the riggers', `rig=${(await T()).rig}`);
 console.log('page errors:', errs.length ? errs.slice(0, 3) : 'none');
 await b.close();

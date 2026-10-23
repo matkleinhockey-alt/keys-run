@@ -1,6 +1,6 @@
 /**
- * Trolling mode: outriggers out, the boat holding seven knots, and a strike that arrives at full
- * speed with no warning.
+ * Trolling mode (+): outriggers out, the boat holding seven knots, and a strike that arrives at
+ * full speed with no warning.
  *
  * The rules live in `@keysrun/shared/sim/troll` (the speed window, how long a strike takes, what
  * eats a dragged lure). This is the client half: the throttle hold, the poles, the sound and —
@@ -138,7 +138,7 @@ export function createTrolling(deps: TrollingDeps): Trolling {
       state = setLinesOut(state, on);
       if (on) {
         toast(deps.outriggers()
-          ? 'Trolling — outriggers out, holding 7 knots. Lures swim between 5 and 9. 7 again to bring them in.'
+          ? 'Trolling — outriggers out, holding 7 knots. Lures swim between 5 and 9. + again to bring them in.'
           : 'Trolling — lines out, holding 7 knots. This hull has no riggers, so the spread is narrow.');
       } else {
         toast('Lines in.');

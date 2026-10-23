@@ -44,7 +44,7 @@ await sleep(5000);
 ok(!(await cam()).active, 'idle before anything is hooked');
 
 const before = await camPos();
-await p.keyboard.press('Digit7'); await sleep(9000);   // trolling, so the hookup needs no timing
+await p.keyboard.press('Equal'); await sleep(9000);   // trolling, so the hookup needs no timing
 const fired = await p.evaluate(() => window.__fishDebug.trollStrikeNow());
 ok(fired, 'a trolling strike hooks up');
 // ONE round trip. Each `evaluate` costs ~0.5 s at this sandbox's ~2 fps and the whole shot is

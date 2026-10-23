@@ -45,7 +45,7 @@ export interface InputCallbacks {
   resetCamZoom(): void;
   /** Cruise control was switched on or off — for the toast and the HUD light. */
   setCruise(on: boolean): void;
-  /** Trolling mode (7): outriggers out and the throttle held at trolling speed. */
+  /** Trolling mode (+): outriggers out and the throttle held at trolling speed. */
   toggleTroll(): void;
 }
 
@@ -79,7 +79,11 @@ export function bindBoatInput(input: BoatInputState, box: BoatStateBox, cb: Inpu
     if (e.code === 'BracketLeft') { cb.zoomChart(0.7); return; }
     if (e.code === 'BracketRight') { cb.zoomChart(1 / 0.7); return; }
     if (e.code === 'KeyT') { cb.toggleTrim(); return; }
-    if (e.code === 'Digit7' || e.code === 'Numpad7') { cb.toggleTroll(); return; }
+    // Trolling is on PLUS. Both the main-row `+` (which is shift-and-equals, so the code is
+    // `Equal` whether or not shift is down) and the numpad's own `+` — a player reaching for
+    // "plus" will use whichever their keyboard puts in front of them, and `Equal` alone would
+    // leave the numpad dead.
+    if (e.code === 'Equal' || e.code === 'NumpadAdd') { cb.toggleTroll(); e.preventDefault(); return; }
     if (e.code === 'Digit6' || e.code === 'Numpad6') {
       input.cruise = !input.cruise;
       applyThrottle();
