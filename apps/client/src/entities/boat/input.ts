@@ -45,6 +45,8 @@ export interface InputCallbacks {
   resetCamZoom(): void;
   /** Cruise control was switched on or off — for the toast and the HUD light. */
   setCruise(on: boolean): void;
+  /** Trolling mode (7): outriggers out and the throttle held at trolling speed. */
+  toggleTroll(): void;
 }
 
 const KEYMAP: Record<string, keyof Pick<BoatInput, 'fwd' | 'back' | 'left' | 'right'>> = {
@@ -77,6 +79,7 @@ export function bindBoatInput(input: BoatInputState, box: BoatStateBox, cb: Inpu
     if (e.code === 'BracketLeft') { cb.zoomChart(0.7); return; }
     if (e.code === 'BracketRight') { cb.zoomChart(1 / 0.7); return; }
     if (e.code === 'KeyT') { cb.toggleTrim(); return; }
+    if (e.code === 'Digit7' || e.code === 'Numpad7') { cb.toggleTroll(); return; }
     if (e.code === 'Digit6' || e.code === 'Numpad6') {
       input.cruise = !input.cruise;
       applyThrottle();

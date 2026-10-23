@@ -169,6 +169,10 @@
     "./sim/chum": {
       "types": "./dist/sim/chum.d.ts",
       "default": "./dist/sim/chum.js"
+    },
+    "./sim/troll": {
+      "types": "./dist/sim/troll.d.ts",
+      "default": "./dist/sim/troll.js"
     }
   },
   "scripts": {

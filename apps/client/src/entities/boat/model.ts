@@ -125,6 +125,15 @@ export interface BoatModel {
   stations: Array<{ pos: THREE.Vector3; out: THREE.Vector3; spot: THREE.Vector3 }>;
   /** Mutable: which station (index into `stations`) the angler is currently fishing from. */
   station: number;
+  /**
+   * Swing the outriggers out for trolling, or stow them alongside. `t` is 0 (stowed) to 1 (out) —
+   * a value, not a boolean, so the caller can ease them rather than snapping, which is how a real
+   * pair of twenty-foot poles behave and the only way the player sees them move at all.
+   *
+   * Null on hulls with nothing to mount them on: outriggers bolt to a tower or a hard top, and a
+   * flats skiff has neither.
+   */
+  setOutriggers: ((t: number) => void) | null;
   captain: Human;
   /** legacy `crew` (index.html:1533-1536): the bikini-clad passenger lounging/seated near the
    * bow or sunpad. */
@@ -284,6 +293,8 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
   if (st.radar) { box(0.18, 0.18, 0.18, 0xe9e9e9, 0, topY + 0.22, tz); box(1.3, 0.1, 0.16, 0xf2f2f2, 0, topY + 0.36, tz); }
   if (st.outriggers && !st.bigTower) for (const sx of [-1, 1]) g.add(beamBetween(V3(sx * tw * 0.45, topY + 0.08, tz), V3(sx * (tw * 0.45 + 0.9), topY + 4.6, tz + 2.2), 0.028, frame));
 
+  /** Set below when the hull has a tower or a top to bolt riggers to; see the OUTRIGGERS block. */
+  let setOutriggers: ((t: number) => void) | null = null;
   // tuna tower with an upper helm on the offshore fishing boats
   let tower: Tower | null = null;
   if (S.id === 'freeman' || S.id === 'grady') {
@@ -536,7 +547,57 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
     const sb = hullStation(H, L, B, 0.8), bz = zRake(H, sb, sb.ys);
     nav(0xff2a2a, -(sb.bs + 0.02), sb.ys - 0.12, bz, 0.9);
     nav(0x2aff5a, sb.bs + 0.02, sb.ys - 0.12, bz, 0.9);
-    const mastY = tower ? tower.pos.y + 2.2 : topY + 0.75;
+    /**
+   * OUTRIGGERS. Two long tapered poles on swivel bases, stowed upright alongside the tower and
+   * swung out to about 70 degrees for trolling — which is the whole point of them: they carry the
+   * outside lines wide so a four-rod spread does not tangle itself behind the transom.
+   *
+   * Mounted on the tower when there is one and on the hard top otherwise, because that is where
+   * they bolt in real life and because both already exist here. A hull with neither gets none,
+   * and `setOutriggers` is null rather than a no-op so a caller can tell the difference and say
+   * so rather than silently appearing to deploy nothing.
+   */
+  if (tower || st.top === 'hardtop' || st.top === 'ttop') {
+    const baseY = tower ? tower.pos.y + 0.35 : topY + 0.2;
+    const baseZ = tower ? tower.pos.z + 0.1 : tz;
+    const RIG_LEN = Math.max(5.5, L * 0.78);
+    const rigMat = M(0xdfe3e6, { roughness: 0.35, metalness: 0.45 });
+    const pivots: THREE.Group[] = [];
+    for (const sx of [-1, 1]) {
+      const pivot = new THREE.Group();
+      pivot.position.set(sx * (B * 0.22), baseY, baseZ);
+      // Built along +Y so the pole's own length is the axis the pivot rotates about Z — stowed is
+      // straight up, deployed is out and slightly aft.
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.085, RIG_LEN, 7), rigMat);
+      pole.position.y = RIG_LEN / 2;
+      pivot.add(pole);
+      // the base clamp, and the halyard rings a real rigger carries up its length
+      const clamp = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.26, 8), M(0x8d9396, { roughness: 0.5, metalness: 0.5 }));
+      pivot.add(clamp);
+      for (let k = 1; k <= 3; k++) {
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.055, 0.012, 5, 10), M(0x2e3236, { roughness: 0.7 }));
+        ring.position.y = (RIG_LEN * k) / 4;
+        ring.rotation.x = Math.PI / 2;
+        pivot.add(ring);
+      }
+      g.add(pivot);
+      pivots.push(pivot);
+    }
+    const STOW = 0.12, OUT = 1.22; // radians from vertical: just off the mast, and ~70 degrees out
+    setOutriggers = (t: number): void => {
+      const k = Math.max(0, Math.min(1, t));
+      const a = STOW + (OUT - STOW) * k;
+      pivots[0].rotation.set(0, 0, a);
+      pivots[1].rotation.set(0, 0, -a);
+      // They also rake aft as they go out, which is what stops them looking like a pair of
+      // antennae and is how a rigger is actually set.
+      pivots[0].rotation.x = -0.18 * k;
+      pivots[1].rotation.x = -0.18 * k;
+    };
+    setOutriggers(0);
+  }
+
+  const mastY = tower ? tower.pos.y + 2.2 : topY + 0.75;
     nav(0xffffff, 0, mastY, tower ? tower.pos.z - 0.2 : tz + tl * 0.3, 1.1);
     if (!tower) g.add(beamBetween(V3(0, topY + 0.1, tz + tl * 0.3), V3(0, mastY, tz + tl * 0.3), 0.02, M(0xf4f4f4)));
   }
@@ -839,7 +900,7 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
   if (deps.wealth && !deps.wealth.underglow && lights) lights.visible = false;
 
   return {
-    group: g, deckY: cs, props, helmPos, helmPose, fishSpot, soleAt,
+    group: g, deckY: cs, props, helmPos, helmPose, fishSpot, soleAt, setOutriggers,
     wheel: helmWheel, tower, outboards, lights, flags,
     cabin, cabinLight, cabinLight2,
     rodPivot, rodTip: tip, stations, station: 0, captain, crew,

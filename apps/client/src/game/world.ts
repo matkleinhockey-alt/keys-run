@@ -11,7 +11,7 @@
  */
 import * as THREE from 'three';
 import { chainZ } from '@keysrun/shared/world/chain';
-import { depthAt, WB } from '@keysrun/shared/world/depth';
+import { depthAt, zoneAt, WB } from '@keysrun/shared/world/depth';
 import { BOATS, SPEED_SCALE, type Boat } from '@keysrun/shared/content/boats';
 import { SEA_STATES } from '@keysrun/shared/waves';
 import { ampAt } from '@keysrun/shared/sim/depth-grid';
@@ -42,6 +42,7 @@ import { createCrewSystem } from '../entities/crew-model/index.js';
 import { createElectronics, type BoatReadout } from '../entities/boat/electronics.js';
 import { applyBoatVisuals, sampleWaterHeight } from '../entities/boat/visuals.js';
 import { createBoatInput, bindBoatInput, type BoatStateBox } from '../entities/boat/input.js';
+import { createTrolling, type Trolling } from './fishing/trolling.js';
 import { createCamState, createFpState, updateCamera, cycleView, bindCameraPointerControls, snapChaseRig } from '../entities/camera.js';
 
 import { waterVelocity, type DiverEvent } from '@keysrun/shared/sim/diver';
@@ -594,10 +595,33 @@ export function initWorld(wrap: HTMLElement): World {
     // Charging counts as a cast in flight even though `state` is still 'idle' while the key is
     // held: ashore the keyup is suspended (above), so a charge left running stays running, the
     // cast meter sits half-full behind the town HUD, and the first Space back aboard releases it.
-    prepare: () => { dropCruise(); if (FishF.charging || (FishF.state !== 'idle' && FishF.state !== 'caught')) fishing.reelIn(); },
+    prepare: () => { dropCruise(); stowTrolling(); if (FishF.charging || (FishF.state !== 'idle' && FishF.state !== 'caught')) fishing.reelIn(); },
     toast, shop: econ.shop, gameRunning: () => game.running, casino,
     // F underwater opens treasure, not the dock (entities/land/index.ts's `diving` dep).
     diving: () => diver.mode === 'diver',
+  });
+
+  // 13c-3. trolling (game/fishing/trolling.ts, rules in @keysrun/shared/sim/troll): outriggers
+  // out, the throttle held at seven knots, and a strike that arrives at speed. It hands off to
+  // `fishing.setHook` — the same hookup the cast's strike window uses — so everything from the
+  // fight to the jumps to the catch card is the machinery that already exists.
+  const trolling: Trolling = createTrolling({
+    setHook: () => fishing.setHook(),
+    outriggers: () => model.setOutriggers,
+    zone: () => zoneAt(stateBox.state.x, stateBox.state.z),
+    // A weedline or a hump fishes faster than open water. `life.spots` already answers "what is
+    // under me" for the rod, so trolling asks the same question rather than inventing its own.
+    richness: () => {
+      const hs = life.spots.nearHotspot?.(stateBox.state.x, stateBox.state.z);
+      return hs ? 2.4 : 1;
+    },
+    onStrike: (x, z) => {
+      particles.splash(x, z, 42, 2.2);
+      camState.shake = Math.max(camState.shake, 0.55);
+      // The rod's own strike sound, positioned at the lure — a trolling hit is the same event,
+      // it just arrives without a float going under first.
+      audio.engine.strike(x, z);
+    },
   });
 
   // 13d. speargun (entities/speargun/**) — first-person harpoon. Fires at whatever
@@ -659,7 +683,7 @@ export function initWorld(wrap: HTMLElement): World {
       : raceMode.isActive() ? 'Finish the race first.' : null),
     // Also abort a cast that is still CHARGING (state is 'idle' while the key is held): leaving it would
     // release a real cast on the Space keyup that arrives after the pistol is out. reelIn clears it.
-    prepare: () => { dropCruise(); if (FishF.charging || (FishF.state !== 'idle' && FishF.state !== 'caught')) fishing.reelIn(); },
+    prepare: () => { dropCruise(); stowTrolling(); if (FishF.charging || (FishF.state !== 'idle' && FishF.state !== 'caught')) fishing.reelIn(); },
     toast, gear: econ.gear, fishWorld, life, audio: audio.engine, particles,
     // Caelen is down. Nobody aboard liked him.
     onCaelenDown() {
@@ -714,7 +738,7 @@ export function initWorld(wrap: HTMLElement): World {
       if (tooDrunkToDive(buffs.mods)) { toast('Caelen: "You can barely stand. Sit down, loser."'); return; }
       // ...including a charge still building (state is 'idle' while Space is held), which
       // underwater is the ascend key and would otherwise release a cast on the way down.
-      dropCruise();
+      dropCruise(); stowTrolling();
       if (FishF.charging || (FishF.state !== 'idle' && FishF.state !== 'caught')) fishing.reelIn();
       diver.enterWater(stateBox.state.x, stateBox.state.z, stateBox.state.h);
       setDiveUI(true);
@@ -741,6 +765,10 @@ export function initWorld(wrap: HTMLElement): World {
    * aboard to a boat that is already under way, because you latched the throttle four minutes ago
    * before diving, is the kind of surprise that ends with you on a sandbar.
    */
+  /** Bring the lines in and stow the riggers. Called wherever the player leaves the helm — the
+   * same places `dropCruise` is, and for the same reason: nobody is driving the boat. */
+  function stowTrolling(): void { trolling.off(); }
+
   function dropCruise(): void {
     if (!input.cruise) return;
     input.cruise = false;
@@ -785,6 +813,13 @@ export function initWorld(wrap: HTMLElement): World {
     },
     zoomChart(k) { electronics.zoom(k); },
     toggleBigChart() { document.getElementById('mapbox')?.classList.toggle('big'); },
+    toggleTroll() {
+      if (diver.mode === 'diver' || land.mode === 'land' || handgun.mode === 'gun') { toast('Back at the helm first.'); return; }
+      // Trolling drives the throttle itself, so a latched cruise would be two things fighting
+      // over it. Trolling wins, because it is the one with a target speed.
+      dropCruise();
+      trolling.toggle(stateBox.state);
+    },
     setCruise(on) {
       toast(on
         ? 'Cruise control on (6) — throttle stays open. S or 6 to drop it.'
@@ -858,7 +893,7 @@ export function initWorld(wrap: HTMLElement): World {
   document.getElementById('btnMarina')?.addEventListener('click', () => {
     game.running = false;
     input.fwd = input.back = input.left = input.right = false;
-    dropCruise();
+    dropCruise(); stowTrolling();
     if (diver.mode === 'diver') { diver.exitToBoat(); setDiveUI(false); }
     land.exitToBoat();
     handgun.exitToBoat();
@@ -933,13 +968,22 @@ export function initWorld(wrap: HTMLElement): World {
     // without the boat acting on it, and leaves forward/steering alone so you can still drive
     // after a running fish.
     const rodHasLine = fishingLineOut() || FishF.state === 'caught';
-    const boatInput = diver.mode === 'diver' || land.mode === 'land' || handgun.mode === 'gun' ? NEUTRAL_BOAT_INPUT
+    // Trolling drives the throttle itself (game/fishing/trolling.ts's `wantThrottle`), so its
+    // override goes on last and only while the player is actually at the helm. It overrides
+    // rather than sets `input.fwd`, so the player's own key is untouched and bringing the lines
+    // in hands the throttle straight back.
+    const helm = !(diver.mode === 'diver' || land.mode === 'land' || handgun.mode === 'gun');
+    const trollThrottle = helm && trolling.isOn();
+    const boatInput = !helm ? NEUTRAL_BOAT_INPUT
+      : trollThrottle ? { ...input, fwd: trolling.wantThrottle(stateBox.state), back: false }
       : rodHasLine && input.back ? { ...input, back: false }
       : input;
     // `land.holdBoat` pins the hull where it was tied up — it must wrap the stepped state rather
     // than the input, because a moored boat still has to stop drifting on waves/current, which
     // stepBoat applies regardless of throttle.
     const next = land.holdBoat(stepBoat(stateBox.state, boatInput, env, dt));
+    // After the boat has moved, so the speed the spread is judged on is this step's.
+    trolling.update(dt, next);
     stateBox.state = next;
     fishing.update(dt, simTime, next, sw, ch);
     return next.events;
@@ -1324,6 +1368,15 @@ export function initWorld(wrap: HTMLElement): World {
     poolStats: fishWorld.debugPoolStats,
     stats: () => fishWorld.stats,
     blowCount: fishWorld.debugBlowCount,
+    /** Verification-only: trolling's live state — the mode, how far the riggers have swung, and
+     * how much fishing credit is left before the next strike. */
+    troll: () => ({ ...trolling.debug(), speed: +stateBox.state.speed.toFixed(2), rod: FishF.state }),
+    trollToggle: () => trolling.toggle(stateBox.state),
+    trollStrikeNow: () => trolling.debugStrikeNow(stateBox.state),
+    /** Verification-only: what is on the end of the line right now. */
+    fightInfo: () => (FishF.fight
+      ? { key: FishF.key, weight: +FishF.weight.toFixed(1), jumper: !!FishF.fightParams?.jump, canJump: !!(FishF.fightParams?.jump || FishF.fightParams?.kingfish), jumpQ: FishF.fight.jumpQ, airborne: FishF.fight.airborne }
+      : null),
     /** Verification-only: where the three gold bluefin are. Finding them is the whole point, so
      * nothing in normal play reads this. */
     legend: fishWorld.debugLegend,

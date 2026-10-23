@@ -53,6 +53,15 @@ export interface FishingSystem {
   reelIn(msg?: string): void;
   /** Returns the rod to idle after a catch card is dismissed — see update.ts's `clearCaught`. */
   clearCaught(): void;
+  /**
+   * Set the hook on whatever `F` is currently holding, exactly as hitting the strike window does.
+   *
+   * Exposed for trolling (game/fishing/trolling.ts), which has no cast and no strike window: the
+   * fish hooks itself against the drag at seven knots. Everything after this point — the fight,
+   * the drag, the jumps, the catch card — is then the machinery that already exists, rather than
+   * a second fight to keep in step with the first.
+   */
+  setHook(): void;
   dispose(): void;
 }
 
@@ -97,7 +106,7 @@ export function createFishing(deps: FishingSystemDeps): FishingSystem {
     visuals.dispose();
   }
 
-  return { update, render, setDrag: logic.setDrag, reelIn: logic.reelIn, clearCaught: logic.clearCaught, dispose };
+  return { update, render, setDrag: logic.setDrag, reelIn: logic.reelIn, clearCaught: logic.clearCaught, setHook: logic.setHook, dispose };
 }
 
 const tipWorld = new THREE.Vector3();
