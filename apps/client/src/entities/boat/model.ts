@@ -552,14 +552,15 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
    * swung out to about 70 degrees for trolling — which is the whole point of them: they carry the
    * outside lines wide so a four-rod spread does not tangle itself behind the transom.
    *
-   * Mounted on the tower when there is one and on the hard top otherwise, because that is where
-   * they bolt in real life and because both already exist here. A hull with neither gets none,
-   * and `setOutriggers` is null rather than a no-op so a caller can tell the difference and say
-   * so rather than silently appearing to deploy nothing.
+   * TOWER BOATS ONLY — the Freeman and the Grady-White. They were briefly fitted to hard-top
+   * hulls as well, on the reasoning that a rigger bolts to a hard top in real life too, but it
+   * put twenty-foot poles on boats nobody would rig that way and made the two offshore hulls
+   * less special for owning them. A hull without a tower gets `setOutriggers: null` rather than
+   * a no-op, so trolling can say the spread is narrow instead of appearing to deploy nothing.
    */
-  if (tower || st.top === 'hardtop' || st.top === 'ttop') {
-    const baseY = tower ? tower.pos.y + 0.35 : topY + 0.2;
-    const baseZ = tower ? tower.pos.z + 0.1 : tz;
+  if (tower) {
+    const baseY = tower.pos.y + 0.35;
+    const baseZ = tower.pos.z + 0.1;
     const RIG_LEN = Math.max(5.5, L * 0.78);
     const rigMat = M(0xdfe3e6, { roughness: 0.35, metalness: 0.45 });
     const pivots: THREE.Group[] = [];

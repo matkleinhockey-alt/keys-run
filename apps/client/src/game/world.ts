@@ -1372,6 +1372,8 @@ export function initWorld(wrap: HTMLElement): World {
      * how much fishing credit is left before the next strike. */
     troll: () => ({ ...trolling.debug(), speed: +stateBox.state.speed.toFixed(2), rod: FishF.state }),
     trollToggle: () => trolling.toggle(stateBox.state),
+    /** Verification-only: does THIS hull carry outriggers? Tower boats only. */
+    hasRiggers: () => ({ boat: boatSpec.id, riggers: !!model.setOutriggers }),
     trollStrikeNow: () => trolling.debugStrikeNow(stateBox.state),
     /** Verification-only: what is on the end of the line right now. */
     fightInfo: () => (FishF.fight
