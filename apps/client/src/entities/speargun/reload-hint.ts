@@ -1,9 +1,11 @@
 /**
- * The reload prompt: a small bar low-centre that says what the player's hands have to do next
- * ("brace" while the gun recovers, "press R" to haul the bands, a fill for how far they are
- * drawn). Reloading used to be an invisible 2.5 s timer, so nothing on screen told you it was
+ * The reload prompt: a small bar in the bottom-left corner that says what the player's hands have
+ * to do next ("brace" while the gun recovers, "press R" to haul the bands, a fill for how far
+ * they are drawn). Reloading used to be an invisible 2.5 s timer, so nothing on screen told you it was
  * happening or that you could change how long it took; now it is an act, and acts need a
- * read-out. Inline styles on purpose: a one-element overlay that only exists while diving does
+ * read-out. It sits clear of the bottom edge (132px up) rather than in the very corner, because
+ * the dive touch controls (#tdL/#tdR in style.css) own left:16px from bottom:20px to ~84px.
+ * Inline styles on purpose: a one-element overlay that only exists while diving does
  * not warrant a stylesheet rule that every other agent's style.css edits would have to merge
  * around.
  */
@@ -21,9 +23,9 @@ export function createReloadHint(): ReloadHint {
   const root = document.createElement('div');
   root.id = 'reloadHint';
   root.setAttribute('aria-live', 'polite');
-  root.style.cssText = 'position:absolute;left:50%;bottom:132px;transform:translateX(-50%);z-index:7;pointer-events:none;'
+  root.style.cssText = 'position:absolute;left:16px;bottom:132px;z-index:7;pointer-events:none;'
     + 'display:none;min-width:190px;padding:7px 12px 9px;border-radius:10px;background:rgba(6,24,34,.62);'
-    + 'color:#dff4f7;font:600 13px/1.2 system-ui,sans-serif;text-align:center;letter-spacing:.02em;transition:opacity .25s';
+    + 'color:#dff4f7;font:600 13px/1.2 system-ui,sans-serif;text-align:left;letter-spacing:.02em;transition:opacity .25s';
   const label = document.createElement('div');
   const track = document.createElement('div');
   track.style.cssText = 'margin-top:6px;height:5px;border-radius:3px;background:rgba(255,255,255,.18);overflow:hidden;position:relative';
