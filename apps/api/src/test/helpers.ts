@@ -15,7 +15,7 @@ export function testDbHandle(): DbHandle {
   return createDb(url);
 }
 
-const TABLES = ['estates', 'tag_events', 'tagged_fish', 'audit_flags', 'species_records', 'global_records', 'catches', 'players', 'sessions', 'users', 'world'];
+const TABLES = ['player_saves', 'estates', 'tag_events', 'tagged_fish', 'audit_flags', 'species_records', 'global_records', 'catches', 'players', 'sessions', 'users', 'world'];
 
 export async function truncateAll(handle: DbHandle): Promise<void> {
   await handle.pool.query(`TRUNCATE TABLE ${TABLES.map((t) => `"${t}"`).join(', ')} RESTART IDENTITY CASCADE`);

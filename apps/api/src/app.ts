@@ -17,6 +17,7 @@ import playersRoutes from './routes/players.js';
 import catchesRoutes from './routes/catches.js';
 import tagsRoutes from './routes/tags.js';
 import estatesRoutes from './routes/estates.js';
+import saveRoutes from './routes/save.js';
 import healthRoutes from './routes/health.js';
 
 declare module 'fastify' {
@@ -39,7 +40,9 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   fastify.decorate('db', opts.db);
   fastify.decorate('pgPool', opts.pool);
 
-  await fastify.register(cors, { origin: opts.corsOrigin });
+  // PUT for /estates/:id/build and /save: @fastify/cors only allows GET, HEAD and POST by default,
+  // which made browsers refuse every PUT at the preflight.
+  await fastify.register(cors, { origin: opts.corsOrigin, methods: ['GET', 'HEAD', 'POST', 'PUT'] });
 
   // global: false — this instance only enforces limits on routes that opt in
   // via `config.rateLimit` (the /auth/* routes). Every other route is
@@ -56,6 +59,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await fastify.register(catchesRoutes);
   await fastify.register(tagsRoutes);
   await fastify.register(estatesRoutes);
+  await fastify.register(saveRoutes);
 
   return fastify;
 }
