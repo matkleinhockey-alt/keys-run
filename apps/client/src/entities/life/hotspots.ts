@@ -185,9 +185,20 @@ export interface Rig extends GullSite {
   told: boolean;
 }
 
-/** The four platforms' (x, dz-from-chain) sites, exported so test/wrecks.test.ts can assert a wreck
- * never overlaps one. */
-export const RIG_SITES: ReadonlyArray<readonly [number, number]> = [[-3250, 2950], [-900, 3150], [1550, 2800], [3350, 3100]];
+/** What sort of structure stands at a site. The field used to be four copies of one production
+ * platform, distinguishable only by `rotation.y = ri * 0.6`; running the chain offshore showed you
+ * the same silhouette four times. These are the three things that actually stand in a field:
+ * the big manned production platform, a small unmanned wellhead that just caps a well, and a
+ * jack-up drilling rig whose legs run right through its hull and tower above the deck. */
+export type RigKind = 'platform' | 'satellite' | 'jackup';
+
+/** The platforms' (x, dz-from-chain, kind) sites, exported so test/wrecks.test.ts can assert a
+ * wreck never overlaps one. Every site is checked for >= 20 m of water by `spawnRigs`, which
+ * silently skips any that is too shallow — see test/rigs.test.ts, which asserts none are. */
+export const RIG_SITES: ReadonlyArray<readonly [number, number, RigKind]> = [
+  [-4400, 2900, 'satellite'], [-3250, 2950, 'platform'], [-2100, 2650, 'jackup'], [-900, 3150, 'platform'],
+  [400, 3250, 'satellite'], [1550, 2800, 'jackup'], [2500, 2700, 'satellite'], [3350, 3100, 'platform'],
+];
 
 /** legacy `RIGS` (index.html:2091-2129): 4 fixed offshore platforms — no randomness at all, so
  * no `hashCell` treatment is needed (see this module's header). */
@@ -206,56 +217,133 @@ function spawnRigs(scene: THREE.Scene, lightMats: LightMatEntry[]): Rig[] {
   const beam = (g: THREE.Group, a: THREE.Vector3, b: THREE.Vector3, r: number, m: THREE.Material): void => { g.add(beamBetween(a, b, r, m)); };
 
   const rigs: Rig[] = [];
-  spots.forEach(([x, dz], ri) => {
+  spots.forEach(([x, dz, kind], ri) => {
     const z = chainZ(x) + dz;
     if (depthAt(x, z) < 20) return;
     const g = new THREE.Group();
     g.position.set(x, 0, z); g.rotation.y = ri * 0.6;
     scene.add(g);
-    const H = 12, base = -Math.min(40, depthAt(x, z)), top = 18;
-    const legs: ReadonlyArray<readonly [number, number]> = [[-H, -H], [H, -H], [H, H], [-H, H]];
-    legs.forEach(([lx, lz]) => {
-      beam(g, V(lx * 1.25, base, lz * 1.25), V(lx * 1.04, -0.6, lz * 1.04), 0.95, rust);
-      beam(g, V(lx * 1.04, -0.6, lz * 1.04), V(lx, top, lz), 0.9, steel);
-    });
-    for (const y of [-16, -6, 6, 13]) {
-      const k = y < 0 ? 1.04 + (-0.6 - y) / (-0.6 - base) * 0.21 : 1.0;
-      const P = legs.map(([lx, lz]) => V(lx * k, y, lz * k));
-      for (let i = 0; i < 4; i++) beam(g, P[i], P[(i + 1) % 4], 0.35, y < 0 ? rust : steel);
-    }
-    for (let i = 0; i < 4; i++) {
-      const [ax, az] = legs[i], [bx, bz] = legs[(i + 1) % 4];
-      beam(g, V(ax * 1.02, 1, az * 1.02), V(bx, 12.5, bz), 0.25, steel);
-      beam(g, V(bx * 1.02, 1, bz * 1.02), V(ax, 12.5, az), 0.25, steel);
-    }
     const box = (w: number, h: number, d: number, m: THREE.Material, px: number, py: number, pz: number): THREE.Mesh => {
       const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
       b.position.set(px, py, pz); b.castShadow = true; g.add(b);
       return b;
     };
-    box(34, 1.2, 34, deckM, 0, top, 0);
-    box(30, 1, 30, deckM, 0, top + 6.5, 0);
-    for (const [px, pz] of [[-14, -14], [14, -14], [14, 14], [-14, 14]] as const) beam(g, V(px, top + 0.6, pz), V(px, top + 6, pz), 0.45, steel);
-    box(14, 5.5, 10, whiteM, -6, top + 3.3, -8);
-    box(14, 1, 10, orangeM, -6, top + 6.2, -8);
-    box(8, 4, 8, orangeM, 8, top + 2.6, 6);
-    box(6, 9, 6, whiteM, 9, top + 11, -9);
-    const heli = new THREE.Mesh(new THREE.CylinderGeometry(8, 8, 0.5, 24), heliM);
-    heli.position.set(-8, top + 12.6, 6); g.add(heli);
-    beam(g, V(-8, top + 7, 6), V(-8, top + 12.3, 6), 0.6, steel);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(5, 0.18, 6, 32), new THREE.MeshBasicMaterial({ color: 0xf2c14e }));
-    ring.rotation.x = Math.PI / 2; ring.position.set(-8, top + 12.9, 6); g.add(ring);
-    beam(g, V(12, top + 7, 12), V(12, top + 12, 12), 0.7, steel);
-    beam(g, V(12, top + 12, 12), V(-4, top + 22, 20), 0.35, orangeM);
-    beam(g, V(17, top + 6, -6), V(36, top + 16, -12), 0.4, steel);
-    const fl = new THREE.Mesh(new THREE.PlaneGeometry(9, 9), flameM);
-    fl.position.set(37, top + 17.5, -12.5); g.add(fl);
-    box(6, 0.4, 3, deckM, H + 3, 1.6, 0);
-    beam(g, V(H + 3, 1.8, -1.5), V(H, top, -1.5), 0.15, steel);
-    beam(g, V(H + 3, 1.8, 1.5), V(H, top, 1.5), 0.15, steel);
-    for (const [px, pz] of [[-16, -16], [16, -16], [16, 16], [-16, 16], [0, 0]] as const) {
-      const sp = new THREE.Sprite(lampM); sp.scale.setScalar(5); sp.position.set(px, top + 7.5, pz); g.add(sp);
+    const lamp = (px: number, py: number, pz: number, scale = 5): void => {
+      const sp = new THREE.Sprite(lampM); sp.scale.setScalar(scale); sp.position.set(px, py, pz); g.add(sp);
+    };
+    const seabed = -Math.min(40, depthAt(x, z));
+    let fl: THREE.Mesh | undefined;
+
+    if (kind === 'platform') {
+      // The full manned production platform: two decks, accommodation block, derrick, helipad and
+      // a flare boom out on an outrigger. Unchanged from when this was the only kind of rig.
+      const H = 12, base = seabed, top = 18;
+      const legs: ReadonlyArray<readonly [number, number]> = [[-H, -H], [H, -H], [H, H], [-H, H]];
+      legs.forEach(([lx, lz]) => {
+        beam(g, V(lx * 1.25, base, lz * 1.25), V(lx * 1.04, -0.6, lz * 1.04), 0.95, rust);
+        beam(g, V(lx * 1.04, -0.6, lz * 1.04), V(lx, top, lz), 0.9, steel);
+      });
+      for (const y of [-16, -6, 6, 13]) {
+        const k = y < 0 ? 1.04 + (-0.6 - y) / (-0.6 - base) * 0.21 : 1.0;
+        const P = legs.map(([lx, lz]) => V(lx * k, y, lz * k));
+        for (let i = 0; i < 4; i++) beam(g, P[i], P[(i + 1) % 4], 0.35, y < 0 ? rust : steel);
+      }
+      for (let i = 0; i < 4; i++) {
+        const [ax, az] = legs[i], [bx, bz] = legs[(i + 1) % 4];
+        beam(g, V(ax * 1.02, 1, az * 1.02), V(bx, 12.5, bz), 0.25, steel);
+        beam(g, V(bx * 1.02, 1, bz * 1.02), V(ax, 12.5, az), 0.25, steel);
+      }
+      box(34, 1.2, 34, deckM, 0, top, 0);
+      box(30, 1, 30, deckM, 0, top + 6.5, 0);
+      for (const [px, pz] of [[-14, -14], [14, -14], [14, 14], [-14, 14]] as const) beam(g, V(px, top + 0.6, pz), V(px, top + 6, pz), 0.45, steel);
+      box(14, 5.5, 10, whiteM, -6, top + 3.3, -8);
+      box(14, 1, 10, orangeM, -6, top + 6.2, -8);
+      box(8, 4, 8, orangeM, 8, top + 2.6, 6);
+      box(6, 9, 6, whiteM, 9, top + 11, -9);
+      const heli = new THREE.Mesh(new THREE.CylinderGeometry(8, 8, 0.5, 24), heliM);
+      heli.position.set(-8, top + 12.6, 6); g.add(heli);
+      beam(g, V(-8, top + 7, 6), V(-8, top + 12.3, 6), 0.6, steel);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(5, 0.18, 6, 32), new THREE.MeshBasicMaterial({ color: 0xf2c14e }));
+      ring.rotation.x = Math.PI / 2; ring.position.set(-8, top + 12.9, 6); g.add(ring);
+      beam(g, V(12, top + 7, 12), V(12, top + 12, 12), 0.7, steel);
+      beam(g, V(12, top + 12, 12), V(-4, top + 22, 20), 0.35, orangeM);
+      beam(g, V(17, top + 6, -6), V(36, top + 16, -12), 0.4, steel);
+      fl = new THREE.Mesh(new THREE.PlaneGeometry(9, 9), flameM);
+      fl.position.set(37, top + 17.5, -12.5); g.add(fl);
+      box(6, 0.4, 3, deckM, H + 3, 1.6, 0);
+      beam(g, V(H + 3, 1.8, -1.5), V(H, top, -1.5), 0.15, steel);
+      beam(g, V(H + 3, 1.8, 1.5), V(H, top, 1.5), 0.15, steel);
+      for (const [px, pz] of [[-16, -16], [16, -16], [16, 16], [-16, 16], [0, 0]] as const) lamp(px, top + 7.5, pz);
+    } else if (kind === 'satellite') {
+      // An unmanned wellhead: four short legs, one small deck, a cluster of capped wells and a
+      // nav light. Nobody lives here and nothing burns — it just caps the well and blinks.
+      const H = 5, top = 9;
+      const legs: ReadonlyArray<readonly [number, number]> = [[-H, -H], [H, -H], [H, H], [-H, H]];
+      legs.forEach(([lx, lz]) => {
+        beam(g, V(lx * 1.18, seabed, lz * 1.18), V(lx * 1.03, -0.6, lz * 1.03), 0.5, rust);
+        beam(g, V(lx * 1.03, -0.6, lz * 1.03), V(lx, top, lz), 0.46, steel);
+      });
+      for (const y of [-9, -2, 5]) {
+        const k = y < 0 ? 1.03 + (-0.6 - y) / (-0.6 - seabed) * 0.15 : 1.0;
+        const P = legs.map(([lx, lz]) => V(lx * k, y, lz * k));
+        for (let i = 0; i < 4; i++) beam(g, P[i], P[(i + 1) % 4], 0.2, y < 0 ? rust : steel);
+      }
+      box(14, 0.9, 14, deckM, 0, top, 0);
+      // Wellhead cluster: capped christmas trees in a row, the whole point of the structure.
+      for (const wx of [-3.4, 0, 3.4]) {
+        beam(g, V(wx, top + 0.4, 0), V(wx, top + 3.4, 0), 0.34, steel);
+        box(1.5, 0.7, 1.5, orangeM, wx, top + 3.7, 0);
+      }
+      box(3.6, 2.4, 2.6, whiteM, -4.6, top + 1.6, 4.4);
+      // Handrail round the deck edge, which is most of what reads as "platform" at this size.
+      for (const [ax, az, bx, bz] of [[-7, -7, 7, -7], [7, -7, 7, 7], [7, 7, -7, 7], [-7, 7, -7, -7]] as const) {
+        beam(g, V(ax, top + 1.5, az), V(bx, top + 1.5, bz), 0.08, steel);
+      }
+      beam(g, V(6, top + 0.5, -6), V(6, top + 6, -6), 0.22, steel);
+      lamp(6, top + 6.4, -6, 3.4);
+    } else {
+      // A jack-up: the legs run through the hull and tower well above the deck, which is the one
+      // silhouette nobody mistakes for a fixed platform. Three legs, a drilling derrick, and the
+      // cantilever that slides out over the well.
+      const R = 13, top = 16;
+      const legs: ReadonlyArray<readonly [number, number]> = [[0, -R], [R * 0.87, R * 0.5], [-R * 0.87, R * 0.5]];
+      legs.forEach(([lx, lz]) => {
+        beam(g, V(lx, seabed, lz), V(lx, top + 26, lz), 1.05, steel);
+        // Spud can: the broad foot a jack-up stands on.
+        const can = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 4.2, 2.2, 12), rust);
+        can.position.set(lx, seabed + 1.1, lz); g.add(can);
+        // Rack teeth up the leg, which is what makes it read as a leg and not a mast.
+        for (let y = -2; y < top + 24; y += 4) beam(g, V(lx - 1.2, y, lz), V(lx + 1.2, y, lz), 0.18, steel);
+      });
+      for (let i = 0; i < 3; i++) {
+        const [ax, az] = legs[i], [bx, bz] = legs[(i + 1) % 3];
+        beam(g, V(ax, top + 2, az), V(bx, top + 2, bz), 0.3, steel);
+      }
+      // Triangular hull, approximated as a slab with the corners carried by the legs.
+      box(30, 3.2, 30, deckM, 0, top, 0);
+      box(26, 1.2, 26, deckM, 0, top + 2.4, 0);
+      box(10, 4.5, 7, whiteM, -8, top + 4.4, 7);
+      box(10, 1, 7, orangeM, -8, top + 7, 7);
+      // Derrick: a lattice tower over the drill floor.
+      const dx = 4, dz2 = -5, dTop = top + 24;
+      const feet: ReadonlyArray<readonly [number, number]> = [[dx - 3.2, dz2 - 3.2], [dx + 3.2, dz2 - 3.2], [dx + 3.2, dz2 + 3.2], [dx - 3.2, dz2 + 3.2]];
+      feet.forEach(([fx, fz]) => beam(g, V(fx, top + 2.4, fz), V(dx + (fx - dx) * 0.22, dTop, dz2 + (fz - dz2) * 0.22), 0.3, steel));
+      for (const y of [top + 8, top + 14, top + 19]) {
+        const k = 1 - (y - (top + 2.4)) / (dTop - (top + 2.4)) * 0.78;
+        const P = feet.map(([fx, fz]) => V(dx + (fx - dx) * k, y, dz2 + (fz - dz2) * k));
+        for (let i = 0; i < 4; i++) beam(g, P[i], P[(i + 1) % 4], 0.14, steel);
+      }
+      box(3, 1.2, 3, orangeM, dx, dTop + 0.6, dz2);
+      // Cantilever out over the stern, where the drill string actually goes down.
+      box(9, 1.4, 14, deckM, 4, top + 1.2, -18);
+      const heli = new THREE.Mesh(new THREE.CylinderGeometry(6.5, 6.5, 0.5, 20), heliM);
+      heli.position.set(-9, top + 4.2, -7); g.add(heli);
+      lamp(0, top + 28, -R, 3.6);
+      lamp(R * 0.87, top + 28, R * 0.5, 3.6);
+      lamp(-R * 0.87, top + 28, R * 0.5, 3.6);
+      lamp(0, top + 6, 0);
     }
+
     g.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = true; });
     rigs.push({ x, z, g, fl, fish: 999, twin: false, told: false });
     rigs.push({ x: x + 18, z: z - 14, fish: 999, twin: true, told: false });
@@ -413,7 +501,10 @@ export function createHotspotWorld(scene: THREE.Scene, lightMats: LightMatEntry[
       return best ? { fr: best.fr } : null;
     },
     nearRig(x, z, r = 60): Rig | null {
-      for (const R of rigs) if (R.g && R.fl && Math.hypot(R.x - x, R.z - z) < r) return R;
+      // `R.g` is the test for "a real structure, not a twin anchor marker". This used to also
+      // require `R.fl`, which only worked while every rig happened to be a flaring production
+      // platform: a wellhead or a jack-up has no flare and would not have been fishable at all.
+      for (const R of rigs) if (R.g && Math.hypot(R.x - x, R.z - z) < r) return R;
       return null;
     },
     nearWeed(x, z, extra = 25): WeedPatch | null {
