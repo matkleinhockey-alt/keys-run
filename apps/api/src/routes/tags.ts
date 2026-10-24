@@ -62,7 +62,7 @@ function daysSince(at: Date, now: Date): number {
 
 function currentWeight(row: FishRow, now: Date): number {
   const w = Number(row.weightLb);
-  return row.status === 'at_large' ? grownWeight(row.speciesKey, w, daysSince(row.lastSeenAt, now)) : w;
+  return row.status === 'at_large' ? grownWeight(row.speciesKey, w, daysSince(row.lastSeenAt, now), row.tagNo) : w;
 }
 
 /** Could this at-large fish be the one on a line at (x, z) right now? */
