@@ -87,8 +87,15 @@ function tick(dt: number): void {
   if (F.fight) visuals.updateHooked(simT, dt, F.fight.running, F.fight.shake, 0, false);
 }
 
+/** Verification override: when set, draw() uses this camera placement instead of the two canned
+ * ones, so a close-up of a specific part (the reel) can be framed without a full game boot. */
+let camOverride: { p: [number, number, number]; look: [number, number, number] } | null = null;
+
 function draw(): void {
-  if (!fpOn) {
+  if (camOverride) {
+    camera.position.set(...camOverride.p);
+    camera.lookAt(...camOverride.look);
+  } else if (!fpOn) {
     camera.position.set(3.4, 2.4, 3.2);
     camera.lookAt(0.3, 2.2, -6);
   } else {
@@ -114,6 +121,29 @@ draw();
   step: (sec: number) => { for (let i = 0; i < Math.round(sec / DT); i++) tick(DT); draw(); },
   setFp: (v: boolean) => { fpOn = v; rodVM.group.visible = v; rodPivot.visible = !v; draw(); },
   setReeling: (v: boolean) => { reeling = v; },
+  /** Frame an arbitrary close-up; pass null to go back to the canned views. */
+  cam: (p: [number, number, number] | null, look?: [number, number, number]) => {
+    camOverride = p ? { p, look: look ?? [0, 0, 0] } : null;
+    draw();
+  },
+  /** The first-person rod hangs off the camera, so moving the camera moves the rod with it and
+   * it can never be orbited. This re-parents it into the scene at a fixed spot so a close-up of
+   * the reel (or anything else on it) can actually be framed. Pass false to put it back. */
+  inspect: (on: boolean) => {
+    if (on) {
+      scene.add(rodVM.group);
+      rodVM.group.position.set(0, 1.4, -1.2);
+      rodVM.group.rotation.set(0, 0, 0);
+      rodVM.group.visible = true;
+    } else {
+      camera.add(rodVM.group);
+      rodVM.group.position.set(0, 0, 0);
+      rodVM.group.rotation.set(0, 0, 0);
+    }
+    draw();
+  },
+  /** World position of the reel, so a caller can aim `cam` at it without guessing. */
+  reelAt: () => { const v = new THREE.Vector3(); rodVM.group.updateMatrixWorld(true); const r = rodVM.group.getObjectByName('reel'); r?.getWorldPosition(v); return r ? [v.x, v.y, v.z] : null; },
   /** Real physics: advance the actual fight with a given policy for `sec` s and report. */
   realFight: (sec: number) => {
     let s = F.fight!;
