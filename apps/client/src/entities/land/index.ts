@@ -331,8 +331,11 @@ export function createLandSystem(deps: LandDeps): LandSystem {
     if (ctl.mode === 'boat' && deps.gameRunning()) {
       const boat = deps.getBoat();
       const r = ctl.canTieUp(boat, deps.getHullLen());
+      // Only the actionable prompt. "Slow down to tie up" used to sit in the middle of the
+      // screen the whole time you had way on anywhere near a dock, which is most of the time you
+      // are near one — and it told you nothing you could act on. Slow down and the F prompt
+      // appears by itself; press F while still moving and catch-flow.ts still toasts the reason.
       if (r.ok && !deps.refuse()) want = 'F  Tie up and go ashore';
-      else if (!r.ok && r.reason.startsWith('Slow')) want = 'Slow down to tie up';
     }
     if (want !== lastDockPrompt) { hud.setDockPrompt(want); lastDockPrompt = want; }
   }
