@@ -17,6 +17,7 @@ import playersRoutes from './routes/players.js';
 import catchesRoutes from './routes/catches.js';
 import tagsRoutes from './routes/tags.js';
 import estatesRoutes from './routes/estates.js';
+import saveRoutes from './routes/save.js';
 import healthRoutes from './routes/health.js';
 
 declare module 'fastify' {
@@ -41,8 +42,10 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
 
   // @fastify/cors only allows GET, HEAD and POST by default, so every PUT was refused at the
   // preflight — which silently broke `PUT /estates/:id/build` (routes/estates.ts), the request
-  // the client makes to build on a lot. Verified against production: the preflight for a PUT
-  // came back `access-control-allow-methods: GET,HEAD,POST`, so the browser never sent it.
+  // the client makes to build on a lot, and now also `PUT /save` (routes/save.ts), which is how
+  // a signed-in player's game follows them between devices. Verified against production: the
+  // preflight for a PUT came back `access-control-allow-methods: GET,HEAD,POST`, so the browser
+  // never sent it.
   await fastify.register(cors, { origin: opts.corsOrigin, methods: ['GET', 'HEAD', 'POST', 'PUT'] });
 
   // global: false — this instance only enforces limits on routes that opt in
@@ -60,6 +63,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await fastify.register(catchesRoutes);
   await fastify.register(tagsRoutes);
   await fastify.register(estatesRoutes);
+  await fastify.register(saveRoutes);
 
   return fastify;
 }

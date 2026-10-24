@@ -25,6 +25,7 @@
 import { initWorld } from './game/world.js';
 import { toast } from './ui/toast.js';
 import { mountAuthGate } from './ui/auth/gate.js';
+import { hydrate, startSync } from './net/cloud-save.js';
 import { mountLeaderboard } from './ui/leaderboard/panel.js';
 import { NetClient } from './net/client.js';
 import { createRemoteBoatManager } from './net/remote-boats.js';
@@ -36,6 +37,15 @@ if (!wrap) throw new Error('main: #wrap not found');
 
 async function boot(): Promise<void> {
   const gate = await mountAuthGate();
+
+  // Signed in: the account's saved game goes into localStorage before any system reads it, and
+  // changes are uploaded from then on (net/cloud-save.ts).
+  if (gate.mode === 'online') {
+    const session = { token: gate.token, userId: gate.userId, displayName: gate.displayName };
+    const loaded = await hydrate(session);
+    if (loaded !== 'unreachable') startSync(session);
+    else toast('Could not load your saved game — playing this browser\'s copy, unsaved to your account.');
+  }
 
   const world = initWorld(wrap!);
 

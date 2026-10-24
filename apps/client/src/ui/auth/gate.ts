@@ -10,24 +10,25 @@
  */
 import { login, logout, me, register, ApiError } from './api.js';
 import { saveSession, loadSavedSession, clearSession, type Session } from './session.js';
+import { signOutSave } from '../../net/cloud-save.js';
 import './auth.css';
 
 export type GateResult = { mode: 'online'; token: string; userId: string; displayName: string } | { mode: 'offline' };
 
 const VALIDATE_TIMEOUT_MS = 3000;
 
-async function validateSavedSession(session: Session): Promise<boolean> {
+async function validateSavedSession(session: Session): Promise<'ok' | 'invalid' | 'unreachable'> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), VALIDATE_TIMEOUT_MS);
   try {
     await me(session.token);
-    return true;
+    return 'ok';
   } catch (err) {
     // A clear auth rejection (expired/revoked) invalidates the saved session; a network error
     // (api down) does not — we just can't confirm it right now, so fall through to the gate UI
     // rather than silently discarding a token that might still be good.
-    if (err instanceof ApiError && err.status === 401) return false;
-    return false;
+    if (err instanceof ApiError && err.status === 401) return 'invalid';
+    return 'unreachable';
   } finally {
     clearTimeout(timer);
   }
@@ -36,9 +37,9 @@ async function validateSavedSession(session: Session): Promise<boolean> {
 export async function mountAuthGate(): Promise<GateResult> {
   const saved = loadSavedSession();
   if (saved) {
-    const ok = await validateSavedSession(saved);
-    if (ok) return { mode: 'online', token: saved.token, userId: saved.userId, displayName: saved.displayName };
-    clearSession();
+    const v = await validateSavedSession(saved);
+    if (v === 'ok') return { mode: 'online', token: saved.token, userId: saved.userId, displayName: saved.displayName };
+    if (v === 'invalid') clearSession();
   }
   return new Promise<GateResult>((resolve) => {
     buildGateUI(resolve);
@@ -49,8 +50,10 @@ export async function mountAuthGate(): Promise<GateResult> {
  * without duplicating the API call + storage-clear logic. Reloads the page: the simplest correct
  * way to fully unwind an in-progress net connection + rendered world back to the gate. */
 export async function logOutAndReload(token: string): Promise<void> {
-  try { await logout(token); } catch { /* best-effort */ }
+  const session = loadSavedSession();
+  if (session) await signOutSave(session); // last save up, offline game back (net/cloud-save.ts)
   clearSession();
+  try { await logout(token); } catch { /* best-effort */ }
   location.reload();
 }
 
