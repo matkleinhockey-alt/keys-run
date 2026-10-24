@@ -16,6 +16,9 @@
  */
 import type { SpearFightState } from '@keysrun/shared/sim/spear';
 
+/** A speared fish has no chafing leader, so the bar's danger point does not move. */
+const SPEAR_HOT = 0.82;
+
 function $(id: string): HTMLElement | null { return document.getElementById(id); }
 
 export interface SpearFightUI {
@@ -41,7 +44,13 @@ export function createSpearFightUI(): SpearFightUI {
     const fT = $('fT');
     if (fT) {
       fT.style.width = Math.max(0, Math.min(1, fight.tension)) * 100 + '%';
-      fT.className = fight.tension > 0.82 ? 'hot' : fight.tension < 0.08 ? 'slack' : '';
+      fT.className = fight.tension > SPEAR_HOT ? 'hot' : fight.tension < 0.08 ? 'slack' : '';
+      // Set the zones explicitly rather than inheriting them. A spear fight has no chafing
+      // leader, so its thresholds are fixed — but the rod fight moves these on the same shared
+      // element (game/fishing/update.ts), and a worn-down limit left over from the last fish
+      // would otherwise paint this bar's danger zone in the wrong place.
+      const track = fT.parentElement;
+      if (track) { track.style.setProperty('--warn', SPEAR_HOT * 100 + '%'); track.style.setProperty('--snap', '100%'); }
     }
     const fLine = $('fLine');
     if (fLine) fLine.textContent = Math.round(fight.dist) + ' m';

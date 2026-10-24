@@ -277,6 +277,24 @@ export function scaledLenM(key: string, weight: number): number {
 }
 
 /**
+ * Where the tension bar's warning and snapping zones sit, as percentages of a full bar.
+ *
+ * The bar used to paint these at a fixed 82% and 100% in CSS while the line actually parts at
+ * `limit`, which starts at 1 and falls to 0.45 as the leader chafes (`limit = 1 - 0.55 *
+ * abrasion`). So late in a long fight the line let go at 45% tension while the meter was still
+ * showing green to 82%: it told you that you were safe exactly when you were not, which is the
+ * worst thing a gauge can do. Driving the zones from the live limit instead means the red creeps
+ * leftwards as the leader wears, so a chafing leader is something you can watch happen.
+ */
+export function tensionZones(limit: number): { warnPct: number; snapPct: number } {
+  const snap = clamp(limit, 0, 1);
+  return { warnPct: +(snap * HOT_FRACTION * 100).toFixed(1), snapPct: +(snap * 100).toFixed(1) };
+}
+
+/** Fraction of the current limit at which the bar turns hot — the "back off" point. */
+export const HOT_FRACTION = 0.8;
+
+/**
  * What owned gear and a spent consumable change in a fight. A structural subset of shop.ts's
  * `Modifiers` (so a whole bag can be passed straight in) plus the one consumable effect that
  * belongs to the fight and not to the cast: a fluorocarbon leader.

@@ -12,7 +12,7 @@ import type { CamState, FpState } from '../../entities/camera.js';
 import { sampleWaterHeight } from '../../entities/boat/visuals.js';
 import { landH, zoneAt, nearHump } from '@keysrun/shared/world/depth';
 import { ampAt } from '@keysrun/shared/sim/depth-grid';
-import { chooseFish, fightParamsFor, scaledLenM, startFight, stepFight, type FightState } from '@keysrun/shared/sim/fight';
+import { chooseFish, fightParamsFor, scaledLenM, startFight, stepFight, type FightState, tensionZones, HOT_FRACTION } from '@keysrun/shared/sim/fight';
 import { xoshiro128ss } from '@keysrun/shared/rng';
 import { SPECIES } from '@keysrun/shared/content/species';
 import type { Tackle } from '@keysrun/shared/content/tackle';
@@ -370,7 +370,15 @@ export function createFishingLogic(deps: FishingDeps) {
       visuals.updateHooked(t, dt, next.running, next.shake, next.deep, next.airborne);
 
       const fT = $('fT');
-      if (fT) { fT.style.width = clamp(next.tension, 0, 1) * 100 + '%'; fT.className = next.tension > next.limit * 0.8 ? 'hot' : next.tension < 0.08 ? 'slack' : ''; }
+      if (fT) {
+        fT.style.width = clamp(next.tension, 0, 1) * 100 + '%';
+        fT.className = next.tension > next.limit * HOT_FRACTION ? 'hot' : next.tension < 0.08 ? 'slack' : '';
+        // Move the painted zones with the real limit, or the track keeps promising green water
+        // where the line now parts — see sim/fight.ts's tensionZones.
+        const z = tensionZones(next.limit);
+        const track = fT.parentElement;
+        if (track) { track.style.setProperty('--warn', z.warnPct + '%'); track.style.setProperty('--snap', z.snapPct + '%'); }
+      }
       setText('fLine', Math.round(next.dist) + ' m');
       const fStam = $('fStam'); if (fStam) fStam.style.width = next.stam * 100 + '%';
 

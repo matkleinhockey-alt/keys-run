@@ -110,7 +110,7 @@ button:focus-visible{outline:3px solid var(--sun);outline-offset:2px}
 #fight{position:absolute;left:50%;transform:translateX(-50%);bottom:90px;width:min(440px,92vw);padding:12px 16px}
 #fLabel{font-family:var(--display);font-weight:800;font-size:22px;line-height:1.1}
 #fSub{font-size:12px;color:var(--muted);margin:2px 0 8px}
-.tbar{position:relative;height:18px;border-radius:9px;background:linear-gradient(90deg,rgba(255,255,255,.12) 0 8%,rgba(127,227,212,.28) 8% 82%,rgba(228,87,46,.45) 82% 100%);overflow:hidden}
+.tbar{position:relative;height:18px;border-radius:9px;--warn:82%;--snap:100%;background:linear-gradient(90deg,rgba(255,255,255,.12) 0 8%,rgba(127,227,212,.28) 8% var(--warn),rgba(228,87,46,.45) var(--warn) var(--snap),rgba(228,87,46,.82) var(--snap) 100%);overflow:hidden}
 .tbar i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--sun);border-radius:9px;mix-blend-mode:screen}
 .tbar i.hot{background:var(--marker)}
 .tbar i.slack{background:#d7dde2}
