@@ -22,6 +22,14 @@ export interface CreatureVis {
   sail?: boolean;
   bill?: number;
   wings?: boolean;
+  /**
+   * Lies flat on the bottom rather than swimming upright: a flatfish. The body is authored
+   * upright like every other fish (a deep `h`, a very thin `w`) and rolled a quarter turn at
+   * render time — see entities/fish/school.ts. That is what a flounder anatomically IS, so the
+   * dorsal and anal fins become the fringe down its two long edges and the baked swim bend
+   * sweeps in the vertical plane, which is how a flatfish actually undulates, both for free.
+   */
+  flat?: boolean;
   flap?: boolean;
   tuna?: boolean;
   finlet?: string;
@@ -76,6 +84,9 @@ export const VIS: Record<string, CreatureVis> = {
   cero:{kind:'fish',len:.7,h:.14,w:.09,back:'#3f6286',belly:'#eef2f5',fin:'#c9b25a',pattern:'gspots',level:'surface',speed:2.2,school:[3,6],spread:3,dMin:4,dMax:60},
   jackcrevalle:{kind:'fish',len:.85,h:.32,w:.14,back:'#4f6a6e',belly:'#e6e4c6',fin:'#d9bd4a',pattern:'gillspot',level:'mid',speed:2,school:[4,9],spread:4,dMin:1,dMax:40},
   ladyfish:{kind:'fish',len:.6,h:.12,w:.08,back:'#7f9aa0',belly:'#eef3f4',fin:'#a8b8bd',level:'surface',speed:1.8,school:[4,10],spread:4,dMin:.5,dMax:7},
+  // Deep and extremely thin (h 10x w) because that is a flatfish seen head-on, plus `flat` to
+  // lay it over. `belly` is near-white: a flounder's underside is the blind side and unpigmented.
+  flounder:{kind:'fish',len:.5,h:.3,w:.055,back:'#6b5f4a',belly:'#efe9dd',fin:'#5e5342',pattern:'spot',flat:true,level:'bottom',speed:.45,school:[1,2],spread:2.2,dMin:.5,dMax:14},
   sheepshead:{kind:'fish',len:.55,h:.3,w:.1,back:'#c9c9c0',belly:'#eeeeea',fin:'#3a3a38',pattern:'bars',level:'bottom',speed:.8,school:[2,6],spread:2.5,dMin:2,dMax:20},
   pompano:{kind:'fish',len:.42,h:.2,w:.07,back:'#9aa9ad',belly:'#f1e9b0',fin:'#e5c84a',level:'mid',speed:1.6,school:[3,7],spread:3,dMin:.8,dMax:8},
   tripletail:{kind:'fish',len:.65,h:.32,w:.12,back:'#4e4434',belly:'#6b5e47',fin:'#3b3226',pattern:'mottle',level:'surface',speed:.3,school:[1,1],spread:0,dMin:2,dMax:1e5},
@@ -267,16 +278,16 @@ export function isCatchable(key: string): boolean {
  */
 export const ZONE_LIFE: Record<string, Array<[string, number]>> = {
   // Mangrove creek channels — juveniles sheltering along the edges.
-  'Creek':[['sawfish',.05],['snook',3],['redfish',2.5],['tarpon',1.5],['manatee',1],['mangrove',3.5],['ladyfish',2.5],['trout',1.5],['jackcrevalle',1]],
+  'Creek':[['flounder',2],['sawfish',.05],['snook',3],['redfish',2.5],['tarpon',1.5],['manatee',1],['mangrove',3.5],['ladyfish',2.5],['trout',1.5],['jackcrevalle',1]],
   // Very shallow skinny water — bonefish/permit on the sand, small sharks cruising the edges.
-  'Flats':[['sawfish',.07],['bonefish',5],['permit',2.2],['stingray',3],['redfish',1.5],['barracuda',2],['blacktip',1.5],['lemonshark',1],['eagleray',1],['ladyfish',3],['pompano',1.2],['palometa',3],['bluerunner',2],['manatee',.7]],
+  'Flats':[['flounder',2.5],['sawfish',.07],['bonefish',5],['permit',2.2],['stingray',3],['redfish',1.5],['barracuda',2],['blacktip',1.5],['lemonshark',1],['eagleray',1],['ladyfish',3],['pompano',1.2],['palometa',3],['bluerunner',2],['manatee',.7]],
   // Florida Bay backcountry — juvenile snapper, small barracuda, rays on the sand, baitfish
   // schools, manatees in the shallows, and dolphin pods working the bay ("the bay" in the task
   // brief).
-  'Backcountry':[['sawfish',.06],['redfish',4],['snook',3],['trout',3],['mangrove',2.5],['tarpon',2],['bonefish',1.5],['permit',1],['barracuda',1.2],['manatee',1.2],['stingray',2.2],['jackcrevalle',2],['ladyfish',3],['pompano',1.5],['tripletail',.6],['dolphin',1.5]],
+  'Backcountry':[['flounder',2.5],['sawfish',.06],['redfish',4],['snook',3],['trout',3],['mangrove',2.5],['tarpon',2],['bonefish',1.5],['permit',1],['barracuda',1.2],['manatee',1.2],['stingray',2.2],['jackcrevalle',2],['ladyfish',3],['pompano',1.5],['tripletail',.6],['dolphin',1.5]],
   // Bridge pilings and the channels that run under them — structure-holders in current. Dolphin
   // pods regularly work the bridge channels for bait pushed through on the tide.
-  'Bridge':[['tarpon',5],['snook',2],['mangrove',3],['eagleray',1],['sheepshead',3],['goliath',.6],['jackcrevalle',1.5],['nurse',1],['cobia',1],['barracuda',1],['dolphin',1.2],['lookdown',3.5],['bluerunner',4],['schoolmaster',2],['manatee',.9]],
+  'Bridge':[['flounder',1.5],['tarpon',5],['snook',2],['mangrove',3],['eagleray',1],['sheepshead',3],['goliath',.6],['jackcrevalle',1.5],['nurse',1],['cobia',1],['barracuda',1],['dolphin',1.2],['lookdown',3.5],['bluerunner',4],['schoolmaster',2],['manatee',.9]],
   // Mixed mid-water schools, mackerel and jacks between the Bay and the reef line — classic
   // bottlenose water, hence the higher dolphin weight ("less rare" per the task brief).
   'Hawk Channel':[['mangrove',4],['eagleray',2],['turtle',1.5],['barracuda',2],['nurse',1.5],['mutton',2],['dolphin',1.8],['cero',2],['pompano',1.5],['cobia',1],['graytrigger',1.2],['jackcrevalle',1.8],['yellowtail',1.5],['sheepshead',1.2],['tarpon',1.6],['goliath',.5],['bullshark',.35],['bluerunner',4.5],['lanesnapper',3],['spanishmack',3],['lookdown',1.5],['schoolmaster',2]],
@@ -362,6 +373,7 @@ export const SHAPE: Record<string, FishShape> = {
   cero:{peak:.4,nose:1.3,ped:.12,tail:'lunate',tl:.2,th:1.1,dor:[[.2,.4,.25,'spiny'],[.48,.58,.3,'tri']],anal:[[.56,.64,.3,'tri']],pec:.1,finlets:true},
   jackcrevalle:{peak:.36,nose:.5,ped:.1,tail:'fork',tl:.3,th:.75,dor:[[.32,.4,.3,'tri'],[.44,.74,.3,'sickle']],anal:[[.52,.74,.28,'sickle']],pec:.22,hump:.15},
   ladyfish:{peak:.42,nose:1.2,ped:.16,tail:'fork',tl:.3,th:.8,dor:[[.42,.54,.5,'tri']],anal:[[.7,.78,.25,'tri']],pec:.1},
+  flounder:{peak:.46,nose:.35,ped:.13,tail:'round',tl:.15,th:.5,dor:[[.1,.93,.3,'long']],anal:[[.36,.93,.26,'long']],pec:.1,belly:.95},
   sheepshead:{peak:.4,nose:.55,ped:.22,tail:'fork',tl:.18,th:.5,dor:[[.25,.78,.3,'spiny']],anal:[[.6,.78,.3,'round']],pec:.16,hump:.12},
   pompano:{peak:.42,nose:.4,ped:.1,tail:'fork',tl:.32,th:.85,dor:[[.48,.72,.35,'sickle']],anal:[[.5,.72,.35,'sickle']],pec:.14},
   tripletail:{peak:.42,nose:.6,ped:.3,tail:'round',tl:.16,th:.55,dor:[[.3,.78,.35,'round']],anal:[[.55,.8,.38,'round']],pec:.14},
