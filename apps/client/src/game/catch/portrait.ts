@@ -66,6 +66,7 @@ import { isHoldable } from './display-mode.js';
 import { buildOffscreenRig, readback, buildGradientEnv, type OffscreenRig, type Backdrop, resyncRigSize } from './render-pipeline.js';
 import { buildFigure, type Figure } from './figure.js';
 import { beamBetween } from '../../entities/boat/hull.js';
+import { clamp } from '../../core/math.js';
 
 interface PortraitRig extends OffscreenRig {
   pivot: THREE.Group;
@@ -401,7 +402,22 @@ export function createPortrait(canvasId: string): Portrait {
     const PAD = 1.16;
     const dH = (hHalf * PAD) / Math.tan(hf / 2);
     const dV = (vHalf * PAD) / Math.tan(cam.fov * Math.PI / 360);
-    const dv = Math.max(dH, dV, 1e-3);
+    // A pure fit normalises the subject away. Pulling the camera back by exactly enough to
+    // contain whatever is in front of it means a 3 lb yellowtail and a 900 lb bluefin both fill
+    // the card edge to edge, and the captain and the hang rig get rescaled with them, so there
+    // is no ruler left in the shot either: the two cards were measured identical, and the only
+    // thing distinguishing a 51 in fish from a 119 in one was the number printed underneath.
+    //
+    // So the fit is compressed rather than applied whole. On-screen size ends up proportional to
+    // length^(1 - SIZE_COMPRESS): big fish read big without a trophy running off the card, small
+    // ones sit honestly small in the frame. A REF_LEN_M fish is framed exactly as a pure fit
+    // would frame it, so the mid-range catch this was all tuned against is unchanged. The clamp
+    // bounds how far either end can run: a giant may crop at the tail (which is what a real
+    // weigh-station photo of something too big does), a tiny one never recedes to a speck.
+    const SIZE_COMPRESS = 0.45;
+    const REF_LEN_M = 1.2;
+    const relax = clamp(Math.pow(REF_LEN_M / Math.max(lenM, 0.05), 1 - SIZE_COMPRESS), 0.7, 2.2);
+    const dv = Math.max(dH, dV, 1e-3) * relax;
 
     cam.near = Math.max(dv / 100, 1e-4); cam.far = Math.max(dv * 10, 40);
     // A slight three-quarter angle reads more like a photo than a dead-on profile; long/billfish
