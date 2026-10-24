@@ -187,7 +187,19 @@ float wakeH(vec2 P,inout vec2 grad,inout float foam){ float h=0.;
     diffuseColor.rgb=vCol*(.9+.2*tz.b);
     float foam=smoothstep(.58,.95,vCrest)*smoothstep(.6,1.4,uCH)*smoothstep(.35,.7,breakup*.8+tz.a*.4);
     foam=max(foam,smoothstep(.12,.25,vSlope)*smoothstep(.4,.75,breakup)*.8);
-    foam=max(foam,smoothstep(.04,.28,vWake)*smoothstep(.2,.6,breakup+.15));
+    // Wake foam. The wedge geometry underneath is already right — sim/boat.ts emits each ring at
+    // c = 0.34*v, so the envelope of the expanding circles is the real ~19.5 degree Kelvin angle —
+    // but the old ramp painted straight over it: it saturated at vWake .28 while forty overlapping
+    // rings sum far past that, so the entire interior of the wedge went flat opaque white and every
+    // crest and trough inside it was lost. Ramping much later and wider keeps the white for the
+    // genuinely churned core behind the transom and lets the rest read as a sheen with the wake's
+    // own waves still visible through it.
+    float wkCore=smoothstep(.16,.95,vWake);
+    // Foam separates into filaments dragged astern rather than lying as one sheet. A second sample
+    // stretched along the wake gives that; the old breakup+.15 floor saturated this factor to 1
+    // over most of the texture, which is why the sheet had no structure at all.
+    float wkStreak=texture2D(uNorm,vWP.xz*vec2(.035,.14)+vec2(-uTime*.05,uTime*.02)).a;
+    foam=max(foam,wkCore*smoothstep(.18,.72,breakup*.55+wkStreak*.65));
     diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.95,.97,1.),foam);
     diffuseColor.a=mix(vWA,1.,foam);`)
       .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>

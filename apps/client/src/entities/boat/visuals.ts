@@ -151,6 +151,13 @@ function applySpray(state: BoatState, ctx: VisualsCtx, fx: number, fz: number, r
   while (wakeAcc > 1) {
     wakeAcc--;
     const sx = state.x - fx * L * 1.05, sz = state.z - fz * L * 1.05;
+    // SIZE is the lever here, not alpha. These sprites used to be 2.5-4.5 m across and spawn about
+    // ninety a second at planing speed, so a few hundred of them overlapped at any moment and summed
+    // — at any alpha — into a shapeless pale fog that covered the whole wake and hid the thing worth
+    // looking at: sim/boat.ts emits wake rings at c = 0.34*v, so the height field underneath already
+    // carries a true ~19.5 degree Kelvin wedge, and the fog sat on top of it. Roughly a third the
+    // radius covers far less of each other, which is what lets that wedge read; alpha goes up a
+    // little to keep the churn behind the transom visible now that fewer sprites pile up.
     // Alpha cut ~15x from the legacy values (0.55/0.7) here only, and growth rate cut too (see
     // world/particles.ts): r186's colour-managed transparent blending composites many overlapping
     // soft-white sprites in correct linear light instead of r128's uncorrected gamma-space
@@ -165,10 +172,10 @@ function applySpray(state: BoatState, ctx: VisualsCtx, fx: number, fz: number, r
       ctx.particles.spawnP(
         sx + rx * B * 0.8 * sgn, 0.1, sz + rz * B * 0.8 * sgn,
         rx * sgn * (1.2 + sp * 0.07) - fx * sp * 0.15, 0, rz * sgn * (1.2 + sp * 0.07) - fz * sp * 0.15,
-        rand(2.5, 4.5), rand(1, 1.6), 0.035, false, ctx.amp,
+        rand(0.9, 1.8), rand(1.1, 1.8), 0.07, false, ctx.amp,
       );
     }
-    ctx.particles.spawnP(sx + rand(-0.4, 0.4), 0.1, sz + rand(-0.4, 0.4), -fx * sp * 0.25, 0, -fz * sp * 0.25, rand(2, 3.5), rand(1.2, 1.8), 0.045, false, ctx.amp);
+    ctx.particles.spawnP(sx + rand(-0.4, 0.4), 0.1, sz + rand(-0.4, 0.4), -fx * sp * 0.25, 0, -fz * sp * 0.25, rand(0.8, 1.5), rand(0.9, 1.4), 0.08, false, ctx.amp);
   }
   const f = sp / ctx.hull.topMs;
   if (f > 0.3 && Math.random() < ctx.dt * sp * 0.8) {
