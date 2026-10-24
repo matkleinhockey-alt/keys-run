@@ -353,12 +353,19 @@ function stepMember(
   if (g.glide > 0) { y = surf + 0.45 + Math.sin(t * 3 + m.seed) * 0.12; pitch = 0.05; }
   if (V.flap) roll = Math.sin(t * 2.2 + m.seed) * 0.28;
   else if (V.kind === 'ray') roll = Math.sin(t * 1.5 + m.seed) * 0.05;
+  // A flatfish lies over on one side (content/creatures.ts's `flat`). The body is authored
+  // upright like every other fish, so laying it over is a quarter turn here rather than a second
+  // geometry path: the deep-and-thin loft becomes a wide flat one, the dorsal and anal fringes
+  // end up running down its two long edges, and the baked lateral swim bend sweeps vertically,
+  // which is how a flatfish actually undulates. The small wobble is the fringe rippling, not a
+  // bank — a fish lying on the bottom has no corner to lean into.
+  else if (V.flat) roll = Math.PI / 2 + Math.sin(t * 1.1 + m.seed) * 0.04;
 
   // Bank into the turn. A fish leans INTO a corner, so a left turn rolls it left — and a slow
   // heavy body leans less for the same corner than a quick one, which is why this is scaled by
   // cruise speed rather than being one constant. Capped: a school hard against the world
   // boundary turns fast enough to put a fish on its side otherwise.
-  if (!V.flap) {
+  if (!V.flap && !V.flat) {
     const bank = clamp(-g.turnRate * (0.30 + 0.10 * V.speed), -BANK_MAX, BANK_MAX);
     m.bank = lerp(m.bank, bank, Math.min(1, dt * 3));
     roll += m.bank;
