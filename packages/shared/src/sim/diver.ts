@@ -131,12 +131,22 @@ export const VERTICAL_KICK_ACCEL = 2.2;
  * the buoyancy curve. It used to be: `VERTICAL_KICK_ACCEL` pulsed, versus up to
  * `BUOY_MAX_NEGATIVE_ACCEL` of sink below neutral, so from 30 m holding Space still sank you
  * (146 m after two minutes) and from 20 m it took 18 s. Now it drives vertical speed toward a
- * target rate with a short response time, regardless of depth or buoyancy: 30 m in ~14 s, ~10 s
- * sprinting. The assist eases off over the last `ASCEND_EASE_DEPTH` so the diver arrives at the
- * surface instead of launching out of it.
+ * target rate with a short response time, regardless of depth or buoyancy. The assist eases off
+ * over the last `ASCEND_EASE_DEPTH` so the diver arrives at the surface instead of launching out
+ * of it.
+ *
+ * The rate is set by the AIR BUDGET, not by feel. Air burns at `ataAt(depth)` times a ~1.54x
+ * kicking-exertion multiplier, so the trip up costs air at 3-4x real time from any real depth —
+ * which means the ascent speed decides whether coming up is affordable at all. At the previous
+ * 2.5 (~2.17 delivered against drag and buoyancy) surfacing from 25 m cost 40 s of a 90 s
+ * budget, 44%, and 35 m cost 76%: a diver who went deep with half a breath left blacked out
+ * short of the surface holding Space the whole way, which is the "it won't come up for air" bug.
+ * At 4.6 (~4.0 delivered) the same trips cost 24% and 41% — deep water is still a real decision,
+ * but the way back is always buyable. See test/diver-ascend.test.ts, which pins that property
+ * rather than the speed, so retuning this cannot quietly reintroduce the trap.
  */
-export const ASCEND_SPEED = 2.5;
-export const ASCEND_SPEED_SPRINT = 3.5;
+export const ASCEND_SPEED = 4.6;
+export const ASCEND_SPEED_SPRINT = 6.4;
 /** 1/s — how quickly vertical speed reaches the ascent rate (~0.1 s; it is re-applied every step against that step's drag and buoyancy, so a soft value settles well under the target). */
 export const ASCEND_RESPONSE = 12;
 export const ASCEND_EASE_DEPTH = 1.5;
