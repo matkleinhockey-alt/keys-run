@@ -62,13 +62,44 @@ export function createRodViewModel(camera: THREE.Camera): RodViewModel {
   s0.add(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.032, 0.34, 10).translate(0, 0.12, 0), cork));
 
   const reel = new THREE.Group();
+  reel.name = 'reel';
   reel.position.set(0, 0.3, -0.075);
   s0.add(reel);
+  // A spinning reel, built to its real anatomy. It used to be two plain cylinders and a stick:
+  // a bare gold drum standing on a dark barrel, with no bail, no line on it and no drag. The bail
+  // is the one shape that says "spinning reel" at a glance, and its absence was most of why this
+  // read as a lump rather than a reel. The rod runs along +Y with the tip at +Y, so the spool sits
+  // forward of the gearbox, which is where it belongs.
+  const steel = new THREE.MeshStandardMaterial({ color: 0xb9c0c7, metalness: 0.85, roughness: 0.22 });
+  const lineMat = new THREE.MeshStandardMaterial({ color: 0xdfe6ea, roughness: 0.75, metalness: 0.05 });
+  // Foot and stem: what actually clamps to the blank.
   reel.add(new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.012, 0.06).translate(0, 0, 0.035), dark));
-  reel.add(new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.08, 14), dark));
-  const spool = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.042, 0.05, 14), gold);
+  reel.add(new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.08, 20), dark));
+  // Rotor cup around the base of the spool, with the arm that carries the bail.
+  const rotor = new THREE.Mesh(new THREE.CylinderGeometry(0.046, 0.043, 0.028, 20), dark);
+  rotor.position.y = 0.05;
+  reel.add(rotor);
+  // Spool: two flanges with the line pack between them, not a solid drum.
+  const spool = new THREE.Group();
   spool.position.y = 0.065;
   reel.add(spool);
+  spool.add(new THREE.Mesh(new THREE.CylinderGeometry(0.0445, 0.0445, 0.005, 20).translate(0, -0.024, 0), gold));
+  spool.add(new THREE.Mesh(new THREE.CylinderGeometry(0.0445, 0.0445, 0.005, 20).translate(0, 0.024, 0), gold));
+  spool.add(new THREE.Mesh(new THREE.CylinderGeometry(0.0395, 0.0395, 0.043, 20), lineMat));
+  // Front drag knob — the stack of thumb-wheels on top of a front-drag reel.
+  spool.add(new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.022, 0.012, 14).translate(0, 0.032, 0), gold));
+  spool.add(new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.008, 12).translate(0, 0.041, 0), dark));
+  // The bail: a wire hoop arcing over the front of the spool, with the line roller at one end.
+  // A half-torus in the XY plane arcs over +Y, which is exactly the path a real bail takes.
+  // Radius clears the 0.0445 flange: at 0.05 the hoop grazed through the spool instead of arcing
+  // over it, which is the one thing a bail must visibly do.
+  const bail = new THREE.Mesh(new THREE.TorusGeometry(0.058, 0.0032, 6, 20, Math.PI), steel);
+  bail.position.y = 0.072;
+  reel.add(bail);
+  const roller = new THREE.Mesh(new THREE.CylinderGeometry(0.0068, 0.0068, 0.012, 10), steel);
+  roller.rotation.z = Math.PI / 2;
+  roller.position.set(0.058, 0.072, 0);
+  reel.add(roller);
   const handle = new THREE.Group();
   handle.position.set(0.055, 0, 0);
   reel.add(handle);
