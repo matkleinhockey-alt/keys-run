@@ -12,19 +12,60 @@
  */
 import { SPECIES } from '../content/species.js';
 
-/** von Bertalanffy-style growth rate, as the fraction of the remaining gap to the species max
- * closed per day at large. 0.02 means a 20 lb mahi (max 55) is ~26 lb after two weeks and ~38 lb
+/** von Bertalanffy-style growth rate, as the fraction of the remaining gap to this fish's own
+ * ceiling (`growthCeiling`) closed per day at large. 0.02 means a 20 lb mahi (max 55) is ~26 lb after two weeks and ~38 lb
  * after two months: visible from one recapture to the next without every tagged fish being a
  * record within a week. */
 export const GROWTH_K_PER_DAY = 0.02;
 
-/** Weight after `days` at large. Never shrinks, never passes the species max (a fish tagged above
- * the max by some quirk keeps its weight rather than being pulled down to it). */
-export function grownWeight(speciesKey: string, weightLb: number, days: number): number {
+/**
+ * The weight THIS individual is growing towards — its own ceiling, not the species record.
+ *
+ * Growth used to use `SPECIES.max` as the asymptote for every tagged fish, which meant time
+ * alone produced records: at k = 0.02/day a tarpon tagged at 80 lb reaches 159.95 lb of a 160 lb
+ * maximum inside a year, and so does every other tarpon. Any tag left out long enough came back
+ * a record, and the species leaderboard became a question of patience rather than of catching
+ * anything. Real fish each stop at their own size, and only a rare one approaches the biggest
+ * ever recorded.
+ *
+ * So each tag draws a ceiling from its own number, uniformly between the middle of the species
+ * range and the record. Half of all tagged fish therefore top out below the three-quarter mark,
+ * and a fish that genuinely grows into a record is uncommon. It is derived rather than stored:
+ * the tag number is already a stable per-fish identity in both registries, so this needs no new
+ * column and no migration, and the same fish grows the same way wherever it is evaluated.
+ *
+ * A fish tagged above its drawn ceiling (a big one from the start) keeps the larger figure: the
+ * ceiling can only ever be the bigger of the two, never a reason to shrink.
+ */
+export function growthCeiling(speciesKey: string, weightLb: number, tagNo: number): number {
   const S = SPECIES[speciesKey];
-  if (!S || !(days > 0) || weightLb >= S.max) return +weightLb.toFixed(2);
-  const w = S.max - (S.max - weightLb) * Math.exp(-GROWTH_K_PER_DAY * days);
-  return +w.toFixed(2);
+  if (!S) return weightLb;
+  // Integer hash of the tag number -> u in [0,1). Deterministic and stable for the life of
+  // the tag; no stored state, so client and server always agree.
+  let h = Math.imul(tagNo ^ 0x9e3779b9, 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  const u = ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  const mid = (S.min + S.max) / 2;
+  return Math.max(weightLb, mid + (S.max - mid) * u);
+}
+
+/** Weight after `days` at large, growing towards this individual's own ceiling (see
+ * `growthCeiling`). Never shrinks, and never passes that ceiling. */
+export function grownWeight(speciesKey: string, weightLb: number, days: number, tagNo: number): number {
+  const S = SPECIES[speciesKey];
+  if (!S || !(days > 0)) return +weightLb.toFixed(2);
+  const ceiling = growthCeiling(speciesKey, weightLb, tagNo);
+  if (weightLb >= ceiling) return +weightLb.toFixed(2);
+  const w = ceiling - (ceiling - weightLb) * Math.exp(-GROWTH_K_PER_DAY * days);
+  // Clamp AFTER rounding: a fish all but converged rounds up, and 2 dp of rounding was enough to
+  // report a weight a hundredth of a pound past its own ceiling.
+  return Math.min(+w.toFixed(2), +ceiling.toFixed(2));
+}
+
+/** `"KR-00042"` -> `42`. The client registry carries the printed code rather than the raw
+ * number, and `grownWeight` needs the number to find this fish's own ceiling. */
+export function tagNoFromCode(code: string): number {
+  return Number.parseInt(code.replace(/^KR-/, ''), 10) || 0;
 }
 
 /** How far (world metres) a tagged fish may have moved from its last release point. A fish just

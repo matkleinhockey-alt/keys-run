@@ -24,6 +24,7 @@ import {
   RECAPTURE_P,
   grownWeight,
   tagCode,
+  tagNoFromCode,
   wanderRadiusM,
   type TagEvent,
   type TaggedFish,
@@ -66,7 +67,7 @@ function saveLocal(list: TaggedFish[]): void {
 
 function withGrowth(f: TaggedFish, now: number): TaggedFish {
   if (f.status !== 'at_large') return f;
-  return { ...f, weightLb: grownWeight(f.speciesKey, f.weightLb, daysSince(f.lastSeenAt, now)) };
+  return { ...f, weightLb: grownWeight(f.speciesKey, f.weightLb, daysSince(f.lastSeenAt, now), tagNoFromCode(f.code)) };
 }
 
 function localEvent(kind: TagEvent['kind'], weightLb: number, at: Landing, now: number): TagEvent {

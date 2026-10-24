@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { eq } from 'drizzle-orm';
-import { DAY_MS, grownWeight, type TaggedFish } from '@keysrun/shared/sim/tagging';
+import { DAY_MS, grownWeight, tagNoFromCode, type TaggedFish } from '@keysrun/shared/sim/tagging';
 import type { DbHandle } from '../db/client.js';
 import { taggedFish } from '../db/schema.js';
 import { buildTestApp, registerUser, loginUser, testDbHandle, truncateAll } from './helpers.js';
@@ -61,7 +61,9 @@ describe('tag and release', () => {
     const [found] = (nearby.json() as { fish: TaggedFish[] }).fish;
     expect(found.id).toBe(fish.id);
     expect(found.weightLb).toBeGreaterThan(80);
-    expect(found.weightLb).toBeCloseTo(grownWeight('tarpon', 80, 30), 0);
+    // Growth is towards this individual's own ceiling, so the expectation has to use its tag
+    // number too (sim/tagging.ts's growthCeiling) rather than the species record.
+    expect(found.weightLb).toBeCloseTo(grownWeight('tarpon', 80, 30, tagNoFromCode(fish.code)), 0);
 
     // Too far away for where a 30-day-old tag could have wandered.
     nearby = await app.inject({ method: 'GET', url: '/tags/nearby?x=5000&z=5000' });
