@@ -82,6 +82,27 @@ export type SchoolEvent =
  * BEAT_MIN is not 0: a fish holding station still sculls, and a frozen tail reads as a dead one.
  */
 const BEAT_MIN = 0.45, BEAT_MAX = 2.4;
+/**
+ * How deep a `level: 'surface'` species actually cruises, in metres below the wave surface.
+ *
+ * They used to sit at a flat 0.5 m always, which put a school of tuna permanently on top of the
+ * water whether it was feeding or not. A tuna works the top of the column, but it is not a
+ * floating object: it comes up to feed and drops back down. This is the "down".
+ */
+const SURFACE_CRUISE_M = 3.4;
+
+/** How long a school-wide surface frenzy runs, and how long between them. A frenzy should be
+ * something you spot from a distance and run to, not the sea's resting state. */
+const FRENZY_S: readonly [number, number] = [9, 18];
+const FRENZY_CD_S: readonly [number, number] = [40, 110];
+/** The last seconds of a frenzy are also the rise into it: the school eases up and back down
+ * rather than teleporting to the top. */
+const FRENZY_RISE_S = 3;
+
+/** Where a mid-water species sits between the floor and the surface, 0 at the bottom. Nudged down
+ * from 0.55 — everything in the column was riding a little high. */
+const MID_LEVEL = 0.46;
+
 /** rad — about 21 degrees. A banking fish, not a barrel roll. */
 const BANK_MAX = 0.37;
 
@@ -133,6 +154,23 @@ export function stepSchool(state: SchoolState, V: CreatureVis, ctx: SchoolCtx): 
     g.fleeHeading = fleeHeadingFrom(g.cx, g.cz, trigger);
   }
   if (V.act === 'glide' && !g.glide && Math.random() < dt * 0.03) g.glide = rand(1.6, 3.4);
+
+  // School-wide feeding frenzy, for the species that bust. Runs on its own clock rather than
+  // per member, so the whole school comes up together, works the surface for a few seconds and
+  // drops back down — which is what a frenzy looks like, and what makes one worth running to.
+  // A spooked school does not feed.
+  if (V.act === 'bust') {
+    if (g.frenzy > 0) {
+      g.frenzy -= dt;
+      if (g.frenzy <= 0) g.frenzyTimer = rand(FRENZY_CD_S[0], FRENZY_CD_S[1]);
+    } else {
+      g.frenzyTimer -= dt;
+      if (g.frenzyTimer <= 0) {
+        if (g.flee > 0) g.frenzyTimer = rand(4, 10);
+        else g.frenzy = rand(FRENZY_S[0], FRENZY_S[1]);
+      }
+    }
+  }
 
   let sp = V.speed;
   if (bowRiding && boatThreat && boatThreat.heading !== undefined) {
@@ -305,15 +343,30 @@ function stepMember(
   let y: number;
   const hold = g.anchor?.hold;
   if (hold && V.level !== 'bottom') y = clamp(floor + hold.h + m.oy * hold.r, floor + 0.4, surf - 0.6);
-  else if (V.level === 'surface') y = surf - 0.5 - (m.oy + 1) * 0.15;
-  else if (V.level === 'bottom') y = floor + 0.25 + (m.oy + 1) * 0.05;
-  else y = clamp(lerp(floor + 0.35, surf - 0.45, 0.55 + m.oy * 0.2), floor + 0.2, surf - 0.35);
+  else if (V.level === 'surface') {
+    // A "surface" species is one that works the top of the water column, not one that lives with
+    // its back out of it. These used to sit at a flat `surf - 0.5` always, so a school of tuna
+    // was permanently skimming the surface whether it was feeding or not; from the helm the
+    // ocean looked like it had tuna lying on it. They cruise at a real depth now and come up for
+    // a reason — see the frenzy below.
+    y = surf - SURFACE_CRUISE_M - (m.oy + 1) * 0.6;
+    if (g.frenzy > 0) {
+      // Up together when the school is busting, and back down as it dies off.
+      const up = Math.min(1, g.frenzy / FRENZY_RISE_S);
+      y = lerp(y, surf - 0.5 - (m.oy + 1) * 0.15, up);
+    }
+    y = Math.max(floor + 0.4, y);
+  } else if (V.level === 'bottom') y = floor + 0.25 + (m.oy + 1) * 0.05;
+  else y = clamp(lerp(floor + 0.35, surf - 0.45, MID_LEVEL + m.oy * 0.2), floor + 0.2, surf - 0.35);
   if (g.dive > 0 && V.level !== 'bottom' && !hold) y = lerp(y, Math.max(floor + 0.5, surf - Math.min(14, (surf - floor) * 0.85)), g.dive);
 
   let pitch = 0, roll = 0;
   if (V.act && V.act !== 'glide') {
     m.actTimer -= dt;
-    if (!m.act && m.actTimer <= 0 && g.flee <= 0 && (V.act !== 'tail' || d < 2.6)) {
+    // A bust is the frenzy, so a member may only bust while its school is having one. Without
+    // this each one surfaced on its own 2-8 s timer, which is not a frenzy, it is a fidget.
+    const actReady = V.act !== 'bust' || g.frenzy > 0;
+    if (!m.act && m.actTimer <= 0 && g.flee <= 0 && actReady && (V.act !== 'tail' || d < 2.6)) {
       m.act = V.act; m.actPhase = 0; m.splashed = false; m.splashed2 = false;
       // Rare bonus breach (task brief: "if you're feeling ambitious, a rare breach") — humpback
       // only, rolled fresh each time a blow cycle starts. Cosmetic timing only (same precedent as
@@ -325,7 +378,7 @@ function stepMember(
       const p = Math.min(1, m.actPhase), k = Math.sin(p * Math.PI);
       if (m.act === 'tail') { pitch = -0.95 * k; y = lerp(y, surf - 0.08, k); }
       else if (m.act === 'roll') { y = surf - 0.9 + k * 1.15; pitch = Math.cos(p * Math.PI) * 0.7; if (p > 0.45 && !m.splashed) { m.splashed = true; events.push({ type: 'splash', x: mx, z: mz, r: 7, p: 0.6 }); } }
-      else if (m.act === 'bust') { y = surf - 0.5 + k * 0.75; pitch = Math.cos(p * Math.PI) * 0.6; if (p > 0.4 && !m.splashed) { m.splashed = true; events.push({ type: 'splash', x: mx, z: mz, r: 9, p: 0.8 }); } }
+      else if (m.act === 'bust') { y = lerp(y, surf + 0.25, k); pitch = Math.cos(p * Math.PI) * 0.6; if (p > 0.4 && !m.splashed) { m.splashed = true; events.push({ type: 'splash', x: mx, z: mz, r: 9, p: 0.8 }); } }
       else if (m.act === 'breathe') { y = lerp(y, surf - 0.1, k); pitch = 0.22 * k; }
       else if (m.act === 'porpoise') { y = surf - 0.6 + k * 1.35; pitch = Math.cos(p * Math.PI) * 0.8; if (p > 0.85 && !m.splashed) { m.splashed = true; events.push({ type: 'splash', x: mx, z: mz, r: 6, p: 0.6 }); } }
       else if (m.act === 'blow') {

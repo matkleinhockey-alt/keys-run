@@ -133,6 +133,14 @@ export interface SchoolState {
   bowRide: number;
   /** Flyingfish-style airborne glide timer (legacy `g.glide`). */
   glide: number;
+  /**
+   * Seconds left in a surface feeding frenzy — the school-wide "bust" (entities/fish/school.ts).
+   * A busting species sits deep between frenzies and comes up together for one, rather than each
+   * member popping up on its own timer. 0 for every species that does not bust.
+   */
+  frenzy: number;
+  /** Countdown to the next frenzy, seconds. */
+  frenzyTimer: number;
   /** Smoothed 0..1 dive-deeper bias (legacy `g.dv`). */
   dive: number;
   diveTimer: number;
