@@ -10,6 +10,14 @@
  *
  * Direction is the real assertion; the winding check is what catches a regression that gets the
  * direction right on frame one but still traps the school in a loop.
+ *
+ * The second bug here is the same mistake one level up. Fleeing straight away from the threat's
+ * current position is right for a boat sitting still and wrong for one chasing: at trolling speed
+ * a boat moves about as fast as a fleeing school, so "directly away" is the one heading that
+ * keeps the school in front of the bow. It ran ahead of the hull for as long as the boat held
+ * course, which from the helm reads as fish dancing around the boat instead of getting out of the
+ * way. behavior.ts's `fleeHeadingFrom` turns the escape across the threat's course as the threat
+ * gets faster, which is what real fish do.
  */
 import { describe, expect, it } from 'vitest';
 import { stepSchool } from '../src/entities/fish/school.js';
@@ -81,5 +89,52 @@ describe('a spooked school', () => {
       const { dist } = run(g, [{ x: AX, z: AZ, kind: 'diver', speed: 1 }], 6);
       expect(dist, `heading ${h.toFixed(1)} ended ${dist.toFixed(1)} m from the diver`).toBeGreaterThan(4);
     }
+  });
+});
+
+describe('a school a boat is trolling through', () => {
+  const TROLL = 3.6; // ~7 kn, sim/troll.ts's speed window
+
+  /** Boat holds a straight line along +z through the school's anchor. */
+  function trollPast(type: string, spd: number, heading: number): { minAhead: number; maxLat: number; passedAt: number } {
+    const g = school(type, 6, heading);
+    const V = VIS[type];
+    const bz0 = AZ - 120;
+    let t = 0, maxLat = 0, passedAt = Infinity, stuckAhead = Infinity;
+    for (let i = 0; i < Math.round(60 / DT); i++) {
+      t += DT;
+      const bz = bz0 + spd * t;
+      stepSchool(g, V, { t, dt: DT, threats: [{ x: AX, z: bz, kind: 'boat', speed: spd, heading: 0 }] });
+      const ahead = g.cz - bz;
+      maxLat = Math.max(maxLat, Math.abs(g.cx - AX));
+      if (ahead > 0 && ahead < 30) stuckAhead = Math.min(stuckAhead, ahead);
+      if (ahead < 0 && passedAt === Infinity) passedAt = t;
+    }
+    return { minAhead: stuckAhead, maxLat, passedAt };
+  }
+
+  it('breaks across the bow instead of running on ahead of it', () => {
+    for (const h of [0, 1.1, 2.4, 3.9, 5.2]) {
+      const { maxLat } = trollPast('yellowtail', TROLL, h);
+      // Straight-away flee kept the school within a few metres of the boat's track the whole way
+      // past; a real sidestep puts it well clear of the hull's line.
+      expect(maxLat, `heading ${h.toFixed(1)} only got ${maxLat.toFixed(1)} m off the track`).toBeGreaterThan(12);
+    }
+  });
+
+  it('lets the boat go by rather than being pushed along in front of it', () => {
+    for (const h of [0, 1.1, 2.4, 3.9, 5.2]) {
+      const { passedAt } = trollPast('yellowtail', TROLL, h);
+      // The boat starts 120 m astern at 3.6 m/s, so it reaches the school by ~33 s. If the school
+      // is still ahead of it late in the run, it is being herded rather than shying off.
+      expect(passedAt, `heading ${h.toFixed(1)} was still ahead of the boat at ${passedAt.toFixed(0)} s`).toBeLessThan(42);
+    }
+  });
+
+  it('still retreats straight from a boat that is not going anywhere', () => {
+    // The sidestep is for pursuit. A drifting hull should not make a school swim sideways past it.
+    const g = school('yellowtail', 6, 1.1);
+    const { dist } = run(g, [{ x: AX, z: AZ, kind: 'boat', speed: 0, heading: 0 }], 6);
+    expect(dist).toBeGreaterThan(HULL_CLEAR * 0.8);
   });
 });
