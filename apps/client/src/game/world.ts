@@ -35,6 +35,7 @@ import { createFishWorld } from '../entities/fish/index.js';
 import type { Threat } from '../entities/fish/types.js';
 import { createClouds } from '../world/clouds.js';
 import { createMarinas } from '../world/marinas.js';
+import { createChannelBuoys } from '../world/channel-buoys.js';
 import { createParticleSystem } from '../world/particles.js';
 
 import { makeBoat, type BoatModel } from '../entities/boat/model.js';
@@ -256,6 +257,10 @@ export function initWorld(wrap: HTMLElement): World {
   // 10. marinas / docks / mooring field / golf
   const marinas = createMarinas();
   scene.add(marinas.group);
+  // Lateral marks on the dredged cuts (world/channel-buoys.ts). Placement is shared pure data;
+  // this only adds the geometry and bobs it on the same water everything else floats on.
+  const channelBuoys = createChannelBuoys();
+  scene.add(channelBuoys.group);
 
   // 11. particles (wake + spray)
   const particles = createParticleSystem(renderer.getPixelRatio());
@@ -1233,6 +1238,7 @@ export function initWorld(wrap: HTMLElement): World {
     for (const b of marinas.dockBoats) {
       b.position.y = sampleWaterHeight(curState, b.position.x, b.position.z, simTime, ampAt(b.position.x, b.position.z), sw, ch) - 0.05;
     }
+    channelBuoys.update((x, z) => sampleWaterHeight(curState, x, z, simTime, ampAt(x, z), sw, ch));
 
     if (diver.mode === 'diver' && diverState) {
       // applyBoatVisuals above already kept the (drifting) boat's own transform/wake current —
