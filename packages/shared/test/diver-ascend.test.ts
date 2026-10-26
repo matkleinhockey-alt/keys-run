@@ -66,6 +66,28 @@ describe('coming up for air', () => {
     expect(low).toBeLessThan(AIR_MAX * 0.5); // it really did run down before coming back
   });
 
+  // The reported bug: "I sink faster than I can come up". Descend is bound to Ctrl, a modifier
+  // whose keyup the browser eats on Ctrl+R / Ctrl+Tab / Ctrl+click, so it can be stuck down with
+  // nothing on screen saying so. The surfacing assist used to be gated on `!input.descend`, so
+  // in that state the ascend key did nothing whatever while the descend kick kept firing: from
+  // 12 m you ended up at 25.5 m, still going down.
+  it('comes up even with descend stuck down, because going up must never be refusable', () => {
+    let s = createDiverState(-3000, -12, -2500, 0);
+    const startDepth = 12;
+    for (let i = 0; i < 20 / DT; i++) {
+      s = stepDiver(s, { ...NO_INPUT, ascend: true, descend: true }, env(), DT);
+      if (s.blackedOut) break;
+    }
+    expect(-s.y, 'still sinking with the surface key held').toBeLessThan(startDepth);
+    expect(-s.y).toBeLessThan(1);
+  });
+
+  it('still lets you go down when only descend is held', () => {
+    let s = createDiverState(-3000, -4, -2500, 0);
+    for (let i = 0; i < 6 / DT; i++) s = stepDiver(s, { ...NO_INPUT, descend: true }, env(), DT);
+    expect(-s.y, 'descend no longer descends').toBeGreaterThan(4);
+  });
+
   it('still punishes leaving it far too late — this is not a free pass', () => {
     expect(ascend(30, 0.1).surfaced, '30 m on a tenth of a breath').toBe(false);
     expect(ascend(40, 0.2).surfaced, '40 m on a fifth').toBe(false);
