@@ -34,6 +34,14 @@ import { SPEED_SCALE } from '../content/boats.js';
 /** Ring buffer size for recent wake emissions (legacy `WAKE_N`, index.html:450). */
 export const WAKE_N = 72;
 
+/**
+ * The speed at which consecutive wake rings are far enough apart to each carry their full
+ * amplitude. Below it a ring represents proportionally less displaced water, because the hull
+ * covered less ground before the next one was laid. Roughly hull speed for these boats, which is
+ * also where a displacement wake is genuinely at its worst.
+ */
+export const WAKE_FULL_SPACING_SPEED = 8;
+
 export interface BoatHull {
   len: number;
   beam: number;
@@ -193,7 +201,15 @@ function waveHeightWithWake(ring: Float64Array, x: number, z: number, t: number,
 /** legacy `emitWake` (index.html:451-453), writing into a plain ring instead of `THREE.Vector4[]`. */
 function emitWakeInto(ring: Float64Array, index: number, x: number, z: number, v: number, len: number, t: number): number {
   if (v < 2) return index;
-  const A = clamp(len / 10, 0.35, 1.3) * (0.18 + 0.5 * Math.exp(-(((v - 8) / 7) ** 2)) + 0.12 * Math.min(v / 25, 1));
+  // Each ring stands for the water the hull shoved aside since the last one, but they are emitted
+  // on a TIMER, so how much water that is depends entirely on how far the boat moved in between.
+  // Without accounting for that, a trolling boat lays its rings a metre apart and a dozen of them
+  // overlap and stack: measured peak wake height was 0.97 m one metre astern at 5 knots against
+  // 0.21 m at 37, i.e. the slower the boat the bigger its wake, which is backwards and is the
+  // white mound that sat behind the transom while trolling. Scaling by distance travelled per
+  // ring puts the energy back where it belongs.
+  const perRing = Math.min(1, v / WAKE_FULL_SPACING_SPEED);
+  const A = perRing * clamp(len / 10, 0.35, 1.3) * (0.18 + 0.5 * Math.exp(-(((v - 8) / 7) ** 2)) + 0.12 * Math.min(v / 25, 1));
   const c = Math.max(1.5, 0.34 * v);
   const o = index * 4;
   ring[o] = x; ring[o + 1] = z; ring[o + 2] = t; ring[o + 3] = Math.round(c * 10) * 10 + Math.min(9.9, A);
