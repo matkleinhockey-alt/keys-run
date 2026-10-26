@@ -58,6 +58,9 @@ export interface Trolling {
   wantThrottle(boat: BoatState): boolean;
   update(dt: number, boat: BoatState): void;
   /** VERIFICATION ONLY. */
+  /** How far the gear is deployed, 0 stowed to 1 fully out — the same eased number the poles
+   * swing on, so the spread in the water comes out with them (game/fishing/troll-spread.ts). */
+  rigOut(): number;
   debug(): { on: boolean; rig: number; quality: number; untilStrike: number; soak: number };
   /**
    * VERIFICATION ONLY: put a fish on now. The soak is 50-140 SIMULATED seconds by design, and
@@ -132,6 +135,7 @@ export function createTrolling(deps: TrollingDeps): Trolling {
   }
 
   return {
+    rigOut: () => rig,
     isOn: () => on,
     toggle(boat) {
       on = !on;

@@ -44,6 +44,7 @@ import { createElectronics, type BoatReadout } from '../entities/boat/electronic
 import { applyBoatVisuals, sampleWaterHeight } from '../entities/boat/visuals.js';
 import { createBoatInput, bindBoatInput, type BoatStateBox } from '../entities/boat/input.js';
 import { createTrolling, type Trolling } from './fishing/trolling.js';
+import { createTrollSpread } from './fishing/troll-spread.js';
 import { createFishCam } from './fishing/fish-cam.js';
 import { createCamState, createFpState, updateCamera, cycleView, bindCameraPointerControls, snapChaseRig } from '../entities/camera.js';
 
@@ -261,6 +262,8 @@ export function initWorld(wrap: HTMLElement): World {
   // this only adds the geometry and bobs it on the same water everything else floats on.
   const channelBuoys = createChannelBuoys();
   scene.add(channelBuoys.group);
+  // The lines and lures actually in the water while trolling (game/fishing/troll-spread.ts).
+  const trollSpread = createTrollSpread(scene);
 
   // 11. particles (wake + spray)
   const particles = createParticleSystem(renderer.getPixelRatio());
@@ -1239,6 +1242,7 @@ export function initWorld(wrap: HTMLElement): World {
       b.position.y = sampleWaterHeight(curState, b.position.x, b.position.z, simTime, ampAt(b.position.x, b.position.z), sw, ch) - 0.05;
     }
     channelBuoys.update((x, z) => sampleWaterHeight(curState, x, z, simTime, ampAt(x, z), sw, ch));
+    trollSpread.update(simTime, model, trolling.rigOut(), (x, z) => sampleWaterHeight(curState, x, z, simTime, ampAt(x, z), sw, ch));
 
     if (diver.mode === 'diver' && diverState) {
       // applyBoatVisuals above already kept the (drifting) boat's own transform/wake current —
