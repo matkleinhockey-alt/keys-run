@@ -6,6 +6,10 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
+    "./world/channel-marks": {
+      "types": "./dist/world/channel-marks.d.ts",
+      "default": "./dist/world/channel-marks.js"
+    },
     "./world/chain": {
       "types": "./dist/world/chain.d.ts",
       "default": "./dist/world/chain.js"
