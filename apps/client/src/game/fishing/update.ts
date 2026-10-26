@@ -165,6 +165,12 @@ export function createFishingLogic(deps: FishingDeps) {
   function setHook(): void {
     $('strike')?.classList.add('hidden');
     if (!F.key) chooseFishLocal();
+    // A trolling hookup arrives with its fish already rolled — game/fishing/trolling.ts sets
+    // F.key, F.weight and the lure position before calling this — so `chooseFishLocal`, which is
+    // the only thing that ever reveals the hooked-fish mesh, never ran. The fish ate the lure,
+    // fought the whole way to the boat and was landed without ever being drawn: a trolling strike
+    // was a splash, a toast and an invisible fight. Reveal it either way.
+    else if (F.sp) visuals.showHooked(F.sp.color, scaledLenM(F.key, F.weight));
     const key = F.key!, S = F.sp!;
     // Rod / reel gear is permanent (Modifiers.lineMul / reelMul); the fluoro leader is a
     // consumable and is spent here, on the hookup it protects, not on the cast.
