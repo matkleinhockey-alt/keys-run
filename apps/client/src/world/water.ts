@@ -24,7 +24,7 @@
  * here; this file only owns the water plane's own material.
  */
 import * as THREE from 'three';
-import { DEPTHG, INLETG, DG, DGN, DG0X, DG0Z } from '@keysrun/shared/sim/depth-grid';
+import { DEPTHG, INLETG, DG, DGN, DG0X, DG0Z, INLET_MAX } from '@keysrun/shared/sim/depth-grid';
 import { WAKE_N } from '@keysrun/shared/sim/boat';
 import { isTouch } from '../core/scene.js';
 import { waterNoiseTex } from '../core/textures.js';
@@ -54,7 +54,9 @@ function buildDepthTex(): THREE.DataTexture {
   const LG = Math.log2(401);
   for (let i = 0; i < DGN * DGN; i++) {
     d[i * 4] = Math.max(0, Math.min(255, Math.log2(DEPTHG[i] + 1) / LG * 255));
-    d[i * 4 + 1] = Math.max(0, Math.min(255, INLETG[i] * 255));
+    // Packed against INLET_MAX, not 0..1: the surf break goes well past 1 and a byte clamped
+    // at 1 would flatten it to an ordinary tidal inlet. The shader multiplies it back.
+    d[i * 4 + 1] = Math.max(0, Math.min(255, (INLETG[i] / INLET_MAX) * 255));
     d[i * 4 + 3] = 255;
   }
   const t = new THREE.DataTexture(d, DGN, DGN, THREE.RGBAFormat);
@@ -163,7 +165,7 @@ float wakeH(vec2 P,inout vec2 grad,inout float foam){ float h=0.;
     vec4 wpW=modelMatrix*vec4(position,1.0);
     vec4 dtx=texture2D(uDepth,((wpW.xz-uDepthBox.xy)/uDepthBox.z+.5)/uDepthBox.w);
     float dep=exp2(dtx.r*8.6474)-1.;
-    float wAmp=ampForG(dep)*(1.+.9*dtx.g);
+    float wAmp=ampForG(dep)*(1.+.9*${INLET_MAX.toFixed(1)}*dtx.g);
     vCol=depthCol(dep); vWA=clamp(.36+.4*log(dep+1.)/log(30.),.36,.72);
     float hh=0.; vec2 dd=vec2(0.); float chv=min(uCH,2.2);
     wv(wpW.xz,.0114,.0262,.53,.62*uSW,.12,0.,hh,dd); wv(wpW.xz,.0302,.0322,.66,.32*uSW,.16,1.7,hh,dd);

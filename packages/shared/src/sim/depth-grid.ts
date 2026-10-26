@@ -17,9 +17,19 @@
  */
 
 import { chainZ } from '../world/chain.js';
-import { depthAt, OLDBR, WORLD } from '../world/depth.js';
+import { depthAt, OLDBR, SURF_BREAK, WORLD } from '../world/depth.js';
 import { ampFor } from '../waves/index.js';
 import { clamp } from '../internal/math.js';
+
+/**
+ * The largest value the inlet/amplitude field may carry, and the scale the client's depth texture
+ * packs it with. The tidal inlets only ever reach 1, and the byte the shader reads was clamped
+ * there, so nothing could ever be rougher than 1.9x its depth's amplitude — which is calmer than
+ * open water, and no use at all for a surf break. Raising the ceiling means the texture has to be
+ * packed against it; water.ts multiplies by this on the way back out so the shader and `ampAt`
+ * still compute the same number.
+ */
+export const INLET_MAX = 4;
 
 const DG = 10;
 const DGN = Math.ceil(WORLD.size / DG) + 1;
@@ -37,6 +47,17 @@ function buildGrids(): { depth: Float32Array; inlet: Float32Array } {
       inlet[k] = (d > 3 && Math.abs(dz) < 85) ? (1 - Math.abs(dz) / 85)
         : (d > 3 && x > OLDBR.x0 && x < OLDBR.x1 && Math.abs(dz - OLDBR.dz) < 50) ? 0.5 * (1 - Math.abs(dz - OLDBR.dz) / 50)
         : 0;
+      // The surf break (world/depth.ts's SURF_BREAK). Swell shoaling onto a bar is the one place
+      // in this world where shallow means BIGGER, so it goes well past the 0..1 the tidal inlets
+      // use — see INLET_MAX. Gated on depth so it neither washes over the dry beach nor keeps
+      // standing up out in water too deep to feel the bottom.
+      const sd = Math.hypot(x - SURF_BREAK.x, z - SURF_BREAK.z);
+      if (sd < SURF_BREAK.r && d > 1.1 && d < 9) {
+        const near = 1 - sd / SURF_BREAK.r;
+        // Steepest where the bar is shallowest: the wave feels the bottom and stands up.
+        const shoal = clamp((10 - d) / 5, 0, 1);
+        inlet[k] = Math.max(inlet[k], INLET_MAX * near * near * shoal);
+      }
     }
   }
   return { depth, inlet };

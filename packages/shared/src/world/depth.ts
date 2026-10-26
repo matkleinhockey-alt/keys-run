@@ -28,6 +28,18 @@ export const HUMPS: Hump[] = [
   { name: 'Delta Shoal', x: 1250, dz: 1300, patch: true },
 ];
 
+/**
+ * Where the swell stands up and breaks: a bar off the mainland beach, north of the chain.
+ *
+ * Everywhere else in this world gets calmer as it gets shallower — `ampFor` grows with depth, so
+ * the flats are glass and the Gulf Stream has the rollers. That is right for the Keys and wrong
+ * for a beach: real swell shoals, steepening as the bottom comes up under it, and breaks. This is
+ * the one place that happens, so there is somewhere to go and find surf.
+ *
+ * `r` is where the break fades out entirely; the steep water is the inner half of it.
+ */
+export const SURF_BREAK = { name: 'The Mainland Bar', x: 600, z: -2672, r: 300 } as const;
+
 export interface Channel {
   x0: number;
   x1: number;
