@@ -132,29 +132,59 @@ export function stepTroll(state: TrollState, input: TrollInput, dt: number, rng:
 }
 
 /**
- * The species a trolling strike should offer, in preference order, given what the water holds.
+ * What a trolled lure is most likely to provoke.
  *
- * Trolling is how you catch the fish that will not sit still for a bait: it drags a lure past a
- * predator at speed and provokes a reaction. So the roll is biased toward the fast pelagics and
- * — deliberately — toward the ones that JUMP, because the whole reason to troll is what happens
- * in the first four seconds. `quality` decides how hard the bias is: a well-trimmed spread earns
- * the good fish, a sloppy one gets whatever was passing.
+ * This used to be an ordered list that doubled as a filter: a species not on it could never take
+ * a trolled lure at all, so a grouper or a snook simply did not exist to the mechanic, and the
+ * order put sailfish and mahi ahead of every tuna. Anything in the water can eat a lure dragged
+ * past it — that is the whole point of dragging one — so the list is a set of WEIGHTS now, and
+ * anything not named still hits at the baseline.
+ *
+ * The weighting is what the mechanic is for: the tunas, the billfish and wahoo are what you set
+ * a spread to catch, so they dominate. Behind them are the other fast pelagics that genuinely
+ * take a lure. Everything else is possible and uncommon, which is honest — people do catch odd
+ * things trolling.
  */
-export const TROLL_PREFERRED: readonly string[] = [
-  'sailfish', 'marlin', 'blackmarlin', 'mahi', 'wahoo', 'kingfish', 'blackfin',
-  'yellowfin', 'bluefin', 'albacore', 'barracuda', 'cero', 'spanishmack', 'mako', 'tarpon',
-];
+export const TROLL_WEIGHTS: Readonly<Record<string, number>> = {
+  // What the spread is set for.
+  wahoo: 12, yellowfin: 12, bluefin: 12, bigeye: 12,
+  blackfin: 10, albacore: 10, marlin: 10, blackmarlin: 10,
+  sailfish: 9, swordfish: 8, skipjack: 8,
+  // Fast and lure-hungry, but not why you put the riggers out.
+  mahi: 6, kingfish: 5, mako: 3, barracuda: 3, cero: 3, spanishmack: 3,
+  amberjack: 2, jackcrevalle: 2, tarpon: 2,
+};
+
+/** Anything with no entry above — it can still hit, it is just not what you were fishing for. */
+export const TROLL_BASE_WEIGHT = 1;
+
+/** The fish the mechanic exists for, for anything that wants to name them. */
+export const TROLL_PREFERRED: readonly string[] = Object.keys(TROLL_WEIGHTS).filter((k) => TROLL_WEIGHTS[k] >= 8);
 
 /**
- * Pick from `available` (what this water actually holds), preferring `TROLL_PREFERRED` in order.
- * Returns null when the caller's own table has nothing a trolled lure would interest, which is
- * the honest answer inshore — and the caller should then simply not offer a strike rather than
- * inventing a sailfish in four feet of water.
+ * Roll one species out of `available`, weighted by `TROLL_WEIGHTS`.
+ *
+ * `quality` sharpens the bias rather than gating a list: a clean, well-trimmed spread skews hard
+ * toward the fish it was set for, while a sloppy one flattens out toward whatever happened to be
+ * swimming past. Null only when there is genuinely nothing in the water to hook.
  */
 export function pickTrollSpecies(available: readonly string[], quality: number, rng: () => number = Math.random): string | null {
-  const good = TROLL_PREFERRED.filter((k) => available.includes(k));
-  if (!good.length) return null;
-  // A clean spread reaches further up the list; a poor one is mostly taking what it is given.
-  const reach = Math.max(1, Math.round(good.length * (1 - 0.65 * quality)));
-  return good[Math.min(good.length - 1, Math.floor(rng() * reach))];
+  if (!available.length) return null;
+  const q = Math.max(0, Math.min(1, quality));
+  // A clean spread raises the premium fish well above the rest; a poor one barely separates them.
+  const sharpen = 0.6 + 1.0 * q;
+  let total = 0;
+  const w: number[] = [];
+  for (const k of available) {
+    const v = Math.pow(TROLL_WEIGHTS[k] ?? TROLL_BASE_WEIGHT, sharpen);
+    w.push(v);
+    total += v;
+  }
+  let r = rng() * total;
+  for (let i = 0; i < available.length; i++) {
+    r -= w[i];
+    if (r <= 0) return available[i];
+  }
+  return available[available.length - 1];
 }
+
