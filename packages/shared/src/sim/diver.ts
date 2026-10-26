@@ -416,7 +416,8 @@ function integrateMotion(state: DiverState, input: DiverInput, env: DiverEnv, dt
     state.vz += kz * accel * dt;
 
     const vAccel = VERTICAL_KICK_ACCEL * sprintK * pulse * swimMul;
-    if (input.descend) state.vy -= vAccel * dt;
+    // Ascend beats descend when both are held — see the surfacing block below for why.
+    if (input.descend && !input.ascend) state.vy -= vAccel * dt;
   } else {
     state.kicking = false;
     state.kickPhase = 0;
@@ -454,8 +455,25 @@ function integrateMotion(state: DiverState, input: DiverInput, env: DiverEnv, dt
   state.vy = par * dPar * fy + py * dPerpV;
   state.vz = w.z + par * dPar * fz + pz * dPerpH;
 
-  // Surfacing (see ASCEND_SPEED): applied after buoyancy and drag so neither can hold it back.
-  if (allowKicks && input.ascend && !input.descend && state.y < 0) {
+  /**
+   * Surfacing (see ASCEND_SPEED): applied after buoyancy and drag so neither can hold it back.
+   *
+   * Deliberately NOT gated on `!input.descend` any more. It was, and that made the ascend key
+   * inert whenever descend was also down — not merely weaker, but skipped entirely, while the
+   * descend kick above kept firing. Holding both from 12 m put the diver at 25.5 m and still
+   * going down at 0.87 m/s: pressing the surface key did nothing at all, which is the "I sink
+   * faster than I can come up" report.
+   *
+   * That is reachable in normal play because descend is bound to Ctrl, and Ctrl is a modifier:
+   * Ctrl+R, Ctrl+Tab, Ctrl+click and friends are routinely taken by the browser with the keyup
+   * never delivered, so the button stays down with nothing on screen to say so. `onBlur` catches
+   * the alt-tab case (entities/diver/input.ts) and cannot catch those.
+   *
+   * Going up is the one action that must never be refusable: it is how a player gets air. So it
+   * now wins outright, which also makes a stuck descend self-correcting — press the surface key
+   * and you rise, whatever else the game thinks you are holding.
+   */
+  if (allowKicks && input.ascend && state.y < 0) {
     const ease = clamp(-state.y / ASCEND_EASE_DEPTH, 0, 1);
     const target = (input.sprint ? ASCEND_SPEED_SPRINT : ASCEND_SPEED) * ease;
     if (state.vy < target) state.vy += (target - state.vy) * Math.min(1, ASCEND_RESPONSE * dt);
