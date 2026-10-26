@@ -54,10 +54,37 @@ function landMat(): THREE.MeshStandardMaterial {
   });
 }
 
+/** Wet sand at the water's edge, and the dry sand further up. */
+const SAND_WET: readonly [number, number, number] = [0.70, 0.635, 0.48];
+const SAND_DRY: readonly [number, number, number] = [0.95, 0.89, 0.69];
+/** Elevation over which sand dries out. Below this the beach is a continuous gradient, not bands. */
+const BEACH_TOP = 1.25;
+
 function landColor(I: Island, x: number, z: number, h: number): [number, number, number] {
   const cd = creekDist(x, z), n = hash2(x * 0.13, z * 0.11);
-  if (h < 0.5) return [0.78, 0.72, 0.56];
-  if (h < 1.25) return [0.93, 0.86, 0.66];
+  if (h < BEACH_TOP) {
+    // The beach used to be the one part of the land with no variation in it at all: two flat
+    // constants, [0.78,0.72,0.56] below half a metre and [0.93,0.86,0.66] above it, while every
+    // vegetation band carried a noise term. So a shoreline read as two slabs of poster paint
+    // meeting along a contour line, which is the one place the eye is most likely to be looking.
+    //
+    // It is one continuous beach now: wet at the water and drying as the ground lifts, with the
+    // damp line wandering rather than following a height contour exactly, and two octaves of
+    // grain over it — a coarse one for patchy damp and a fine one for the sand itself. The
+    // vertical gradient does the work the two constants were doing; the noise is what stops it
+    // reading as an airbrush.
+    const damp = hash2(x * 0.047, z * 0.041);
+    const grain = hash2(x * 0.83, z * 0.79);
+    // The waterline wanders +/- ~12 cm, so the damp edge is not a contour of the heightfield.
+    const u = Math.max(0, Math.min(1, (h - 0.08 - (damp - 0.5) * 0.24) / (BEACH_TOP - 0.2)));
+    const dry = u * u * (3 - 2 * u); // smoothstep: flat at the water, flat up the top of the beach
+    const shade = 0.93 + 0.09 * grain + 0.05 * (n - 0.5);
+    return [
+      (SAND_WET[0] + (SAND_DRY[0] - SAND_WET[0]) * dry) * shade,
+      (SAND_WET[1] + (SAND_DRY[1] - SAND_WET[1]) * dry) * shade,
+      (SAND_WET[2] + (SAND_DRY[2] - SAND_WET[2]) * dry) * shade,
+    ];
+  }
   if (cd < 16 || I.small) return [0.17 + 0.05 * n, 0.33 + 0.05 * n, 0.15];
   if (I.mainland && inCity(x, z)) return [0.52 + 0.06 * n, 0.53 + 0.06 * n, 0.5 + 0.05 * n];
   return [0.27 + 0.08 * n, 0.47 + 0.07 * n, 0.22 + 0.04 * n];
