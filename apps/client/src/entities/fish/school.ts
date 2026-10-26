@@ -34,7 +34,7 @@ import { clamp, lerp, rand } from '../../core/math.js';
 import { SWIM_ANG_BASE } from './swim.js';
 import {
   angLerp, fleeClassFor, fleeParamsFor, nearestTrigger, ACT_DUR, ACT_CD,
-  isBowRider, bowRideTarget, BOW_RIDE_RADIUS, BOW_RIDE_MIN_SPEED, BOW_RIDE_MAX_SPEED,
+  isBowRider, bowRideTarget, fleeHeadingFrom, BOW_RIDE_RADIUS, BOW_RIDE_MIN_SPEED, BOW_RIDE_MAX_SPEED,
 } from './behavior.js';
 import type { SchoolCtx, SchoolState, FishMember } from './types.js';
 
@@ -130,7 +130,7 @@ export function stepSchool(state: SchoolState, V: CreatureVis, ctx: SchoolCtx): 
     // Under a stopped boat that is a ring of fish lapping the hull about once a second (measured:
     // 257 turns in four simulated minutes, identical at every anchor radius — which is what gave
     // it away as the flee path rather than the anchor).
-    g.fleeHeading = Math.atan2(trigger.x - g.cx, trigger.z - g.cz);
+    g.fleeHeading = fleeHeadingFrom(g.cx, g.cz, trigger);
   }
   if (V.act === 'glide' && !g.glide && Math.random() < dt * 0.03) g.glide = rand(1.6, 3.4);
 

@@ -160,6 +160,52 @@ export const ACT_CD: Record<string, [number, number]> = { tail: [3, 9], roll: [4
  * ------------------------------------------------------------------------------------------ */
 
 /** Within this range of a pod's centroid, a moving boat is noticed and worth intercepting. */
+/** Below this the threat is not really pursuing and a straight retreat is right. */
+export const FLEE_SIDESTEP_MIN_SPEED = 0.9;
+/** At this speed the break is fully across the threat's course rather than straight away. */
+export const FLEE_SIDESTEP_FULL_SPEED = 3.2;
+
+/**
+ * Which way a spooked school breaks.
+ *
+ * Straight away from the threat's current position is right for something sitting still, and
+ * wrong for something chasing. A boat holding trolling speed moves about as fast as a fleeing
+ * school, so "directly away" is the one heading that keeps the school in front of the bow: it
+ * runs ahead of the hull for as long as the boat holds course, which is what reads from the helm
+ * as fish dancing around the boat rather than getting out of the way. Measured on a yellowtail
+ * school with the boat at 3.6 m/s: it sat 16-17 m dead ahead, within 4 m of the boat's track,
+ * for five seconds before it finally slipped off to one side.
+ *
+ * Real fish break across the bow and let the boat go by, so the faster the threat, the more of
+ * the escape is turned across its course instead of along it. A school caught exactly ahead or
+ * astern has no "across" to pick from, so it takes a side from its own position — deterministic,
+ * so neighbouring schools do not all break the same way and the choice does not flicker.
+ */
+export function fleeHeadingFrom(cx: number, cz: number, th: Threat): number {
+  const dx = cx - th.x, dz = cz - th.z;
+  const d = Math.hypot(dx, dz) || 1e-6;
+  let ax = dx / d, az = dz / d;
+  if (th.heading !== undefined && th.speed > FLEE_SIDESTEP_MIN_SPEED) {
+    // The threat's own course, in the same convention as everything else here.
+    const cxv = -Math.sin(th.heading), czv = -Math.cos(th.heading);
+    const along = ax * cxv + az * czv;
+    let lx = ax - along * cxv, lz = az - along * czv;
+    let ll = Math.hypot(lx, lz);
+    if (ll < 1e-3) {
+      // Dead ahead or dead astern: no across-course component to grow, so pick a beam.
+      const side = (Math.floor(Math.abs(cx) * 0.37 + Math.abs(cz) * 0.11) % 2) === 0 ? 1 : -1;
+      lx = -czv * side; lz = cxv * side; ll = 1;
+    }
+    lx /= ll; lz /= ll;
+    const w = Math.min(1, (th.speed - FLEE_SIDESTEP_MIN_SPEED) / (FLEE_SIDESTEP_FULL_SPEED - FLEE_SIDESTEP_MIN_SPEED));
+    ax = ax * (1 - w) + lx * w; az = az * (1 - w) + lz * w;
+    const n = Math.hypot(ax, az) || 1e-6;
+    ax /= n; az /= n;
+  }
+  // Heading whose forward vector (-sin h, -cos h) is the escape direction.
+  return Math.atan2(-ax, -az);
+}
+
 export const BOW_RIDE_RADIUS = 70;
 /** Below this speed there's no real pressure wave worth riding — a drifting/idling boat doesn't
  * attract a pod (and doesn't trigger the normal flee response either; dolphins are unbothered by
