@@ -134,6 +134,9 @@ export interface BoatModel {
    * flats skiff has neither.
    */
   setOutriggers: ((t: number) => void) | null;
+  /** The two rigger tips, empties parented to the poles so they swing with them. Empty on a hull
+   * with no riggers — see `setOutriggers`. */
+  outriggerTips: THREE.Object3D[];
   captain: Human;
   /** legacy `crew` (index.html:1533-1536): the bikini-clad passenger lounging/seated near the
    * bow or sunpad. */
@@ -295,6 +298,7 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
 
   /** Set below when the hull has a tower or a top to bolt riggers to; see the OUTRIGGERS block. */
   let setOutriggers: ((t: number) => void) | null = null;
+  const outriggerTips: THREE.Object3D[] = [];
   // tuna tower with an upper helm on the offshore fishing boats
   let tower: Tower | null = null;
   if (S.id === 'freeman' || S.id === 'grady') {
@@ -581,6 +585,13 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
         ring.rotation.x = Math.PI / 2;
         pivot.add(ring);
       }
+      // The working end of the pole. Trolling hangs its lines off these (game/fishing/
+      // troll-spread.ts) and needs a point that swings with the rigger rather than a guess at
+      // where the tip ended up.
+      const tipObj = new THREE.Object3D();
+      tipObj.position.y = RIG_LEN;
+      pivot.add(tipObj);
+      outriggerTips.push(tipObj);
       g.add(pivot);
       pivots.push(pivot);
     }
@@ -901,7 +912,7 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
   if (deps.wealth && !deps.wealth.underglow && lights) lights.visible = false;
 
   return {
-    group: g, deckY: cs, props, helmPos, helmPose, fishSpot, soleAt, setOutriggers,
+    group: g, deckY: cs, props, helmPos, helmPose, fishSpot, soleAt, setOutriggers, outriggerTips,
     wheel: helmWheel, tower, outboards, lights, flags,
     cabin, cabinLight, cabinLight2,
     rodPivot, rodTip: tip, stations, station: 0, captain, crew,
