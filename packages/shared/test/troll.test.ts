@@ -100,24 +100,50 @@ describe('waiting for a strike', () => {
 });
 
 describe('what eats a trolled lure', () => {
-  it('prefers the fast pelagics the mechanic exists for', () => {
-    const offshore = ['mahi', 'sailfish', 'blackfin', 'yellowtail', 'mangrove', 'grouper'];
-    const picks = new Set(Array.from({ length: 40 }, (_, i) => pickTrollSpecies(offshore, 1, () => i / 40)));
-    for (const p of picks) expect(TROLL_PREFERRED, `${p} is not a trolling fish`).toContain(p);
-    expect(picks.has('grouper')).toBe(false);
+  const OFFSHORE = ['yellowfin', 'bluefin', 'albacore', 'blackfin', 'marlin', 'swordfish', 'wahoo',
+    'mahi', 'sailfish', 'kingfish', 'barracuda', 'grouper', 'mangrove', 'yellowtail', 'gag'];
+  /** What the spread is actually set for. */
+  const TARGET = ['yellowfin', 'bluefin', 'albacore', 'blackfin', 'bigeye', 'skipjack',
+    'marlin', 'blackmarlin', 'swordfish', 'wahoo'];
+
+  function share(quality: number, of: readonly string[], n = 20000): number {
+    let hit = 0;
+    for (let i = 0; i < n; i++) {
+      const k = pickTrollSpecies(OFFSHORE, quality, () => (i + 0.5) / n);
+      if (k && of.includes(k)) hit++;
+    }
+    return hit / n;
+  }
+
+  it('is mostly tuna, marlin, swordfish and wahoo', () => {
+    expect(share(1, TARGET)).toBeGreaterThan(0.6);
   });
 
-  it('a well-trimmed spread reaches the better fish; a sloppy one takes what it is given', () => {
-    const table = ['sailfish', 'marlin', 'mahi', 'wahoo', 'kingfish', 'blackfin', 'cero'];
-    // rng at its lowest always takes the first entry it is allowed to reach, so `reach` is what
-    // separates the two cases.
-    const clean = pickTrollSpecies(table, 1, () => 0.999);
-    const sloppy = pickTrollSpecies(table, 0, () => 0.999);
-    expect(TROLL_PREFERRED.indexOf(clean!)).toBeLessThan(TROLL_PREFERRED.indexOf(sloppy!));
+  it('can still hook anything that is actually in the water', () => {
+    // The list used to be a filter, so a grouper could not take a trolled lure at all. People do
+    // catch odd things trolling; it should be uncommon, not impossible.
+    const odd = share(0.5, ['grouper', 'mangrove', 'yellowtail', 'gag']);
+    expect(odd).toBeGreaterThan(0.002);
+    expect(odd).toBeLessThan(0.2);
   });
 
-  it('returns null inshore rather than inventing a sailfish in four feet of water', () => {
-    expect(pickTrollSpecies(['snook', 'redfish', 'trout', 'mangrove'], 1)).toBeNull();
+  it('includes every tuna, and the swordfish the old list left out entirely', () => {
+    for (const k of ['yellowfin', 'bluefin', 'bigeye', 'albacore', 'blackfin', 'skipjack', 'swordfish']) {
+      expect(TROLL_PREFERRED, `${k} should be one of the fish trolling is for`).toContain(k);
+    }
+  });
+
+  it('a well-trimmed spread earns the good fish; a sloppy one takes what it is given', () => {
+    expect(share(1, TARGET)).toBeGreaterThan(share(0, TARGET));
+  });
+
+  it('returns null only when there is nothing there at all', () => {
     expect(pickTrollSpecies([], 1)).toBeNull();
+    // Inshore you now hook an inshore fish rather than nothing — but never a marlin.
+    const inshore = new Set(Array.from({ length: 200 }, (_, i) =>
+      pickTrollSpecies(['snook', 'redfish', 'trout', 'mangrove'], 1, () => (i + 0.5) / 200)));
+    expect(inshore.size).toBeGreaterThan(0);
+    for (const k of inshore) expect(['snook', 'redfish', 'trout', 'mangrove']).toContain(k);
   });
 });
+
