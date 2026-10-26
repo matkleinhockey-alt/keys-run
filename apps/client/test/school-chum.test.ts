@@ -36,7 +36,7 @@ function roamer(type: string, x: number, z: number, heading: number): SchoolStat
   }));
   return {
     id: `c:${type}:${heading.toFixed(2)}`, type, cx: x, cz: z, heading, phase: heading * 17.3,
-    vx: 0, vz: 0, turnRate: 0, turn: 0, flee: 0, fleeHeading: heading, bowRide: 0, glide: 0, dive: 0,
+    vx: 0, vz: 0, turnRate: 0, turn: 0, flee: 0, fleeHeading: heading, bowRide: 0, glide: 0, frenzy: 0, frenzyTimer: 0, dive: 0,
     diveTimer: 9, diveTarget: 0, anchor: null, resident: false, members,
   };
 }

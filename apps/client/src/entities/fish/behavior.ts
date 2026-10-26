@@ -150,7 +150,13 @@ export function nearestTrigger(
  * `actTimer` window regardless of species, so a freshly-activated whale pod doesn't make a visiting
  * diver/boat wait a full cooldown just to see one blow.) */
 export const ACT_DUR: Record<string, number> = { tail: 2.6, roll: 1.4, breathe: 3.5, porpoise: 1.2, bust: 0.7, blow: 4.5 };
-export const ACT_CD: Record<string, [number, number]> = { tail: [3, 9], roll: [4, 12], breathe: [8, 20], porpoise: [1.5, 4], bust: [2, 8], blow: [24, 65] };
+// `tail` and `roll` are the two that put a fish through the surface where you can see it, and
+// both fired often enough that a stretch of water always had something breaking on it. Rarer now,
+// so a roll is something you notice rather than scenery. Deliberately unchanged: `breathe`
+// (turtles and manatees have to come up), `porpoise` (a travelling dolphin really does porpoise
+// every couple of seconds), `blow` (already a slow whale cycle) and `bust`, which is now gated on
+// a school-wide frenzy in school.ts rather than on its own cooldown.
+export const ACT_CD: Record<string, [number, number]> = { tail: [7, 18], roll: [10, 28], breathe: [8, 20], porpoise: [1.5, 4], bust: [2, 8], blow: [24, 65] };
 
 /* ------------------------------------------------------------------------------------------ *
  * Dolphin bow-riding — real behavior: a pod notices a boat moving at a reasonable clip and peels
