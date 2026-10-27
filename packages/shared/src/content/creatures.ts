@@ -87,6 +87,12 @@ export const VIS: Record<string, CreatureVis> = {
   // Deep and extremely thin (h 10x w) because that is a flatfish seen head-on, plus `flat` to
   // lay it over. `belly` is near-white: a flounder's underside is the blind side and unpigmented.
   flounder:{kind:'fish',len:.5,h:.3,w:.055,back:'#6b5f4a',belly:'#efe9dd',fin:'#5e5342',pattern:'spot',flat:true,level:'bottom',speed:.45,school:[1,2],spread:2.2,dMin:.5,dMax:14},
+  // The other two flatfish. Same construction as the flounder above — authored deep and very
+  // thin, `flat` lays it over — and the same rule about the blind underside being unpigmented.
+  // A sole is a small rounded thing that buries itself in estuary mud; a halibut is the biggest
+  // flatfish there is and lives out where it is deep and cold, which is why `dMin` is so far down.
+  sole:{kind:'fish',len:.26,h:.17,w:.03,back:'#5e5444',belly:'#efe9dd',fin:'#4e4639',pattern:'blotch',flat:true,level:'bottom',speed:.38,school:[1,3],spread:1.8,dMin:.5,dMax:18},
+  halibut:{kind:'fish',len:1.25,h:.72,w:.13,back:'#4a4a44',belly:'#f0ece2',fin:'#3e3e39',pattern:'blotch',flat:true,level:'bottom',speed:.6,school:[1,1],spread:0,dMin:18,dMax:240},
   sheepshead:{kind:'fish',len:.55,h:.3,w:.1,back:'#c9c9c0',belly:'#eeeeea',fin:'#3a3a38',pattern:'bars',level:'bottom',speed:.8,school:[2,6],spread:2.5,dMin:2,dMax:20},
   pompano:{kind:'fish',len:.42,h:.2,w:.07,back:'#9aa9ad',belly:'#f1e9b0',fin:'#e5c84a',level:'mid',speed:1.6,school:[6,16],spread:3,dMin:.8,dMax:8},
   tripletail:{kind:'fish',len:.65,h:.32,w:.12,back:'#4e4434',belly:'#6b5e47',fin:'#3b3226',pattern:'mottle',level:'surface',speed:.3,school:[1,1],spread:0,dMin:2,dMax:1e5},
@@ -278,19 +284,19 @@ export function isCatchable(key: string): boolean {
  */
 export const ZONE_LIFE: Record<string, Array<[string, number]>> = {
   // Mangrove creek channels — juveniles sheltering along the edges.
-  'Creek':[['flounder',2],['sawfish',.05],['snook',3],['redfish',2.5],['tarpon',1.5],['manatee',1],['mangrove',3.5],['ladyfish',2.5],['trout',1.5],['jackcrevalle',1]],
+  'Creek':[['flounder',2],['sole',1.6],['sawfish',.05],['snook',3],['redfish',2.5],['tarpon',1.5],['manatee',1],['mangrove',3.5],['ladyfish',2.5],['trout',1.5],['jackcrevalle',1]],
   // Very shallow skinny water — bonefish/permit on the sand, small sharks cruising the edges.
-  'Flats':[['flounder',2.5],['sawfish',.07],['bonefish',5],['permit',2.2],['stingray',3],['redfish',1.5],['barracuda',2],['blacktip',1.5],['lemonshark',1],['eagleray',1],['ladyfish',3],['pompano',1.2],['palometa',3],['bluerunner',2],['manatee',.7]],
+  'Flats':[['flounder',2.5],['sole',1.2],['sawfish',.07],['bonefish',5],['permit',2.2],['stingray',3],['redfish',1.5],['barracuda',2],['blacktip',1.5],['lemonshark',1],['eagleray',1],['ladyfish',3],['pompano',1.2],['palometa',3],['bluerunner',2],['manatee',.7]],
   // Florida Bay backcountry — juvenile snapper, small barracuda, rays on the sand, baitfish
   // schools, manatees in the shallows, and dolphin pods working the bay ("the bay" in the task
   // brief).
-  'Backcountry':[['flounder',2.5],['sawfish',.06],['redfish',4],['snook',3],['trout',3],['mangrove',2.5],['tarpon',2],['bonefish',1.5],['permit',1],['barracuda',1.2],['manatee',1.2],['stingray',2.2],['jackcrevalle',2],['ladyfish',3],['pompano',1.5],['tripletail',.6],['dolphin',1.5]],
+  'Backcountry':[['flounder',2.5],['sole',1.8],['sawfish',.06],['redfish',4],['snook',3],['trout',3],['mangrove',2.5],['tarpon',2],['bonefish',1.5],['permit',1],['barracuda',1.2],['manatee',1.2],['stingray',2.2],['jackcrevalle',2],['ladyfish',3],['pompano',1.5],['tripletail',.6],['dolphin',1.5]],
   // Bridge pilings and the channels that run under them — structure-holders in current. Dolphin
   // pods regularly work the bridge channels for bait pushed through on the tide.
   'Bridge':[['flounder',1.5],['tarpon',5],['snook',2],['mangrove',3],['eagleray',1],['sheepshead',3],['goliath',.6],['jackcrevalle',1.5],['nurse',1],['cobia',1],['barracuda',1],['dolphin',1.2],['lookdown',3.5],['bluerunner',4],['schoolmaster',2],['manatee',.9]],
   // Mixed mid-water schools, mackerel and jacks between the Bay and the reef line — classic
   // bottlenose water, hence the higher dolphin weight ("less rare" per the task brief).
-  'Hawk Channel':[['mangrove',4],['eagleray',2],['turtle',1.5],['barracuda',2],['nurse',1.5],['mutton',2],['dolphin',1.8],['cero',2],['pompano',1.5],['cobia',1],['graytrigger',1.2],['jackcrevalle',1.8],['yellowtail',1.5],['sheepshead',1.2],['tarpon',1.6],['goliath',.5],['bullshark',.35],['bluerunner',4.5],['lanesnapper',3],['spanishmack',3],['lookdown',1.5],['schoolmaster',2]],
+  'Hawk Channel':[['halibut',.35],['mangrove',4],['eagleray',2],['turtle',1.5],['barracuda',2],['nurse',1.5],['mutton',2],['dolphin',1.8],['cero',2],['pompano',1.5],['cobia',1],['graytrigger',1.2],['jackcrevalle',1.8],['yellowtail',1.5],['sheepshead',1.2],['tarpon',1.6],['goliath',.5],['bullshark',.35],['bluerunner',4.5],['lanesnapper',3],['spanishmack',3],['lookdown',1.5],['schoolmaster',2]],
   // Patch reef / Sombrero crest — the existing shallow reef life (depthAt < REEF_WALL_DEPTH).
   // Dolphins work the reef line hunting bait off the coral too.
   'Reef':[['cubera',.5],['yellowtail',5],['parrotfish',3],['angelfish',2],['hogfish',2],['grouper',2],['gag',1.2],['redgrouper',1.2],['nurse',1],['turtle',1.5],['barracuda',1.5],['mutton',2],['lionfish',1.5],['graytrigger',2],['cero',2],['goliath',1.1],['hammerhead',.3],['bullshark',.3],['tarpon',1.2],['dolphin',1],['schoolmaster',4.5],['lanesnapper',3.5],['bluerunner',4],['vermilion',2],['spanishmack',2]],
@@ -309,7 +315,7 @@ export const ZONE_LIFE: Record<string, Array<[string, number]>> = {
   // Gulf Stream / open offshore — pelagics (roaming layer only; see spawn.ts). Dolphin pods are a
   // common sight riding the current lines; pilot whales/humpbacks are a genuine *rare* event out
   // here — tiny weights are deliberate (see the task brief's "Encounter rarity").
-  'Offshore':[['mako',.5],['mola',.14],['greatwhite',.05],['spermwhale',.05],['whaleshark',.1],['giantmanta',.12],['tigershark',.14],['mahi',5],['flyingfish',4],['dolphin',2.5],['blackfin',3],['sailfish',1.5],['wahoo',1],['turtle',.8],['marlin',.6],['blackmarlin',.25],['swordfish',.3],['yellowfin',2.5],['albacore',1.2],['bluefin',.8],['kingfish',1.5],['amberjack',1.5],['hammerhead',.3],['pilotwhale',.12],['humpback',.07],['skipjack',4],['bigeye',.7]],
+  'Offshore':[['halibut',1.1],['mako',.5],['mola',.14],['greatwhite',.05],['spermwhale',.05],['whaleshark',.1],['giantmanta',.12],['tigershark',.14],['mahi',5],['flyingfish',4],['dolphin',2.5],['blackfin',3],['sailfish',1.5],['wahoo',1],['turtle',.8],['marlin',.6],['blackmarlin',.25],['swordfish',.3],['yellowfin',2.5],['albacore',1.2],['bluefin',.8],['kingfish',1.5],['amberjack',1.5],['hammerhead',.3],['pilotwhale',.12],['humpback',.07],['skipjack',4],['bigeye',.7]],
   // The Humps (Marathon Hump, West Hump) and other named structure far offshore — real relief that
   // concentrates bottom fish and jacks well out in otherwise-open water. Marathon's actual humps
   // are a known pilot-whale spot — a tiny weight here makes that a learnable, place-based rarity
