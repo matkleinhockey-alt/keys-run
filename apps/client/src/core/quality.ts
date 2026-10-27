@@ -123,12 +123,22 @@ export function probeGpu(gl: WebGL2RenderingContext | WebGLRenderingContext): Gp
 export function detectDefaultTier(probe: GpuProbe): QualityTier {
   const s = probe.renderer.toLowerCase();
   if (probe.isSoftware) return 'low';
+  // A touch device is a phone or a tablet, and it is capped at `medium` whatever its GPU string
+  // says. This has to come FIRST, because iOS Safari reports every device — an iPhone as much as
+  // an M-series iPad — as the literal string "Apple GPU", which `appleM1Class` below matches: an
+  // iPhone was being handed the M1 Air desktop tier (1.75x pixel ratio on a 3x screen, 190-segment
+  // water, 2048 shadow maps, SMAA and bloom) and the touch check underneath never ran.
+  //
+  // `low` on anything with few cores to spare, `medium` otherwise. The tier is a default, not a
+  // ceiling — the start screen and the in-HUD button both still let a player on a recent iPad
+  // put it back up.
+  if (probe.touch) return probe.cores <= 4 ? 'low' : 'medium';
   const highEnd = /rtx|gtx\s?1[6-9]\d\d|gtx\s?2\d\d\d|rx\s?[5-9]\d\d\d|radeon pro|quadro|arc a7|apple m[2-9]/.test(s);
   const appleM1Class = /apple m1\b|apple gpu/.test(s);
   const integrated = /intel|iris|uhd graphics|mali|adreno|powervr/.test(s);
   if (highEnd && probe.cores >= 8) return 'ultra';
   if (highEnd || appleM1Class) return 'high'; // the M1 Air / GTX 1650 budget baseline
-  if (probe.touch || integrated) return probe.cores <= 4 ? 'low' : 'medium';
+  if (integrated) return probe.cores <= 4 ? 'low' : 'medium';
   return probe.cores >= 6 ? 'high' : 'medium';
 }
 
