@@ -5,8 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   AIR_MAX, NEUTRAL_DEPTH, airBurnRate, airMaxFor, createDiverState, stepDiver,
-  type DiverEnv, type DiverInput, type DiverState, type SeafloorSampler,
-} from '../src/sim/diver.js';
+  type DiverEnv, type DiverInput, type DiverState, type SeafloorSampler, SHALLOW_BLACKOUT_AIR_FRACTION } from '../src/sim/diver.js';
 import { NO_GEAR, TANK_BREATH_MUL, TANK_CHARGE_DEPTH, loadoutFor, shouldChargeFill, type DiveGear } from '../src/sim/dive-gear.js';
 import { emptyInventory, modifiersFor, buy, type Inventory } from '../src/sim/shop.js';
 
@@ -39,9 +38,9 @@ const gearOf = (inv: Inventory, fills: number): DiveGear => {
 };
 
 describe('scaled air budget', () => {
-  it('full kit is ~252 s of surface air, and airMaxFor guards bad input', () => {
+  it('full kit multiplies the surface budget ~2.8x, and airMaxFor guards bad input', () => {
     const m = modifiersFor(kit(...FULL), 0);
-    expect(airMaxFor(m.breathMul)).toBeCloseTo(252.4, 0);
+    expect(airMaxFor(m.breathMul)).toBeCloseTo(AIR_MAX * 2.804, 0);
     expect(airMaxFor(1)).toBe(AIR_MAX);
     expect(airMaxFor(NaN)).toBe(AIR_MAX);
     expect(airMaxFor(0)).toBe(AIR_MAX);       // never an instant blackout
@@ -97,10 +96,14 @@ describe('scaled air budget', () => {
   it('shallow-water blackout threshold stays in absolute seconds, not a fraction of the bigger budget', () => {
     const big = airMaxFor(2.804);
     const floor: SeafloorSampler = { heightAt: () => -50 };
-    // 15 s of air at 3 m on a 252 s budget is 6%: would blackout if the threshold scaled (8% = 20 s).
-    const s0: DiverState = { ...createDiverState(CALM.x, -3, CALM.z, 0, big), air: 15, vy: 1 };
+    // Comfortably more than the absolute threshold, but a tiny FRACTION of a full-kit budget:
+    // it must not black out, or the threshold is scaling with the tank instead of measuring the
+    // oxygen actually left in the diver.
+    const overThreshold = AIR_MAX * SHALLOW_BLACKOUT_AIR_FRACTION * 2;
+    const s0: DiverState = { ...createDiverState(CALM.x, -3, CALM.z, 0, big), air: overThreshold, vy: 1 };
+    expect(overThreshold / big).toBeLessThan(0.06); // genuinely a sliver of the big budget
     expect(stepDiver(s0, IDLE, envFor(floor), DT).blackedOut).toBe(false);
-    const s1: DiverState = { ...s0, air: AIR_MAX * 0.05 };
+    const s1: DiverState = { ...s0, air: AIR_MAX * SHALLOW_BLACKOUT_AIR_FRACTION * 0.6 };
     expect(stepDiver(s1, IDLE, envFor(floor), DT).blackedOut).toBe(true);
   });
 
@@ -156,7 +159,7 @@ describe('pony bottle fill rule', () => {
     const withFill = loadoutFor(gearOf(owned, 1));
     const without = loadoutFor(gearOf(owned, 0));
     expect(withFill.tankLive).toBe(true);
-    expect(withFill.airMax).toBeCloseTo(252.4, 0);
+    expect(withFill.airMax).toBeCloseTo(AIR_MAX * 2.804, 0);
     expect(without.tankLive).toBe(false);
     expect(without.airMax).toBeCloseTo(AIR_MAX * 1.18 * 1.08, 3); // suit + fins still work
     expect(without.swimMul).toBeCloseTo(1.28, 10);

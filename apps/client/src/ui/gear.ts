@@ -43,7 +43,7 @@ const pct = (mul: number): string => `${mul >= 1 ? '+' : '-'}${Math.round(Math.a
 const near = (a: number, b: number): boolean => Math.abs(a - b) < 1e-9;
 
 /** Every field of `m` that differs from "unchanged", in words. Base values come from the same
- * constants the sims use (AIR_MAX, SPEAR_RANGE), so "90 s" is the real stock figure. */
+ * constants the sims use (AIR_MAX, SPEAR_RANGE), so the stock figure shown is the real one. */
 export function describeModifiers(m: Modifiers): EffectRow[] {
   const rows: EffectRow[] = [];
   const mul = (label: string, v: number, better: 'up' | 'down' = 'up'): void => {
