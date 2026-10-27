@@ -55,6 +55,7 @@ import { createDiverModel } from '../entities/diver/model.js';
 import { createWreckTreasure } from '../entities/life/wreck-treasure.js';
 import { AMMO_KEY } from '@keysrun/shared/sim/handgun';
 import { applyDiverVisuals } from '../entities/diver/visuals.js';
+import { createDiverBubbles } from '../entities/diver/bubbles.js';
 import { updateDiverCamera } from '../entities/diver/camera.js';
 import { updateDiverHud, showDiverHud, clearBlackoutOverlay } from '../entities/diver/hud.js';
 import { createLandSystem } from '../entities/land/index.js';
@@ -267,6 +268,10 @@ export function initWorld(wrap: HTMLElement): World {
   const trollSpread = createTrollSpread(scene);
   // The fish coming up behind a lure, in the seconds before it eats (fishing/troll-raise.ts).
   const trollRaise = createTrollRaise(scene);
+  // The diver's own breath (entities/diver/bubbles.ts). Lives out here rather than inside the
+  // diver because bubbles already in the water must keep rising after the dive ends.
+  const diverBubbles = createDiverBubbles(renderer.getPixelRatio());
+  scene.add(diverBubbles.points);
   /**
    * True while the fish cam is already running on a fish climbing to a lure.
    *
@@ -1278,6 +1283,10 @@ export function initWorld(wrap: HTMLElement): World {
       if (rs.active) { raiseCamShot = true; fishCam.trigger(rs.x, rs.z, RAISE_S + 1.3); }
     }
 
+    // Outside the diver branch on purpose: a breath let go at 15 m is still on its way up long
+    // after the player has climbed back aboard, and it should surface rather than vanish.
+    diverBubbles.update(dt, diver.mode === 'diver' ? diverState : null, diverEvents, simTime);
+
     if (diver.mode === 'diver' && diverState) {
       // applyBoatVisuals above already kept the (drifting) boat's own transform/wake current —
       // just not its camera/HUD, which the diver owns while its driver is over the side.
@@ -1485,6 +1494,7 @@ export function initWorld(wrap: HTMLElement): World {
     trollRaiseNow: () => trolling.debugRaiseNow(stateBox.state),
     trollRaiseState: () => trollRaise.debug(),
     buoyState: (i: number) => channelBuoys.debug(i),
+    diverBubbles: () => diverBubbles.debug(),
     /** Verification-only: hold the fish-cam on the fish currently climbing to a lure, which the
      * chase camera cannot see (the spread sits behind it). */
     trollRaiseCam: (seconds: number) => {
