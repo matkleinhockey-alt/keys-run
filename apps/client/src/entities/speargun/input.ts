@@ -3,7 +3,10 @@
  * binding style (window-level key listeners gated by an `isActive` predicate, touch pads with the
  * same pointer-capture pattern as #touchDiver's other buttons).
  *
- * FIRE is a clean click/tap on the canvas, decided on RELEASE. entities/diver/camera.ts binds
+ * FIRE is a click/tap on the canvas. With the mouse lock held (the normal case on a desktop —
+ * entities/diver/camera.ts) aiming is the mouse itself, so a press cannot also be a turn and the
+ * shot goes on the press. Without the lock — touch, or a browser that refused it — the old
+ * classifier still applies and the shot is decided on RELEASE. entities/diver/camera.ts binds
  * pointerdown/move/up on the same canvas for drag-to-look, and this file used to fire on
  * `pointerdown`, so every look-drag also loosed a shaft (the "I only turned and a spear
  * appeared" bug). Both bindings now run the same classifier (entities/diver/gesture.ts): a press
@@ -22,6 +25,7 @@
  */
 import type { Speargun, DiverAimInput } from './index.js';
 import { beginGesture, moveGesture, isTap, type Gesture } from '../diver/gesture.js';
+import { diverMouseLocked } from '../diver/camera.js';
 
 export function bindSpeargunInput(
   canvas: HTMLCanvasElement,
@@ -32,6 +36,11 @@ export function bindSpeargunInput(
   let g: Gesture | null = null;
   const onPointerDown = (e: PointerEvent): void => {
     if (!isActive() || e.button !== 0 || g) return;
+    // Under the mouse lock there is nothing to disambiguate: aiming is the mouse, so a press is
+    // a shot and can be taken on the press rather than held back until release to see whether it
+    // turns into a drag. The gesture path below is still the answer for touch, and for a mouse
+    // whose lock was refused — see entities/diver/camera.ts.
+    if (diverMouseLocked(canvas)) { gun.tryFire(getAim()); return; }
     g = beginGesture(e.pointerId, e.clientX, e.clientY);
   };
   const onPointerMove = (e: PointerEvent): void => {
