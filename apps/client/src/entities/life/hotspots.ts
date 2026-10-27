@@ -25,6 +25,7 @@ import { beamBetween } from '../boat/hull.js';
 import { glowTex } from '../boat/decor-textures.js';
 import type { LightMatEntry } from '../../core/time-of-day.js';
 import { WB, HUMPS, CREEKS, depthAt, zoneAt, type Zone } from '@keysrun/shared/world/depth';
+import { steadyCurrentAt, chainTangent } from '@keysrun/shared/world/current';
 import { chainZ, shoreInfo } from '@keysrun/shared/world/chain';
 import { ampFor, waveHBase } from '@keysrun/shared/waves';
 import { hashCell } from '@keysrun/shared/rng';
@@ -88,6 +89,14 @@ function placeHotspot(zone: Zone, i: number): { x: number; z: number } | null {
 
 const weedMat = new THREE.MeshStandardMaterial({ color: 0xc69a33, flatShading: true, roughness: 1 });
 
+/** Fraction of the surface current a weed raft actually makes good. Under 1: it floats in the
+ * top metre and takes some of its push from the wind rather than the water. */
+const DRIFT_K = 0.62;
+/** How far a patch may wander from where it was laid down before it is leaned back, metres. */
+const WEED_TETHER_M = 420;
+/** Within this, each raft is tilted to the wave under it; beyond it nobody can see the tilt. */
+const WEED_TILT_M = 260;
+
 /** legacy `spawnHotspot` (index.html:2039-2051). */
 function spawnHotspot(scene: THREE.Scene, zone: Zone, i: number): Hotspot | null {
   const p = placeHotspot(zone, i);
@@ -119,6 +128,9 @@ function spawnHotspot(scene: THREE.Scene, zone: Zone, i: number): Hotspot | null
 
 export interface WeedPatch extends GullSite {
   ang: number; len: number; wid: number;
+  /** Where the patch was laid down. It drifts with the water, but is tethered to this so a
+   * weedline is still roughly where the chart says an hour later. */
+  x0: number; z0: number;
   im: THREE.InstancedMesh;
   off: Array<[number, number, number, number]>;
   bg: THREE.Group;
@@ -149,13 +161,24 @@ function spawnWeedPatches(scene: THREE.Scene): WeedPatch[] {
   return spots.map(([x, z], si) => {
     const len = lerp(50, 170, hashCell(WORLD_SEED, si, 0, SALT.WEED_LEN));
     const wid = lerp(3, 9, hashCell(WORLD_SEED, si, 0, SALT.WEED_WID));
-    const ang = hashCell(WORLD_SEED, si, 0, SALT.WEED_ANG) * Math.PI;
+    // A weedline is not laid down on a random bearing: sargassum collects along the convergence
+    // and shear lines in the surface flow, so the windrow runs WITH the current. The prevailing
+    // direction is the steady one (the stream up the chain tangent), not the tide, which reverses
+    // twice a cycle — the same argument the wrecks' sea fans are oriented on. A little scatter on
+    // top, because a real one wanders.
+    const tg = chainTangent(x);
+    const ang = Math.atan2(tg.tz, tg.tx) + (hashCell(WORLD_SEED, si, 0, SALT.WEED_ANG) - 0.5) * 0.5;
     const n = Math.round(len / 2.2);
     const im = new THREE.InstancedMesh(geo, mat, n);
     const off: Array<[number, number, number, number]> = [];
+    // Clumps and gaps, not an even row of beads. A real windrow is ragged: dense rafts with open
+    // water between them, which is also why you run along one looking for the thick bits.
+    const clumps = 3 + Math.floor(hashCell(WORLD_SEED, si, 1, SALT.WEED_LEN) * 4);
     for (let i = 0; i < n; i++) {
       // Per-blade placement within an already-deterministic patch — pure visual jitter, stays Math.random().
-      const u = (i / n - 0.5) * len, v = (Math.random() - 0.5) * wid * (1 - Math.abs(u / len) * 1.2), s = rand(0.7, 2.2);
+      const cu = (Math.floor((i / n) * clumps) + 0.5) / clumps - 0.5;
+      const u = (cu + (Math.random() - 0.5) * (0.85 / clumps)) * len;
+      const v = (Math.random() - 0.5) * wid * (1 - Math.abs(u / len) * 1.2), s = rand(0.7, 2.2);
       off.push([Math.cos(ang) * u - Math.sin(ang) * v, Math.sin(ang) * u + Math.cos(ang) * v, s, Math.random() * 6]);
       im.setColorAt(i, col.setHex(WC[i % WC.length]));
     }
@@ -169,7 +192,7 @@ function spawnWeedPatches(scene: THREE.Scene): WeedPatch[] {
       bg.add(B.g);
       birds.push({ B, r: rand(15, 30), h: rand(18, 30), sp: rand(0.3, 0.5) * (Math.random() < 0.5 ? -1 : 1), ph: Math.random() * 6 });
     }
-    return { x, z, ang, len, wid, im, off, bg, birds, amp: ampFor(depthAt(x, z)), told: false };
+    return { x, z, x0: x, z0: z, ang, len, wid, im, off, bg, birds, amp: ampFor(depthAt(x, z)), told: false };
   });
 }
 
@@ -595,15 +618,42 @@ export function createHotspotWorld(scene: THREE.Scene, lightMats: LightMatEntry[
 
       // ---- weedlines: drift slowly, frigatebirds circle overhead ----
       for (const w of weeds) {
-        w.x += 0.22 * dt; w.z += 0.05 * dt;
+        /*
+         * Sargassum is a passive floater: it goes where the water goes. It used to creep along a
+         * hardcoded (0.22, 0.05) m/s regardless of what the sea was doing, which meant every
+         * weedline in the world drifted the same way at the same speed even while the tide was
+         * running the other way past it.
+         *
+         * `DRIFT_K` is under 1 because a weed raft sits in the top metre and is pushed by the
+         * wind as well as the water, so it does not exactly track the surface current. The
+         * tether stops a long session from carrying a charted weedline off the map — it is
+         * allowed to wander a few hundred metres and then leans back.
+         */
+        const fl = steadyCurrentAt(w.x, w.z, t);
+        const ex = w.x - w.x0, ez = w.z - w.z0;
+        const exr = Math.hypot(ex, ez) / WEED_TETHER_M;
+        const pull = exr > 1 ? (exr - 1) * 0.35 : 0;
+        w.x += (fl.vx * DRIFT_K - ex / Math.max(1, Math.hypot(ex, ez)) * pull) * dt;
+        w.z += (fl.vz * DRIFT_K - ez / Math.max(1, Math.hypot(ex, ez)) * pull) * dt;
         const d = Math.hypot(w.x - camera.x, w.z - camera.z);
         const vis = d < 1100;
         w.im.visible = vis; w.bg.visible = vis;
         if (d > 800) continue;
+        // Close enough to read the individual rafts: tilt each one to the wave it is sitting on,
+        // from the slope of the same height function. A mat on a swell lies along it; a flat row
+        // of them riding up and down with no tilt reads as floating tiles.
+        const tilt = d < WEED_TILT_M;
         w.off.forEach((o, i) => {
           const x = w.x + o[0], z = w.z + o[1];
-          dummy.position.set(x, waveHBase(x, z, t, w.amp) + 0.04, z);
-          dummy.rotation.set(0, o[3], 0);
+          const h0 = waveHBase(x, z, t, w.amp);
+          dummy.position.set(x, h0 + 0.04, z);
+          if (tilt) {
+            const gx = (waveHBase(x + 2, z, t, w.amp) - h0) / 2;
+            const gz = (waveHBase(x, z + 2, t, w.amp) - h0) / 2;
+            dummy.rotation.set(Math.atan(gz) * 1.4, o[3], -Math.atan(gx) * 1.4, 'YXZ');
+          } else {
+            dummy.rotation.set(0, o[3], 0);
+          }
           dummy.scale.set(o[2], 0.18, o[2] * 0.8);
           dummy.updateMatrix();
           w.im.setMatrixAt(i, dummy.matrix);
