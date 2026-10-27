@@ -37,6 +37,7 @@ import { createClouds } from '../world/clouds.js';
 import { createMarinas } from '../world/marinas.js';
 import { createChannelBuoys } from '../world/channel-buoys.js';
 import { createLighthouse } from '../world/lighthouse.js';
+import { createWaterfront } from '../world/waterfront.js';
 import { createParticleSystem } from '../world/particles.js';
 
 import { makeBoat, type BoatModel } from '../entities/boat/model.js';
@@ -293,7 +294,13 @@ export function initWorld(wrap: HTMLElement): World {
 
   // 12. boat + electronics
   const pilings: Piling[] = bridge.pilings;
-  const dockRects: DockRect[] = marinas.dockRects;
+  // Private waterfront estates: house, pool, dock, lift and the boats on them (world/waterfront.ts).
+  const waterfront = createWaterfront();
+  scene.add(waterfront.group);
+  // The scattered conch houses are instanced scenery and know nothing about these lots, so one
+  // would otherwise stand in the middle of somebody's pool deck.
+  islands.clearScenery((hx, hz) => waterfront.sites.some((q) => Math.hypot(q.x - hx, q.z - hz) < q.r), () => false);
+  const dockRects: DockRect[] = [...marinas.dockRects, ...waterfront.dockRects];
 
   const readout: BoatReadout = { x: 0, z: 0, h: 0, speed: 0 };
   const electronics = createElectronics(readout);
@@ -1273,6 +1280,10 @@ export function initWorld(wrap: HTMLElement): World {
     particles.update(clamped, simTime, (x, z, t, a) => sampleWaterHeight(curState, x, z, t, a, sw, ch));
     catchFlow.updateReleased(clamped, simTime, (x, z, t) => sampleWaterHeight(curState, x, z, t, ampAt(x, z), sw, ch));
 
+    // The estates' tied-off boats ride the swell; the one up on the lift deliberately does not.
+    for (const b of waterfront.floating) {
+      b.position.y = sampleWaterHeight(curState, b.position.x, b.position.z, simTime, ampAt(b.position.x, b.position.z), sw, ch) - 0.12;
+    }
     for (const b of marinas.dockBoats) {
       // `sink` lets a hull ride lower than her lines — the derelict on the mooring field, which
       // would otherwise be bobbed back up to float level like everything else every frame.
@@ -1509,6 +1520,7 @@ export function initWorld(wrap: HTMLElement): World {
     diverBubbles: () => diverBubbles.debug(),
     audioMuffle: () => audio.underwaterDebug(),
     lighthouse: () => lighthouse.debug(),
+    waterfrontSites: () => waterfront.sites,
     /** Verification-only: hold the fish-cam on the fish currently climbing to a lure, which the
      * chase camera cannot see (the spread sits behind it). */
     trollRaiseCam: (seconds: number) => {

@@ -23,7 +23,7 @@ import { grainTex, normalTex } from '../core/textures.js';
 import { lerp } from '../core/math.js';
 import { WORLD_SEED, SALT, SPAWN_X, SPAWN_DZ } from '../state/constants.js';
 
-function makeDockBoat(hull: number, top: number): THREE.Group {
+export function makeDockBoat(hull: number, top: number): THREE.Group {
   const H = { ...HULLS.robalo, colors: { ...HULLS.robalo.colors, hull, boot: top, cove: null } };
   const g = new THREE.Group();
   const L = 7.4, B = 2.6;
