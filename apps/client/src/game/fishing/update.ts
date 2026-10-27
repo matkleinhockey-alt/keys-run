@@ -12,7 +12,7 @@ import type { CamState, FpState } from '../../entities/camera.js';
 import { sampleWaterHeight } from '../../entities/boat/visuals.js';
 import { landH, zoneAt, nearHump } from '@keysrun/shared/world/depth';
 import { ampAt } from '@keysrun/shared/sim/depth-grid';
-import { chooseFish, fightParamsFor, scaledLenM, startFight, stepFight, type FightState, tensionZones, HOT_FRACTION } from '@keysrun/shared/sim/fight';
+import { chooseFish, fightParamsFor, scaledLenM, startFight, stepFight, type FightState, tensionFrac, HOT_FRACTION } from '@keysrun/shared/sim/fight';
 import { xoshiro128ss } from '@keysrun/shared/rng';
 import { SPECIES } from '@keysrun/shared/content/species';
 import type { Tackle } from '@keysrun/shared/content/tackle';
@@ -377,13 +377,17 @@ export function createFishingLogic(deps: FishingDeps) {
 
       const fT = $('fT');
       if (fT) {
-        fT.style.width = clamp(next.tension, 0, 1) * 100 + '%';
-        fT.className = next.tension > next.limit * HOT_FRACTION ? 'hot' : next.tension < 0.08 ? 'slack' : '';
-        // Move the painted zones with the real limit, or the track keeps promising green water
-        // where the line now parts — see sim/fight.ts's tensionZones.
-        const z = tensionZones(next.limit);
-        const track = fT.parentElement;
-        if (track) { track.style.setProperty('--warn', z.warnPct + '%'); track.style.setProperty('--snap', z.snapPct + '%'); }
+        // The bar reads LOAD AGAINST WHAT THE LINE WILL TAKE, not raw tension — see
+        // sim/fight.ts's `tensionFrac` for why the old absolute scale could not run red on most
+        // of the fish in the game. Full bar means it is going now, and the marks never move.
+        const frac = tensionFrac(next.tension, next.limit);
+        fT.style.width = clamp(frac, 0, 1) * 100 + '%';
+        // `over` is its own state: pegged AND past the limit is not the same as pegged at the
+        // top of the red, and it is the one moment the player has to act on immediately.
+        fT.className = frac >= 1 ? 'over' : frac > HOT_FRACTION ? 'hot'
+          // Slack stays an ABSOLUTE judgement: a hook falls out on a loose line regardless of
+          // what that line happens to be rated for.
+          : next.tension < 0.08 ? 'slack' : '';
       }
       setText('fLine', Math.round(next.dist) + ' m');
       const fStam = $('fStam'); if (fStam) fStam.style.width = next.stam * 100 + '%';

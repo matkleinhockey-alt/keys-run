@@ -1,62 +1,66 @@
 /**
- * The tension bar has to agree with the line.
+ * The tension bar reads load against what the line will take.
  *
- * The track painted its warning and snapping zones at a fixed 82% and 100% in CSS, while the
- * line actually parts at `limit` — which starts at 1 and falls to 0.45 as the leader chafes
- * (`limit = 1 - 0.55 * abrasion`, sim/fight.ts). So after a long fight the line let go at 45%
- * tension with the meter still showing green to 82%: it promised safety exactly where there was
- * none. These pin the zones to the live limit.
+ * The gauge has been wrong twice, in two different ways, and these pin both of them shut.
+ *
+ * 1. It showed raw tension on a fixed 0..1 scale while the line actually parts at `limit`, which
+ *    falls to 0.45 as the leader chafes — so late in a fight it showed green where the line was
+ *    already gone.
+ * 2. Worse, on an ordinary fish the needle never moved out of the bottom half: measured over
+ *    full fights a blackfin peaks at 0.72 tension at the tightest drag, against a red zone
+ *    starting near 0.76. "Back off when the bar runs red" was unachievable for most of the game.
  */
 import { describe, expect, it } from 'vitest';
-import { HOT_FRACTION, tensionZones } from '../src/sim/fight.js';
+import {
+  HOT_FRACTION, TENSION_WARN_PCT, TENSION_SNAP_PCT, tensionFrac,
+  startFight, stepFight, fightParamsFor,
+} from '../src/sim/fight.js';
 
-/** The worn-leader end of the range: sim/fight.ts's `limit = 1 - 0.55 * abrasion`. */
-const limitAt = (abrasion: number): number => 1 - 0.55 * abrasion;
-
-describe('tension bar zones', () => {
-  it('matches the old fixed track on a fresh, unchafed leader', () => {
-    const z = tensionZones(1);
-    expect(z.warnPct).toBeCloseTo(80, 1);
-    expect(z.snapPct).toBe(100);
-  });
-
-  it('never paints safe water past the point the line parts', () => {
-    for (let a = 0; a <= 1.0001; a += 0.05) {
-      const limit = limitAt(a);
-      const z = tensionZones(limit);
-      // The bar's own fill is tension*100, so the snap zone must begin exactly at the tension
-      // that breaks the line — not beyond it.
-      expect(z.snapPct).toBeCloseTo(limit * 100, 1);
-      expect(z.warnPct).toBeLessThan(z.snapPct);
-    }
-  });
-
-  it('moves the danger zone left as the leader wears', () => {
-    const fresh = tensionZones(limitAt(0));
-    const half = tensionZones(limitAt(0.5));
-    const worn = tensionZones(limitAt(1));
-    expect(half.snapPct).toBeLessThan(fresh.snapPct);
-    expect(worn.snapPct).toBeLessThan(half.snapPct);
-    // The case that used to lie outright: a fully chafed leader parts at 45%, well inside what
-    // the old fixed track painted as green.
-    expect(worn.snapPct).toBeCloseTo(45, 1);
-    expect(worn.warnPct).toBeCloseTo(36, 1);
-  });
-
-  it('agrees with the threshold the HUD uses to turn the bar hot', () => {
+describe('the tension gauge', () => {
+  it('reads full exactly when the line is at its limit, worn or fresh', () => {
     for (const limit of [1, 0.8, 0.6, 0.45]) {
-      expect(tensionZones(limit).warnPct).toBeCloseTo(limit * HOT_FRACTION * 100, 1);
+      expect(tensionFrac(limit, limit), `limit ${limit}`).toBeCloseTo(1, 10);
     }
   });
 
-  it('stays on the bar for a nonsense limit', () => {
-    for (const bad of [-1, 0, 1.5, Number.NaN]) {
-      const z = tensionZones(bad);
-      if (Number.isNaN(bad)) continue;
-      expect(z.snapPct).toBeGreaterThanOrEqual(0);
-      expect(z.snapPct).toBeLessThanOrEqual(100);
-      expect(z.warnPct).toBeGreaterThanOrEqual(0);
-      expect(z.warnPct).toBeLessThanOrEqual(100);
+  it('shows a worn leader as closer to going, for the same pull', () => {
+    const fresh = tensionFrac(0.5, 1);
+    const worn = tensionFrac(0.5, 0.5);
+    expect(worn).toBeGreaterThan(fresh);
+    expect(worn).toBeCloseTo(1, 10);   // the same 0.5 that was half a bar is now all of it
+  });
+
+  it('keeps the marks still, because the scale moves instead', () => {
+    expect(TENSION_WARN_PCT).toBeCloseTo(HOT_FRACTION * 100, 6);
+    expect(TENSION_SNAP_PCT).toBe(100);
+  });
+
+  it('never divides by a collapsed limit', () => {
+    for (const bad of [0, -1, Number.EPSILON]) {
+      const f = tensionFrac(0.5, bad);
+      expect(Number.isFinite(f), `limit ${bad}`).toBe(true);
+      expect(f).toBeGreaterThan(0);
     }
+  });
+
+  it('actually reaches the red zone on an ordinary fish, which is the whole point', () => {
+    // The failure this replaced: a blackfin at maximum drag could not make the bar run red at
+    // all, so the HUD's own instruction was unfollowable. Fight one and watch the gauge.
+    const peak = (key: string, weight: number, drag: number): number => {
+      let seed = 11;
+      const rng = (): number => (seed = (seed * 16807) % 2147483647) / 2147483647;
+      const p = fightParamsFor(key, weight, drag);
+      let f = startFight(p, -900, 2620, rng);
+      let top = 0;
+      for (let i = 0; i < 3600 && f.outcome === 'fighting'; i++) {
+        f = stepFight(f, { reeling: true, drag }, p, { boatX: -900, boatZ: 2600 }, rng, 1 / 30);
+        top = Math.max(top, tensionFrac(f.tension, f.limit));
+      }
+      return top;
+    };
+    expect(peak('blackfin', 30, 5), 'hard drag on a blackfin should load the bar up').toBeGreaterThan(HOT_FRACTION);
+    // ...and a light drag on the same fish should NOT, or the gauge is just pegged all the time
+    // and tells you nothing either.
+    expect(peak('blackfin', 30, 1)).toBeLessThan(HOT_FRACTION);
   });
 });

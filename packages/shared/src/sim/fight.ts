@@ -299,22 +299,52 @@ export function scaledLenM(key: string, weight: number): number {
 }
 
 /**
- * Where the tension bar's warning and snapping zones sit, as percentages of a full bar.
+ * The gauge reading: how close this load is to parting the line RIGHT NOW, 0..1 and beyond.
  *
- * The bar used to paint these at a fixed 82% and 100% in CSS while the line actually parts at
- * `limit`, which starts at 1 and falls to 0.45 as the leader chafes (`limit = 1 - 0.55 *
- * abrasion`). So late in a long fight the line let go at 45% tension while the meter was still
- * showing green to 82%: it told you that you were safe exactly when you were not, which is the
- * worst thing a gauge can do. Driving the zones from the live limit instead means the red creeps
- * leftwards as the leader wears, so a chafing leader is something you can watch happen.
+ * The bar used to show raw `tension` on a fixed 0..1 scale, and that is what made it useless.
+ * Two separate things were wrong with it.
+ *
+ * First, the scale did not match the failure point. The line parts at `limit`, which starts at 1
+ * and falls to 0.45 as the leader chafes, so late in a long fight it let go at 45% of a bar that
+ * was still painted green to 82%. That much was fixed by sliding the painted zones leftwards as
+ * the leader wore — but a gauge whose MARKINGS move while the needle's scale stays put is a
+ * strange object to read, and it still left the second problem untouched.
+ *
+ * Second, and worse: on an ordinary fish the needle never went anywhere. Measured over full
+ * fights, a blackfin or a grouper runs between 0.2 and 0.5 tension and peaks at 0.72 at the
+ * tightest drag the reel has — against a red zone that begins around 0.76. The HUD says "back
+ * off when the bar runs red" and for the overwhelming majority of fish in this game it was
+ * physically impossible for the bar to run red at any drag setting. The instruction was a lie
+ * and the bottom half of the bar was the only half in use.
+ *
+ * Dividing by the live limit fixes both at once. Full bar always means "the line is going now",
+ * the red is always in the same place, and the same 0.72 on a blackfin reads as 76% of what the
+ * line will take — which is the truth, and is finally worth watching. A worn leader then pushes
+ * the needle right on its own, because the same pull really has got closer to breaking it.
  */
-export function tensionZones(limit: number): { warnPct: number; snapPct: number } {
-  const snap = clamp(limit, 0, 1);
-  return { warnPct: +(snap * HOT_FRACTION * 100).toFixed(1), snapPct: +(snap * 100).toFixed(1) };
+export function tensionFrac(tension: number, limit: number): number {
+  return tension / Math.max(0.05, limit);
 }
 
-/** Fraction of the current limit at which the bar turns hot — the "back off" point. */
-export const HOT_FRACTION = 0.8;
+/** Where the warning and parting marks sit on that bar, as percentages. Fixed now: the scale
+ * moves with the leader instead of the markings. */
+export const TENSION_WARN_PCT = 68;
+export const TENSION_SNAP_PCT = 100;
+
+/**
+ * Fraction of the current limit at which the bar turns hot — the "back off" point.
+ *
+ * Was 0.8, which measurement showed to be unreachable on the fish people actually catch: fought
+ * flat out at the tightest drag the reel has, a blackfin peaks at 0.72 of its limit and a
+ * grouper at 0.70. The HUD said "back off when the bar runs red" and the bar could not run red.
+ *
+ * 0.68 is where it belongs on the physics as well as the gameplay. Line is normally worked at
+ * around a third of its rated strength; two-thirds is genuinely hard on it, and that is exactly
+ * the point at which a warning is worth giving. It also makes the drag knob visible in the
+ * gauge, which is the whole reason the knob exists: at drag 5 a good fish will push the bar into
+ * the red, and at drag 1 the same fish never gets near it.
+ */
+export const HOT_FRACTION = 0.68;
 
 /**
  * What owned gear and a spent consumable change in a fight. A structural subset of shop.ts's
