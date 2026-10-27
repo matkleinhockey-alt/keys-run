@@ -12,8 +12,7 @@ import {
   SHALLOW_BLACKOUT_DEPTH, SURFACE_EPS, DIVER_RADIUS,
   ataAt, buoyancyAccel, airBurnRate, waterVelocity,
   createDiverState, stepDiver,
-  type DiverEnv, type DiverInput, type DiverState, type SeafloorSampler,
-} from '../src/sim/diver.js';
+  type DiverEnv, type DiverInput, type DiverState, type SeafloorSampler, SHALLOW_BLACKOUT_AIR_FRACTION } from '../src/sim/diver.js';
 
 const DT = 1 / 30;
 
@@ -125,7 +124,7 @@ describe('blackout', () => {
   });
 
   it('shallow-water blackout can fire in the final 5 m of ascent on fumes, even with air > 0', () => {
-    const state: DiverState = { ...createDiverState(0, -3, 0, 0), vy: 1.0, air: AIR_MAX * 0.05 };
+    const state: DiverState = { ...createDiverState(0, -3, 0, 0), vy: 1.0, air: AIR_MAX * SHALLOW_BLACKOUT_AIR_FRACTION * 0.6 };
     expect(state.air).toBeGreaterThan(0);
     const next = stepDiver(state, NO_INPUT, baseEnv(0), DT);
     expect(next.blackedOut).toBe(true);
@@ -134,7 +133,7 @@ describe('blackout', () => {
   });
 
   it('does NOT shallow-water-blackout while resting (not ascending) on low air in the shallow band', () => {
-    const state: DiverState = { ...createDiverState(0, -3, 0, 0), vy: 0, air: AIR_MAX * 0.05 };
+    const state: DiverState = { ...createDiverState(0, -3, 0, 0), vy: 0, air: AIR_MAX * SHALLOW_BLACKOUT_AIR_FRACTION * 0.6 };
     const next = stepDiver(state, NO_INPUT, baseEnv(0), DT);
     expect(next.blackedOut).toBe(false);
   });

@@ -385,8 +385,10 @@ entries: Sombrero Reef, Coffins Patch, Delta Shoal. Add the Thunderbolt wreck
 (a real 188-ft wreck in 120 ft off Marathon) as the band-5 set piece.
 
 ### Freedive physics — this is the gameplay
-- Breath-hold ~90 s at surface, consumed at `ATA = 1 + depth/10`. At 20 m you
+- Breath-hold ~180 s at surface, consumed at `ATA = 1 + depth/10`. At 20 m you
   burn air **3× faster**, so depth is self-limiting with no artificial gate.
+  (Was 90 s. Because the descent burns at depth too, that left 1.3 s of bottom
+  time at 20 m and made 30 m unreachable round-trip — see `AIR_MAX`.)
 - **Buoyancy inverts**: positive 0–10 m (you kick down), neutral ~10–12 m,
   negative below (freefall). Descending gets easier exactly as returning gets
   more expensive. That asymmetry is the entire tension of freediving, free.

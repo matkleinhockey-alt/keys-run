@@ -38,8 +38,20 @@ import { steadyCurrentAt, surgeAt } from '../world/current.js';
 // sim uses — see docs/ARCHITECTURE.md's "Freedive physics" bullets for the sources).
 // ---------------------------------------------------------------------------------------------
 
-/** Breath-hold budget at the surface, at rest (ATA=1, exertion=0) — doc: "~90 s at the surface". */
-export const AIR_MAX = 90;
+/**
+ * Breath-hold budget at the surface, at rest (ATA=1, exertion=0).
+ *
+ * Was 90 s, which the doc's original figure. Measured against the depths the game's own content
+ * sits at, that left no dive to speak of: descending burns air at ATA, so the round trip ate the
+ * whole budget. Usable bottom time was 11 s at 15 m, 1.3 s at 20 m, zero at 25 m — you arrived
+ * and turned straight round — and 30 m could not be reached and returned from at all, while the
+ * reefs and wrecks you spear are at exactly those depths.
+ *
+ * At 180 s the curve is a freedive rather than a formality: 55 s at 15 m, 34 s at 20 m, 19 s at
+ * 25 m, 8 s at 30 m. Deep is still a look-and-leave and still punishes a late turn, which is the
+ * tension the mechanic is for; it is just no longer over before it starts.
+ */
+export const AIR_MAX = 180;
 
 /**
  * Per-dive air budget for a given `Modifiers.breathMul` (sim/shop.ts). Gear raises the BUDGET
@@ -106,7 +118,7 @@ export const SHALLOW_BLACKOUT_DEPTH = 5;
 /** Below this fraction of the BASE AIR_MAX (~7 s; deliberately NOT scaled by gear: shallow-water
  * blackout is about the last few seconds of oxygen in the lungs, not about how big your reserve
  * was, and a fraction of a 252 s budget would be a 20 s "blackout zone") inside the shallow band, an active ascent risks SWB. */
-export const SHALLOW_BLACKOUT_AIR_FRACTION = 0.08;
+export const SHALLOW_BLACKOUT_AIR_FRACTION = 0.04;
 
 /** Must be actively ascending (m/s, +y) for the shallow-water-blackout rule to apply — resting at
  * 3 m on fumes is merely desperate, not a shallow-water-blackout case. */
@@ -138,8 +150,8 @@ export const VERTICAL_KICK_ACCEL = 2.2;
  * The rate is set by the AIR BUDGET, not by feel. Air burns at `ataAt(depth)` times a ~1.54x
  * kicking-exertion multiplier, so the trip up costs air at 3-4x real time from any real depth —
  * which means the ascent speed decides whether coming up is affordable at all. At the previous
- * 2.5 (~2.17 delivered against drag and buoyancy) surfacing from 25 m cost 40 s of a 90 s
- * budget, 44%, and 35 m cost 76%: a diver who went deep with half a breath left blacked out
+ * 2.5 (~2.17 delivered against drag and buoyancy) surfacing from 25 m cost 40 s of the 90 s
+ * budget of the time, 44%, and 35 m cost 76%: a diver who went deep with half a breath left blacked out
  * short of the surface holding Space the whole way, which is the "it won't come up for air" bug.
  * At 4.6 (~4.0 delivered) the same trips cost 24% and 41% — deep water is still a real decision,
  * but the way back is always buyable. See test/diver-ascend.test.ts, which pins that property

@@ -7,8 +7,7 @@ import { describe, expect, it } from 'vitest';
 import {
   NEUTRAL_DEPTH, SWIM_KICK_ACCEL, KICK_PERIOD, waterVelocity, kickPulse,
   createDiverState, stepDiver,
-  type DiverEnv, type DiverInput, type DiverState, type SeafloorSampler,
-} from '../src/sim/diver.js';
+  type DiverEnv, type DiverInput, type DiverState, type SeafloorSampler, AIR_MAX } from '../src/sim/diver.js';
 
 const DT = 1 / 30;
 const DEEP_FLOOR: SeafloorSampler = { heightAt: () => -1000 };
@@ -83,8 +82,10 @@ describe('swim feel', () => {
     expect(SWIM_KICK_ACCEL).toBe(2.6);
     const a = swim(30, { fwd: true });
     // ~0.45 exertion kicking at depth 11: 30 frames of ATA*(1+e*1.2) burn, nowhere near blackout
-    expect(a.air).toBeLessThan(90);
-    expect(a.air).toBeGreaterThan(85);
+    // Expressed against the budget, not a literal: this asserts "a second of kicking at 11 m
+    // barely dents the breath", which is the actual claim, and survives the budget changing.
+    expect(a.air).toBeLessThan(AIR_MAX);
+    expect(a.air).toBeGreaterThan(AIR_MAX * 0.94);
   });
 });
 
