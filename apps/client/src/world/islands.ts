@@ -272,6 +272,8 @@ function landArea(I: Island): number {
 /** Maps u in [0,1) to a point on island I's real shoreline (by arc length over all its rings), set
  * MANGROVE_IN metres in on the land side. */
 const MANGROVE_IN = 2;
+/** Shore samples walked per island when looking for sheltered water to plant in. */
+const INLET_WALK = 260;
 function shoreWalk(I: Island): (u: number) => [number, number] {
   const segs: number[] = [], cum: number[] = [];
   let L = 0;
@@ -361,6 +363,55 @@ function buildVegetation(group: THREE.Group): VegetationResult {
       // the promenade rail as black boulders and were the first thing you saw from the water (the polish pass's skyline capture)
       if (inTownFootprint(w[0], w[1], 34)) continue;
       mg.push({ x: w[0], z: w[1], y: Math.max(0.2, landH(w[0], w[1])), s: lerp(3, 6, hashCell(WORLD_SEED, idx, k, SALT.MANGROVE_SIZE)) });
+    }
+
+    /*
+     * The inlets.
+     *
+     * The pass above walks the shoreline at even spacing, so mangroves came out spread evenly
+     * around an island — the same thin fringe on an exposed headland as in a sheltered cove.
+     * That is backwards. A mangrove needs still water to hold onto: the surf side of a point is
+     * beach and rock, and the thicket is in the bights and inlets behind it, which on these real
+     * OSM coastlines is most of the north shores.
+     *
+     * Shelter is measured rather than guessed: count how much of a ring around a shore point is
+     * land. In a cove the land wraps round you and most of the ring is dry; on a headland you
+     * are sticking out into water and almost none of it is. Plant in proportion, and the fringe
+     * thickens into the inlets and thins on the points on its own.
+     */
+    if (rim) {
+      const RING_R = 46, RING_N = 12;
+      for (let k = 0; k < INLET_WALK; k++) {
+        const u = (k + 0.5) / INLET_WALK;
+        const w = rim(u);
+        if (I.mainland && (Math.abs(w[0]) > 5200 || inCity(w[0], w[1]))) continue;
+        if (inTownFootprint(w[0], w[1], 34)) continue;
+        if (onCourse(I, ...islandLocal(I, w[0], w[1]))) continue;
+        let land = 0;
+        for (let a = 0; a < RING_N; a++) {
+          const th = (a / RING_N) * Math.PI * 2;
+          if (landH(w[0] + Math.cos(th) * RING_R, w[1] + Math.sin(th) * RING_R) > 0) land++;
+        }
+        // Half the ring is land everywhere on a straight shore; above that is a bight.
+        const shelter = Math.max(0, land / RING_N - 0.52) / 0.38;
+        if (shelter <= 0.02) continue;
+        const n = Math.round(shelter * 3.2);
+        for (let j = 0; j < n; j++) {
+          // Scattered back into the still water behind the shore line, not on it.
+          const jx = (hashCell(WORLD_SEED, idx, k * 7 + j, SALT.MANGROVE_ANG) - 0.5) * 26;
+          const jz = (hashCell(WORLD_SEED, idx, k * 7 + j, SALT.MANGROVE_SIZE) - 0.5) * 26;
+          const mx = w[0] + jx, mz = w[1] + jz;
+          if (inTownFootprint(mx, mz, 30) || creekDist(mx, mz) < 6) continue;
+          const h = landH(mx, mz);
+          // Mangroves stand IN the water at their own edge, so a little below zero is right;
+          // well inland is somebody's back garden and well offshore is open water.
+          if (h < -0.5 || h > 1.6) continue;
+          mg.push({
+            x: mx, z: mz, y: Math.max(0.15, h),
+            s: lerp(2.2, 5.4, hashCell(WORLD_SEED, idx, k * 7 + j, SALT.MANGROVE_SIZE)),
+          });
+        }
+      }
     }
   });
 
