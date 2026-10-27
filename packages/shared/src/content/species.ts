@@ -46,6 +46,13 @@ export const SPECIES: Record<string, SpeciesDef> = {
   // eyes on the upward (left) side, which is why entities/fish/** needed a `flat` body at all;
   // see creatures.ts's VIS/SHAPE entries and school.ts's lay-flat roll.
   flounder:{name:'Southern Flounder',min:1,max:12,str:.4,mult:18,color:'#6b5f4a',fact:'Both eyes end up on one side: a flounder starts life upright and one eye migrates across its skull as it settles onto the bottom.'},
+  // The other two flatfish, at opposite ends of the size range. A hogchoker is a true sole and a
+  // genuinely Florida fish; the halibut is not — it is a cold North Atlantic animal and there is
+  // no Keys population — but it is the biggest flatfish in the sea and it is what was asked for.
+  // 3 to 400 lb is its real range: the rod-and-reel record is over 400 and they are reliably
+  // caught at a few pounds, so the spread here is honest even if the latitude is not.
+  sole:{name:'Hogchoker Sole',min:.4,max:4,str:.3,mult:22,color:'#5e5444',fact:'A true sole, and small enough that it earned its name from hogs choking on the ones thrown to them: the rough scales catch in the throat.'},
+  halibut:{name:'Atlantic Halibut',min:3,max:400,str:1.5,mult:9,color:'#4a4a44',fact:'The largest flatfish in the world, and it hunts like one: it will leave the bottom entirely and run down a fish in open water.'},
   sheepshead:{name:'Sheepshead',min:2,max:12,str:.45,mult:14,color:'#c9c9c0',fact:'Sheepshead have human-like teeth for crunching crabs and barnacles off bridge pilings.'},
   pompano:{name:'Florida Pompano',min:1,max:6,str:.4,mult:22,color:'#f1e9b0',fact:'Pompano skip along the surface behind a boat wake — and they are prized table fare.'},
   tripletail:{name:'Tripletail',min:4,max:30,str:.6,mult:14,color:'#4e4434',fact:'Tripletail float on their sides under buoys and debris, pretending to be a leaf.'},
@@ -90,7 +97,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
 };
 
 export const ZONE_TABLE: Record<string, Array<[string, number]>> = {
-  'Creek':[['flounder',2],['snook',5],['redfish',3],['tarpon',2],['mangrove',3],['jackcrevalle',2],['ladyfish',2]],
+  'Creek':[['flounder',2],['sole',1.5],['snook',5],['redfish',3],['tarpon',2],['mangrove',3],['jackcrevalle',2],['ladyfish',2]],
   'Oil Rig':[['amberjack',6],['blackfin',3],['cobia',3],['grouper',1.5],['gag',1.2],['barracuda',2],['kingfish',2.5],['mahi',1.5],['wahoo',1.5],['yellowfin',1.2],['sailfish',.4],['goliath',.5],['bullshark',.35]],
   // Steel on the bottom: where the big structure-holders live. Weights are tuned for the hotspot
   // rule in pickSpecies (entries under 2.5 get x2.5 when a cast is on a spot, and a wreck is one),
@@ -99,12 +106,12 @@ export const ZONE_TABLE: Record<string, Array<[string, number]>> = {
   // see `wreckSizeT` in sim/fight.ts. Measured against Reef/Oil Rig by test/playthrough-weights.mjs.
   'Wreck':[['cubera',2],['warsaw',.8],['tigershark',.3],['amberjack',6],['grouper',3.6],['cobia',3.2],['gag',2.6],['goliath',2.6],['barracuda',2.5],['jackcrevalle',2.5],['kingfish',2.5],['bullshark',.9],['mutton',.5],['blacktip',.3]],
   'Weedline':[['mahi',8],['tripletail',3],['blackfin',2],['graytrigger',2],['wahoo',2],['sailfish',1.6],['jackcrevalle',1.5],['yellowfin',.7],['marlin',.3]],
-  'Flats':[['flounder',2],['bonefish',11],['permit',2],['barracuda',3],['tarpon',1],['ladyfish',2],['lemonshark',.8],['blacktip',1],['palometa',1.5]],
-  'Backcountry':[['flounder',2.5],['snook',4],['redfish',4],['trout',5],['tarpon',2],['ladyfish',3],['jackcrevalle',2],['tripletail',.8],['bullshark',.6]],
+  'Flats':[['flounder',2],['sole',1.2],['bonefish',11],['permit',2],['barracuda',3],['tarpon',1],['ladyfish',2],['lemonshark',.8],['blacktip',1],['palometa',1.5]],
+  'Backcountry':[['flounder',2.5],['sole',1.6],['snook',4],['redfish',4],['trout',5],['tarpon',2],['ladyfish',3],['jackcrevalle',2],['tripletail',.8],['bullshark',.6]],
   'Bridge':[['flounder',1.5],['tarpon',11],['mangrove',4],['snook',2],['sheepshead',3],['jackcrevalle',2],['goliath',.6],['bullshark',.6],['lookdown',2],['bluerunner',2.5]],
-  'Hawk Channel':[['mangrove',4],['yellowtail',3],['mutton',2],['redgrouper',1.2],['gag',.8],['barracuda',2],['cero',2],['pompano',1.5],['cobia',1],['jackcrevalle',1.5],['graytrigger',1.5],['bluerunner',3],['lanesnapper',2.5],['spanishmack',2.5],['lookdown',1],['tarpon',.5],['amberjack',.5],['kingfish',1.2],['blacktip',.3]],
+  'Hawk Channel':[['halibut',.4],['mangrove',4],['yellowtail',3],['mutton',2],['redgrouper',1.2],['gag',.8],['barracuda',2],['cero',2],['pompano',1.5],['cobia',1],['jackcrevalle',1.5],['graytrigger',1.5],['bluerunner',3],['lanesnapper',2.5],['spanishmack',2.5],['lookdown',1],['tarpon',.5],['amberjack',.5],['kingfish',1.2],['blacktip',.3]],
   'Reef':[['cubera',.6],['yellowtail',5],['mutton',3],['hogfish',3],['grouper',2.5],['gag',2],['redgrouper',2],['barracuda',2],['cero',2.5],['kingfish',2],['lionfish',1.5],['graytrigger',2],['goliath',.5],['amberjack',.8],['cobia',.6],['lemonshark',.25],['schoolmaster',3],['lanesnapper',2.5],['vermilion',2.5],['bluerunner',2.5],['spanishmack',1.5]],
-  'Offshore':[['mako',.8],['tigershark',.35],['mahi',6],['blackfin',4],['wahoo',2],['sailfish',2],['marlin',1.3],['blackmarlin',.6],['swordfish',1.1],['yellowfin',.8],['albacore',.3],['bluefin',.4],['kingfish',1.5],['amberjack',1.5],['cobia',.5],['hammerhead',.5],['skipjack',3],['bigeye',.7]]
+  'Offshore':[['halibut',1],['mako',.8],['tigershark',.35],['mahi',6],['blackfin',4],['wahoo',2],['sailfish',2],['marlin',1.3],['blackmarlin',.6],['swordfish',1.1],['yellowfin',.8],['albacore',.3],['bluefin',.4],['kingfish',1.5],['amberjack',1.5],['cobia',.5],['hammerhead',.5],['skipjack',3],['bigeye',.7]]
 };
 
 /** Species that make a reel-screaming "sounder" run worth announcing (legacy index.html:2662). */

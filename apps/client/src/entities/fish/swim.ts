@@ -98,6 +98,10 @@ const MODE_BY_KEY: Readonly<Record<string, SwimMode>> = {
   barracuda: 'subcarangiform', tarpon: 'subcarangiform', ladyfish: 'subcarangiform',
   snook: 'subcarangiform', cubera: 'carangiform',
   sawfish: 'anguilliform', nurse: 'anguilliform',
+  // Flatfish undulate the whole fin margin, nose to tail, and `flat` has already laid the body
+  // over — so the lateral wave is drawn in the vertical plane, which is exactly how one moves
+  // over sand. Nothing about them is stiff.
+  flounder: 'anguilliform', sole: 'anguilliform', halibut: 'anguilliform',
   // Deep-bodied reef fish are stiff forward and all tail behind.
   permit: 'carangiform', pompano: 'carangiform', lookdown: 'carangiform',
   palometa: 'carangiform', angelfish: 'carangiform', graytrigger: 'carangiform',
