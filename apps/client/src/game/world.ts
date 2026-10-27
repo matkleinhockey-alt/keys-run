@@ -1264,7 +1264,9 @@ export function initWorld(wrap: HTMLElement): World {
     for (const b of marinas.dockBoats) {
       b.position.y = sampleWaterHeight(curState, b.position.x, b.position.z, simTime, ampAt(b.position.x, b.position.z), sw, ch) - 0.05;
     }
-    channelBuoys.update((x, z) => sampleWaterHeight(curState, x, z, simTime, ampAt(x, z), sw, ch));
+    // REAL dt: the buoys' heave is a spring, and it should ride the wall clock like the water
+    // it is floating on rather than the physics-clamped step.
+    channelBuoys.update(dt, (x, z) => sampleWaterHeight(curState, x, z, simTime, ampAt(x, z), sw, ch));
     trollSpread.update(simTime, model, trolling.rigOut(), (x, z) => sampleWaterHeight(curState, x, z, simTime, ampAt(x, z), sw, ch));
     // After the spread, so the fish climbs to where the lure is THIS frame rather than last.
     trollRaise.update(simTime, trolling.raiseProgress(), (station, out) => trollSpread.lurePos(station, out), (x, z) => sampleWaterHeight(curState, x, z, simTime, ampAt(x, z), sw, ch));
@@ -1482,6 +1484,7 @@ export function initWorld(wrap: HTMLElement): World {
     trollStrikeNow: () => trolling.debugStrikeNow(stateBox.state),
     trollRaiseNow: () => trolling.debugRaiseNow(stateBox.state),
     trollRaiseState: () => trollRaise.debug(),
+    buoyState: (i: number) => channelBuoys.debug(i),
     /** Verification-only: hold the fish-cam on the fish currently climbing to a lure, which the
      * chase camera cannot see (the spread sits behind it). */
     trollRaiseCam: (seconds: number) => {
