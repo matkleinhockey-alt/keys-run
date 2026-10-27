@@ -1522,6 +1522,7 @@ export function initWorld(wrap: HTMLElement): World {
     audioMuffle: () => audio.underwaterDebug(),
     lighthouse: () => lighthouse.debug(),
     waterfrontSites: () => waterfront.sites,
+    commercialFleet: () => life.commercialDebug(),
     /** Verification-only: hold the fish-cam on the fish currently climbing to a lure, which the
      * chase camera cannot see (the spread sits behind it). */
     trollRaiseCam: (seconds: number) => {
