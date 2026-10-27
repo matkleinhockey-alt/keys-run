@@ -41,6 +41,11 @@ const STATIONS: ReadonlyArray<{ back: number; side: number; rigger: 0 | 1 | null
   { back: 96, side: 1.5, rigger: null },   // shotgun, way back down the middle
 ];
 
+/** How long a lure stays hauled under after it is eaten, seconds. */
+const PULL_S = 1.1;
+/** How far under, metres. Deep enough to be gone, not so deep the line looks snagged. */
+const PULL_DEPTH = 1.5;
+
 /** Points down each line. More than before because the lines are now two to three times as long
  * and a 10-segment catenary across 96 m is a visible run of straight sticks. */
 const SEG = 16;
@@ -58,6 +63,13 @@ export interface TrollSpread {
    * and the lure keeps skipping and swinging through the turn while the fish climbs to it.
    */
   lurePos(i: number, out: THREE.Vector3): boolean;
+  /**
+   * Yank lure `i` under for `secs`. A fish does not nibble a trolled lure: it eats it going the
+   * other way at speed, and the first thing anyone on the boat sees is the bait vanish and the
+   * line come up tight. Without this the lure went on skipping merrily while the fish that had
+   * just swallowed it jumped behind it.
+   */
+  sound(i: number, secs?: number): void;
   /**
    * `out` is how far the spread is deployed, 0..1 — the same number the riggers swing on, so
    * the lines come out with the poles instead of appearing fully set.
@@ -100,6 +112,10 @@ export function createTrollSpread(scene: THREE.Scene): TrollSpread {
   }
 
   const _tip = new THREE.Vector3(), _lure = new THREE.Vector3(), _p = new THREE.Vector3();
+
+  /** Per-station "dragged under" timer, seconds remaining. */
+  const pulled = new Float32Array(STATIONS.length);
+  let lastT = 0;
 
   /**
    * The boat's recent track, so the baits can TRAIL rather than pivot.
@@ -164,6 +180,12 @@ export function createTrollSpread(scene: THREE.Scene): TrollSpread {
   }
 
   function update(t: number, model: BoatModel, out: number, sample: (x: number, z: number) => number): void {
+    // Drive the yank timers off the clock the caller already passes, so this needs no dt of its
+    // own and stays in step with the ride above.
+    const dt = Math.min(0.1, Math.max(0, t - lastT));
+    lastT = t;
+    for (let i = 0; i < pulled.length; i++) if (pulled[i] > 0) pulled[i] = Math.max(0, pulled[i] - dt);
+
     group.visible = out > 0.02;
     if (!group.visible) return;
 
@@ -202,7 +224,10 @@ export function createTrollSpread(scene: THREE.Scene): TrollSpread {
       // pop in unison, which would read as one object repeated.
       const beat = Math.sin(t * (3.1 + i * 0.37) + i * 1.9);
       const air = Math.max(0, beat) ** 2;
-      const ly = water + 0.06 + air * 0.5;
+      // Eaten: hauled down hard and held there, easing back up as the fish settles onto the
+      // hook. Deepest right at the strike, which is when it is being taken away from you.
+      const yank = pulled[i] > 0 ? Math.min(1, pulled[i] / PULL_S) : 0;
+      const ly = water + 0.06 + air * 0.5 * (1 - yank) - yank * PULL_DEPTH;
 
       // The SWIM. A skirted lure does not track straight — the whole point of the angled,
       // weighted head is that it digs in, darts off to one side, rolls over, breaks the surface
@@ -248,11 +273,15 @@ export function createTrollSpread(scene: THREE.Scene): TrollSpread {
     }
   }
 
+  function sound(i: number, secs = PULL_S): void {
+    if (i >= 0 && i < pulled.length) pulled[i] = secs;
+  }
+
   function lurePos(i: number, out: THREE.Vector3): boolean {
     if (!group.visible || i < 0 || i >= lures.length) return false;
     out.copy(lures[i].position);
     return true;
   }
 
-  return { group, count: STATIONS.length, lurePos, update };
+  return { group, count: STATIONS.length, lurePos, sound, update };
 }

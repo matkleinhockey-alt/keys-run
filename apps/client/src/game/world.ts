@@ -693,6 +693,7 @@ export function initWorld(wrap: HTMLElement): World {
     lurePos: (station) => (trollSpread.lurePos(station, _lureV) ? { x: _lureV.x, z: _lureV.z } : null),
     onRaise: (color, lenM, station) => trollRaise.begin(color, lenM, station),
     onRaiseEnd: () => { trollRaise.end(); raiseCamShot = false; },
+    onEaten: (station) => trollSpread.sound(station),
     outriggers: () => model.setOutriggers,
     zone: () => zoneAt(stateBox.state.x, stateBox.state.z),
     // A weedline or a hump fishes faster than open water. `life.spots` already answers "what is
