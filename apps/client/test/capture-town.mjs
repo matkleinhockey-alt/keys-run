@@ -28,9 +28,14 @@ const OUT = path.join(HERE, 'screenshots', 'town');
 fs.mkdirSync(OUT, { recursive: true });
 const which = process.argv[2] || 'shots';
 
-// Boot Key Harbor City Marina (world/depth.ts MARINAS[0]): sx -900, shoreline sz ~250.7, dir +1
-// (sea at +z, land at -z). Local (u, v) -> world: x = sx + u, z = sz - v.
-const SX = -900, SZ = 250.7;
+// Boot Key Harbor City Marina (world/depth.ts MARINAS[0]): sx -900, sz 102.6728, dir +1 (sea at
+// +z, land at -z). Local (u, v) -> world: x = sx + u, z = sz - v -- i.e. exactly TOWN_FRAME's
+// ox/oz, which is what every assertion below is really comparing against.
+//
+// This was 250.7 and had gone stale: every position here landed ~148 m out to sea, so tying up
+// silently refused and the interiors run reported every venue as built=false. Seven other
+// capture scripts in this directory still carry the old number.
+const SX = -900, SZ = 102.6728;
 const W = (u, v) => [SX + u, SZ - v];
 
 const errs = [];
@@ -59,7 +64,9 @@ const evalL = (page, fn, arg) => page.evaluate(fn, arg);
 
 /** Pull the boat alongside the T-head of the marina and step ashore with the real F key. */
 async function tieUpAtTownDock(page) {
-  const [x, z] = [SX, SZ + 55];
+  // In the fairway between the main pier and the east finger piers, inside the ~14 m reach
+  // `canTieUp` allows (hullLen / 2 + 9).
+  const [x, z] = [-894, 122];
   await page.evaluate(({ x, z }) => window.__fishDebug.teleport(x, z, Math.PI), { x, z });
   await sleep(2500); // let the town stage in and the dock prompt appear
   await page.keyboard.press('KeyF');

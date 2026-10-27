@@ -26,7 +26,8 @@ import { TACKLE, TACKLE_PRICE, tackleKey } from './tackle.js';
 
 export type VenueId =
   | 'tackle' | 'guns' | 'bar' | 'club' | 'diner'
-  | 'dive' | 'liquor' | 'gifts' | 'pawn' | 'laundromat' | 'icecream' | 'motel' | 'convenience' | 'casino';
+  | 'dive' | 'liquor' | 'gifts' | 'pawn' | 'laundromat' | 'icecream' | 'motel' | 'convenience' | 'casino'
+  | 'tarpon' | 'hammered';
 
 export type EffectKind = 'gear' | 'consumable' | 'buff' | 'cosmetic' | 'sink' | 'service';
 
@@ -179,6 +180,38 @@ export const VENUES: Readonly<Record<VenueId, Venue>> = {
     ],
     enterable: true,
     banner: 'rusty anchor · cold beer hot lies',
+  },
+  tarpon: {
+    id: 'tarpon', name: 'The Tipsy Tarpon', tagline: 'Two for one · Fish tales told free · Mind the step',
+    greeting: [
+      'Welcome to the Tipsy Tarpon. The tarpon on the end wall has heard it all before.',
+      'First one is cold, second one is colder, third one you will not remember.',
+      'Rule of the house: if the fish on the wall is bigger than yours, you buy the round.',
+    ],
+    blurb: 'A low room under a mounted tarpon the size of a canoe, every inch of wall buried in somebody else\u2019s best day. The regulars have been here since the tide turned and show no sign of noticing it turned back.',
+    sells: [
+      item('beer', 'Cold one', 'Lowers your cast accuracy, raises the crowd\u2019s opinion of you.', 5, 'buff', 'bar.beer'),
+      item('round', 'A round for the bar', 'Money out, reputation in.', 250, 'sink', 'bar.round'),
+      item('shot-key-lime', 'Key lime shot', 'Local colour.', 8, 'buff', 'bar.shot'),
+    ],
+    enterable: true,
+    banner: 'tipsy tarpon · two for one all day',
+  },
+  hammered: {
+    id: 'hammered', name: 'Reel Hammered', tagline: 'Beer · Bait · Occasionally both',
+    greeting: [
+      'Reel Hammered. Yes we have heard it. No we are not changing it.',
+      'You look like a man who measures his fish in beers. We can help with the beers.',
+      'Kitchen is shut, the cooler is open, and nobody here is driving a boat tonight.',
+    ],
+    blurb: 'A cinderblock room with a plywood bar, a hammerhead down the far end and a floor that has survived four hurricanes and one wedding. The beer is cheap because the rent is nothing and the landlord drinks here.',
+    sells: [
+      item('beer', 'Cold one', 'Lowers your cast accuracy, raises the crowd\u2019s opinion of you.', 5, 'buff', 'bar.beer'),
+      item('round', 'A round for the bar', 'Money out, reputation in.', 250, 'sink', 'bar.round'),
+      item('wings', 'Hot wings', 'Balances the cold one. Slightly.', 11, 'buff', 'bar.wings'),
+    ],
+    enterable: true,
+    banner: 'reel hammered · cheap beer no judgement',
   },
   club: {
     id: 'club', name: 'Pink Flamingo Cabaret', tagline: 'Live entertainment · Cocktails · Under new management',
