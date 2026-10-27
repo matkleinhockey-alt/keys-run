@@ -262,6 +262,11 @@ export function createTrolling(deps: TrollingDeps): Trolling {
     },
     wantThrottle(boat) {
       if (!on) return false;
+      // Fish on: out of gear. `update` already stops the soak clock in these states — the crew
+      // are busy and nothing is being dragged — but the throttle hold was never given the same
+      // treatment, so the autopilot went on driving the boat at seven knots through the whole
+      // fight, towing the fish along behind it. Nobody keeps trolling with a fish on.
+      if (F.state === 'fight' || F.state === 'caught') return false;
       // A touch of hysteresis around the target, or the engine hunts audibly at 30 Hz.
       return Math.abs(boat.speed) < TROLL_SPEED_TARGET - (Math.abs(boat.speed) > TROLL_SPEED_MIN ? 0.12 : 0);
     },

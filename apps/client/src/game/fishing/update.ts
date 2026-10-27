@@ -389,7 +389,30 @@ export function createFishingLogic(deps: FishingDeps) {
           // what that line happens to be rated for.
           : next.tension < 0.08 ? 'slack' : '';
       }
-      setText('fLine', Math.round(next.dist) + ' m');
+      /*
+       * Whether cranking is doing anything.
+       *
+       * This is the decision the whole fight turns on and the HUD never showed it. Reeling while
+       * the fish is RUNNING recovers line at a quarter rate and piles `horse` onto the tension —
+       * you are burning the leader for almost nothing. Reeling when it is not running recovers
+       * at full rate for far less load. "Pulse the reel" is exactly that, and the player had no
+       * way to see which half of the cycle they were in except by watching a number change.
+       *
+       * So the line readout now says which way it is going and the bar says whether to crank.
+       */
+      setText('fLine', Math.round(next.dist) + ' m' + (next.running ? '  ▲' : reel ? '  ▼' : ''));
+      const label = $('fLabel'), sub = $('fSub');
+      if (label && sub && !next.airborne) {
+        if (next.running) {
+          label.textContent = 'It\u2019s running — let it go';
+          sub.textContent = 'Cranking now costs line and loads the leader. Wait for it to stop.';
+        } else {
+          label.textContent = reel ? 'Gaining line' : 'It has stopped — reel!';
+          sub.textContent = 'Pulse the reel. Back off when the bar runs red.';
+        }
+      }
+      const track = fT?.parentElement;
+      if (track) track.classList.toggle('hold', next.running);
       const fStam = $('fStam'); if (fStam) fStam.style.width = next.stam * 100 + '%';
 
       if (next.outcome === 'landed') { land(); return; }

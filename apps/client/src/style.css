@@ -118,6 +118,10 @@ button:focus-visible{outline:3px solid var(--sun);outline-offset:2px}
 .tbar i.over{background:#ff3b24;box-shadow:0 0 10px rgba(255,59,36,.9);animation:tOver .28s steps(2,end) infinite}
 @keyframes tOver{50%{filter:brightness(1.6)}}
 .tbar i.slack{background:#d7dde2}
+/* The fish is running: cranking now recovers a quarter of the line for most of the load, so the
+   track reads as closed for business until it stops. */
+.tbar.hold{filter:saturate(.35) brightness(.78)}
+.tbar.hold::after{content:'';position:absolute;inset:0;border-radius:9px;border:1px solid rgba(228,87,46,.55)}
 .frow{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:7px}
 .frow b{color:var(--ink)}
 .stam{height:4px;border-radius:2px;background:rgba(255,255,255,.12);margin-top:4px;overflow:hidden}
