@@ -25,7 +25,7 @@
  * Returned velocities are m/s in world axes, directly usable as a drift term.
  */
 import { clamp } from '../internal/math.js';
-import { chainZ } from './chain.js';
+import { chainZ, islands } from './chain.js';
 import { offshoreF } from './depth.js';
 
 export interface Flow {
@@ -55,6 +55,103 @@ export const TIDE_MAX_SPEED = 0.42;
  * "the tide turned" rather than as an oscillator.
  */
 export const TIDE_PERIOD_S = 960;
+
+/* ------------------------------------------------------------------ tidal cuts -------------- */
+
+/**
+ * The cuts through the island chain, and the tide ripping through them.
+ *
+ * This is the piece the flow field was missing. The three components above all run along the
+ * SAME axis — the chain tangent — so wherever you went the current pointed up or down the Keys
+ * and only its strength changed. Real current here does not behave like that at all: the thing
+ * everyone who runs these waters actually plans around is the tide pouring between the islands,
+ * across the chain rather than along it, and doing it hard enough in the narrow cuts to decide
+ * whether you can hold position at all.
+ *
+ * It is continuity that makes them interesting. The same tidal prism has to move between Florida
+ * Bay and the ocean through whatever gap there is, so a narrow throat runs fast and a wide span
+ * barely moves. That falls straight out of the island geometry already in `chain.ts`: merge the
+ * land into spans, and the holes between them are the cuts, with Vaca Cut genuinely the tightest
+ * at fifty metres — which is exactly why, in life, it rips.
+ */
+export interface TidalCut {
+  /** Along-chain centre of the gap. */
+  x: number;
+  /** Gap width, metres. */
+  width: number;
+  /** Peak flow through it, m/s, from the continuity scaling below. */
+  speed: number;
+}
+
+/** Width at which a cut runs `CUT_REF_SPEED`; narrower is faster in proportion. */
+export const CUT_REF_WIDTH = 120;
+export const CUT_REF_SPEED = 0.9;
+/** Nothing runs faster than this, however tight the gap. A diver can still work the edges of
+ * even the worst of it, and only at peak flow is the throat itself unswimmable. */
+export const CUT_MAX_SPEED = 1.6;
+/** Chain-adjacent means within this of the chain line: the Miami islands sit 1.7 km north and
+ * Boot Key hangs south of Vaca, and neither forms a cut. */
+const CHAIN_BAND = 420;
+/** A gap narrower than this is a creek, not a cut; wider than this is open water, not a channel. */
+const MIN_CUT_W = 30;
+const MAX_CUT_W = 1400;
+/** How far the jet carries out of a cut before it spreads, metres. */
+const CUT_PLUME_M = 520;
+
+function buildCuts(): TidalCut[] {
+  const spans = islands
+    .filter((I) => !I.mainland && Math.abs(I.z - chainZ(I.x)) < CHAIN_BAND)
+    .map((I) => [I.x - I.a, I.x + I.a] as [number, number])
+    .sort((a, b) => a[0] - b[0]);
+  // Merge overlapping land first, or two islands that touch invent a gap between them.
+  const merged: Array<[number, number]> = [];
+  for (const sp of spans) {
+    const last = merged[merged.length - 1];
+    if (last && sp[0] <= last[1]) last[1] = Math.max(last[1], sp[1]);
+    else merged.push([sp[0], sp[1]]);
+  }
+  const cuts: TidalCut[] = [];
+  for (let i = 1; i < merged.length; i++) {
+    const a = merged[i - 1][1], b = merged[i][0], w = b - a;
+    if (w < MIN_CUT_W || w > MAX_CUT_W) continue;
+    cuts.push({ x: (a + b) / 2, width: w, speed: Math.min(CUT_MAX_SPEED, CUT_REF_SPEED * (CUT_REF_WIDTH / w)) });
+  }
+  return cuts;
+}
+
+/** Derived once from the island layout — same islands, same cuts, every session. */
+export const TIDAL_CUTS: readonly TidalCut[] = buildCuts();
+
+/**
+ * Flow through the cuts at a point: ACROSS the chain, reversing with the tide.
+ *
+ * Phased off the same sinusoid as the along-chain tide, so flood and ebb agree about which way
+ * the water is going — the cuts fill the bay while the tide runs up the Keys, and empty it
+ * while the tide runs back down.
+ *
+ * Falls off as a Gaussian both ways: tightly along the chain, because a jet through a 50 m hole
+ * is a 50 m-wide jet, and more slowly across it, because that jet shoots a long plume out into
+ * the channel on each side before it spreads.
+ */
+export function cutJetAt(x: number, z: number, t: number): Flow {
+  const phase = Math.sin((t / TIDE_PERIOD_S) * Math.PI * 2);
+  if (phase === 0 || !TIDAL_CUTS.length) return { vx: 0, vz: 0, speed: 0 };
+  const dz = z - chainZ(x);
+  const { nx, nz } = chainNormal(x);
+  let vx = 0, vz = 0;
+  for (const c of TIDAL_CUTS) {
+    const sx = Math.max(60, c.width * 0.8);
+    const du = (x - c.x) / sx;
+    if (du * du > 9) continue;                       // 3 sigma out: nothing left to add
+    const alongChain = Math.exp(-du * du);
+    const dv = dz / CUT_PLUME_M;
+    const across = Math.exp(-dv * dv);
+    const s = c.speed * phase * alongChain * across;
+    vx += nx * s;
+    vz += nz * s;
+  }
+  return { vx, vz, speed: Math.hypot(vx, vz) };
+}
 
 /** Peak surge speed (m/s) at the surface in shallow water. */
 export const SURGE_MAX_SPEED = 0.55;
@@ -118,8 +215,11 @@ export function steadyCurrentAt(x: number, z: number, t: number): Flow {
   const tide = TIDE_MAX_SPEED * tidalExposure(x, z) * Math.sin((t / TIDE_PERIOD_S) * Math.PI * 2);
 
   const s = gulf + tide;
-  const vx = tx * s, vz = tz * s;
-  return { vx, vz, speed: Math.abs(s) };
+  // ...plus whatever is pouring through the nearest gap in the chain, which runs ACROSS this
+  // axis rather than along it and is the only part of the field that is not parallel everywhere.
+  const jet = cutJetAt(x, z, t);
+  const vx = tx * s + jet.vx, vz = tz * s + jet.vz;
+  return { vx, vz, speed: Math.hypot(vx, vz) };
 }
 
 /**
