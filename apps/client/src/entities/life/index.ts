@@ -32,6 +32,7 @@ import * as THREE from 'three';
 import { createRacerFleet, type RacerFleet } from './racers.js';
 import { createTrafficFleet, type TrafficFleet } from './traffic.js';
 import { createCommercialFleet, type CommercialFleet } from './commercial.js';
+import { createSandbar, type Sandbar } from './sandbar.js';
 import { createPelicanFlocks, type PelicanFlocks } from './pelicans.js';
 import { createBannerPlanes, type BannerPlanes } from './banner-plane.js';
 import { createWrecks, type Wrecks } from './wrecks.js';
@@ -160,6 +161,8 @@ export interface LifeSystems {
   legacySnapshot(): { rigs: ReadonlyArray<unknown>; weeds: ReadonlyArray<unknown>; hotspots: ReadonlyArray<unknown>; traffic: ReadonlyArray<unknown>; racers: ReadonlyArray<unknown> };
   /** VERIFICATION ONLY: where the working fleet is. */
   commercialDebug(): ReturnType<CommercialFleet['debug']>;
+  /** VERIFICATION ONLY: the sandbar raft-up. */
+  sandbarDebug(): ReturnType<Sandbar['debug']>;
   dispose(): void;
 }
 
@@ -168,6 +171,8 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
   const trafficFleet: TrafficFleet = createTrafficFleet(scene);
   // The working fleet — trap boats, trawlers and a troller (entities/life/commercial.ts).
   const commercial: CommercialFleet = createCommercialFleet(scene);
+  // The sandbar raft-up (entities/life/sandbar.ts).
+  const sandbar: Sandbar = createSandbar(scene);
   const pelicans: PelicanFlocks = createPelicanFlocks(scene, boatSpawn);
   // Somebody is always towing a banner up the Keys. It is the only thing out on the water that
   // advertises the town, which otherwise you have to already know about to visit.
@@ -209,6 +214,7 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
       racerFleet.update(dt, t, boat, cameraXZ, deps.particles);
       trafficFleet.update(dt, t, boat, cameraXZ, deps.particles);
       commercial.update(dt, t, cameraXZ);
+      sandbar.update(dt, t, { x: cameraXZ.x, y: 0, z: cameraXZ.z });
       pelicans.update(dt, t, boat, cameraXZ, deps.particles);
       bannerPlanes.update(dt, t, boat, cameraXZ);
       hotspotWorld.update(dt, t, boat, cameraXZ, deps.particles);
@@ -280,8 +286,10 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
       };
     },
     commercialDebug: () => commercial.debug(),
+    sandbarDebug: () => sandbar.debug(),
     dispose(): void {
       commercial.dispose();
+      sandbar.dispose();
       luigi.dispose();
       caelen.dispose();
       boatGulls.dispose();

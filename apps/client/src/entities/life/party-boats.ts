@@ -171,7 +171,8 @@ function setLights(model: BoatModel, on: boolean): void {
   model.cabinLight2.visible = on;
 }
 
-function placeholderDeps(): BoatBuildDeps {
+/** Shared with entities/life/sandbar.ts, which builds the same real hulls for the same reason. */
+export function placeholderDeps(): BoatBuildDeps {
   // Same trick game/race/opponents.ts uses: a moored boat's MFD/GPS/sounder screens are never
   // legible from the water, so they get a 2x2 texture instead of three render targets each.
   const c = document.createElement('canvas');

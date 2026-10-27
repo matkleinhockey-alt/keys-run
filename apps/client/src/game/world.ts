@@ -1523,6 +1523,7 @@ export function initWorld(wrap: HTMLElement): World {
     lighthouse: () => lighthouse.debug(),
     waterfrontSites: () => waterfront.sites,
     commercialFleet: () => life.commercialDebug(),
+    sandbar: () => life.sandbarDebug(),
     /** Verification-only: hold the fish-cam on the fish currently climbing to a lure, which the
      * chase camera cannot see (the spread sits behind it). */
     trollRaiseCam: (seconds: number) => {
