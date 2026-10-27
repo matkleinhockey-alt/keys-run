@@ -36,6 +36,7 @@ import type { Threat } from '../entities/fish/types.js';
 import { createClouds } from '../world/clouds.js';
 import { createMarinas } from '../world/marinas.js';
 import { createChannelBuoys } from '../world/channel-buoys.js';
+import { createLighthouse } from '../world/lighthouse.js';
 import { createParticleSystem } from '../world/particles.js';
 
 import { makeBoat, type BoatModel } from '../entities/boat/model.js';
@@ -262,6 +263,9 @@ export function initWorld(wrap: HTMLElement): World {
   scene.add(marinas.group);
   // Lateral marks on the dredged cuts (world/channel-buoys.ts). Placement is shared pure data;
   // this only adds the geometry and bobs it on the same water everything else floats on.
+  // Sombrero Key Light on the reef crest, and the lens that sweeps off it (world/lighthouse.ts).
+  const lighthouse = createLighthouse(tod.lightMats);
+  scene.add(lighthouse.group);
   const channelBuoys = createChannelBuoys();
   scene.add(channelBuoys.group);
   // The lines and lures actually in the water while trolling (game/fishing/troll-spread.ts).
@@ -366,6 +370,9 @@ export function initWorld(wrap: HTMLElement): World {
   // wired to the real surface-crossing signal underwater.ts already exposes.
   const surfaceSource: SurfaceTransitionSource = {
     isUnderwater: () => underwater.isUnderwater(),
+    // How far the listener's head is below the surface, so the topside world (the radio most of
+    // all) keeps getting duller the deeper you swim away from it — audio/underwater.ts.
+    depthM: () => Math.max(0, -camera.position.y),
     onCross: (cb) => underwater.onSurfaceCross(cb),
   };
   const audio = createAudioSystem(surfaceSource);
@@ -1274,6 +1281,8 @@ export function initWorld(wrap: HTMLElement): World {
     }
     // REAL dt: the buoys' heave is a spring, and it should ride the wall clock like the water
     // it is floating on rather than the physics-clamped step.
+    // Sim time, not wall time: the flash is world content, so every client sees it together.
+    lighthouse.update(simTime);
     channelBuoys.update(dt, (x, z) => sampleWaterHeight(curState, x, z, simTime, ampAt(x, z), sw, ch));
     trollSpread.update(simTime, model, trolling.rigOut(), (x, z) => sampleWaterHeight(curState, x, z, simTime, ampAt(x, z), sw, ch));
     // After the spread, so the fish climbs to where the lure is THIS frame rather than last.
@@ -1498,6 +1507,8 @@ export function initWorld(wrap: HTMLElement): World {
     trollRaiseState: () => trollRaise.debug(),
     buoyState: (i: number) => channelBuoys.debug(i),
     diverBubbles: () => diverBubbles.debug(),
+    audioMuffle: () => audio.underwaterDebug(),
+    lighthouse: () => lighthouse.debug(),
     /** Verification-only: hold the fish-cam on the fish currently climbing to a lure, which the
      * chase camera cannot see (the spread sits behind it). */
     trollRaiseCam: (seconds: number) => {

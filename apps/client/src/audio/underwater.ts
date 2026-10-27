@@ -25,8 +25,17 @@ import { clamp, lerp, rand } from '../core/math.js';
 import type { AudioEngine } from './engine.js';
 import type { SurfaceTransitionSource, BreathSource } from './interfaces.js';
 
+/** Cutoff just under the surface, in Hz — bright, because you can still almost hear properly. */
+const MUFFLE_SURFACE_HZ = 900;
+/** e-folding depth of the cutoff, metres. 900 Hz at the surface, ~440 at 10 m, ~215 at 20 m. */
+const MUFFLE_DEPTH_M = 14;
+/** However deep you go, something still gets through — bone conduction does not care about depth. */
+const MUFFLE_FLOOR_HZ = 150;
+
 export interface UnderwaterAudio {
   update(dt: number): void;
+  /** VERIFICATION ONLY: the muffle the topside world is currently heard through. */
+  debug(): { depth: number; cutoffHz: number };
   dispose(): void;
 }
 
@@ -39,7 +48,13 @@ export function createUnderwaterAudio(engine: AudioEngine, surface: SurfaceTrans
   if (!internal.ctx || !internal.underwaterFilter || !internal.underwaterBus) {
     // Engine hasn't called init() yet (no user gesture so far) — degrade to a no-op rather than
     // throwing, since `update()` may be called every frame before the first click.
-    return { update() { /* waiting on a user gesture to start the AudioContext */ }, dispose() { /* nothing built */ } };
+    return {
+      update() { /* waiting on a user gesture to start the AudioContext */ },
+      // -1, not 20000: the built graph also reads 20000 at the surface, and a diagnostic that
+      // cannot tell "wide open" from "never built" is how an hour gets spent on the wrong half.
+      debug: () => ({ depth: 0, cutoffHz: -1 }),
+      dispose() { /* nothing built */ },
+    };
   }
   // Re-bind as plain (non-getter) consts of their non-null type, rather than relying on narrowing
   // of `internal.ctx` etc: TS does not carry a property-access null-check across the nested
@@ -113,14 +128,34 @@ export function createUnderwaterAudio(engine: AudioEngine, surface: SurfaceTrans
   let heartbeatT = 0;
 
   let uwLevel = 0; // the underwaterBus crossfade target, 0..1 — also scales one-shot gains above
+  /** Smoothed listener depth, so a bob through the surface does not chatter the filter. */
+  let depth = 0;
 
   function update(dt: number): void {
     // Only poll when there's no push event to subscribe to instead — see the constructor, which
     // already subscribed via `onCross` if the underwater agent offered one.
     if (!surface.onCross) under = surface.isUnderwater();
     const now = ctx.currentTime;
-    const targetHz = under ? 420 : 20000;
+
+    /*
+     * The muffle used to be a switch: 420 Hz under, 20 kHz over, so a metre down and thirty
+     * metres down sounded exactly alike. Everything topside — the radio above all, which is the
+     * one continuous sound in the game — is playing on a boat at the surface, and as you descend
+     * you are swimming away from it through water that eats the high end first.
+     *
+     * Seawater absorption climbs steeply with frequency, so the audible effect of more path
+     * length is a cutoff that keeps falling rather than a volume that keeps dropping. An
+     * exponential on depth is the right shape and it lands the old 420 Hz at about nine metres —
+     * a typical dive — so mid-water still sounds like it always did, while the shallows are
+     * brighter and the deep is genuinely muddy.
+     */
+    const rawDepth = surface.depthM ? Math.max(0, surface.depthM()) : 0;
+    depth = lerp(depth, under ? rawDepth : 0, Math.min(1, dt * 3));
+    const targetHz = under ? Math.max(MUFFLE_FLOOR_HZ, MUFFLE_SURFACE_HZ * Math.exp(-depth / MUFFLE_DEPTH_M)) : 20000;
     underwaterFilter.frequency.setTargetAtTime(targetHz, now, 0.09); // ~200ms-ish crossfade, legacy's "most important moment"
+    // A little resonance as it closes down, so it reads as water rather than a blanket over the
+    // speaker. Stays gentle: a real peak here would whistle.
+    underwaterFilter.Q.setTargetAtTime(under ? 0.4 + 0.5 * clamp(depth / MUFFLE_DEPTH_M, 0, 1.4) : 0.4, now, 0.2);
     uwLevel = lerp(uwLevel, under ? 1 : 0, Math.min(1, dt * 4));
     underwaterBus.gain.setTargetAtTime(uwLevel * 0.9, now, 0.1);
 
@@ -154,7 +189,11 @@ export function createUnderwaterAudio(engine: AudioEngine, surface: SurfaceTrans
     try { breathSrc.disconnect(); breathBP.disconnect(); breathGain.disconnect(); breathLfo.disconnect(); breathDepth.disconnect(); } catch { /* already disconnected */ }
   }
 
-  return { update, dispose };
+  return {
+    update,
+    debug: () => ({ depth: +depth.toFixed(2), cutoffHz: +underwaterFilter.frequency.value.toFixed(0) }),
+    dispose,
+  };
 }
 
 function makeNoiseBuffer(ctx: AudioContext): AudioBuffer {
