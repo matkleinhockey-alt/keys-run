@@ -267,6 +267,91 @@ function spawnRigs(scene: THREE.Scene, lightMats: LightMatEntry[]): Rig[] {
       b.position.set(px, py, pz); b.castShadow = true; g.add(b);
       return b;
     };
+    /**
+     * The lifeboats, and the handrail that makes a deck look finished.
+     *
+     * A manned platform's most recognisable fitting after the flare is the escape capsule: a
+     * bright orange free-fall boat sitting nose-down on a steep ramp cantilevered off the deck
+     * edge, pointed away from the structure. You abandon by dropping it, bow first, clear of
+     * everything — which is why it hangs out over nothing at that angle.
+     *
+     * Only the manned structures get one. The satellite is an unmanned wellhead with nobody to
+     * evacuate, and the derelict's was taken off with the topsides years ago — a lifeboat still
+     * hanging on an abandoned jacket would say the opposite of what that structure is for.
+     */
+    const freefall = (px: number, py: number, pz: number, yaw: number, scale = 1): void => {
+      const hullM = new THREE.MeshStandardMaterial({ color: 0xf06a16, roughness: 0.45, metalness: 0.1, flatShading: true });
+      const ramp = new THREE.Group();
+      ramp.position.set(px, py, pz); ramp.rotation.y = yaw; ramp.scale.setScalar(scale); g.add(ramp);
+      // The ramp: two rails raked down and out, with cross-ties.
+      const RAKE = -0.62, LEN = 11;
+      for (const o of [-1.5, 1.5]) {
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.28, LEN), steel);
+        rail.position.set(o, -Math.sin(-RAKE) * LEN * 0.5, Math.cos(RAKE) * LEN * 0.5);
+        rail.rotation.x = RAKE; ramp.add(rail);
+      }
+      for (const t of [0.2, 0.5, 0.8]) {
+        const tie = new THREE.Mesh(new THREE.BoxGeometry(3.3, 0.16, 0.16), steel);
+        tie.position.set(0, -Math.sin(-RAKE) * LEN * t, Math.cos(RAKE) * LEN * t);
+        tie.rotation.x = RAKE; ramp.add(tie);
+      }
+      // The capsule, nose down the ramp.
+      const cap = new THREE.Group();
+      cap.position.set(0, -Math.sin(-RAKE) * LEN * 0.46 + 0.8, Math.cos(RAKE) * LEN * 0.46);
+      cap.rotation.x = RAKE; ramp.add(cap);
+      const body = new THREE.Mesh(new THREE.CapsuleGeometry(1.25, 4.2, 4, 10), hullM);
+      body.rotation.x = Math.PI / 2; cap.add(body);
+      const nose = new THREE.Mesh(new THREE.ConeGeometry(1.25, 2.1, 10), hullM);
+      nose.rotation.x = Math.PI / 2; nose.position.z = 3.4; cap.add(nose);
+      // Canopy hatch and the two windows that make it read as a boat and not a buoy.
+      const hatch = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.5, 1.4), new THREE.MeshStandardMaterial({ color: 0xf4f4f2, flatShading: true }));
+      hatch.position.set(0, 1.1, -0.4); cap.add(hatch);
+      for (const o of [-1.2, 1.2]) {
+        const win = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.5, 1.6), new THREE.MeshStandardMaterial({ color: 0x1a2a40, flatShading: true }));
+        win.position.set(o, 0.5, 0.6); cap.add(win);
+      }
+      ramp.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = true; });
+    };
+
+    /**
+     * A davit-launched enclosed boat: the older arrangement, swung out on two curved arms over
+     * the side. Kept alongside the free-fall ones so the field is not one fitting repeated.
+     */
+    const davitBoat = (px: number, py: number, pz: number, yaw: number): void => {
+      const d = new THREE.Group();
+      d.position.set(px, py, pz); d.rotation.y = yaw; g.add(d);
+      const hullM = new THREE.MeshStandardMaterial({ color: 0xf06a16, roughness: 0.45, flatShading: true });
+      for (const o of [-2.4, 2.4]) {
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 4.4, 7), steel);
+        post.position.set(o, 2.2, 0); d.add(post);
+        const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 3.4, 7), steel);
+        arm.position.set(o, 4.1, 1.5); arm.rotation.x = Math.PI / 2.6; d.add(arm);
+        const fall = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2.6, 4), steel);
+        fall.position.set(o, 3, 2.7); d.add(fall);
+      }
+      const boat = new THREE.Mesh(new THREE.CapsuleGeometry(1.05, 4.4, 4, 10), hullM);
+      boat.rotation.z = Math.PI / 2; boat.position.set(0, 1.9, 2.7); d.add(boat);
+      const canopy = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.9, 1.5), hullM);
+      canopy.position.set(0, 2.7, 2.7); d.add(canopy);
+      d.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = true; });
+    };
+
+    /** A handrail round a deck edge. Cheap, and it is most of what makes a deck read as finished
+     * rather than as a slab somebody left floating. */
+    const rail = (cx: number, cz: number, w: number, d2: number, y: number, post = 3.4): void => {
+      const hw = w / 2, hd = d2 / 2;
+      const corners: ReadonlyArray<readonly [number, number]> = [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]];
+      for (let i = 0; i < 4; i++) {
+        const [ax, az] = corners[i], [bx, bz] = corners[(i + 1) % 4];
+        for (const h of [0.55, 1.1]) beam(g, V(cx + ax, y + h, cz + az), V(cx + bx, y + h, cz + bz), 0.055, steel);
+        const len = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.round(len / post));
+        for (let k = 0; k <= n; k++) {
+          const t = k / n, sx2 = cx + ax + (bx - ax) * t, sz2 = cz + az + (bz - az) * t;
+          beam(g, V(sx2, y, sz2), V(sx2, y + 1.1, sz2), 0.05, steel);
+        }
+      }
+    };
+
     const lamp = (px: number, py: number, pz: number, scale = 5): void => {
       const sp = new THREE.Sprite(lampM); sp.scale.setScalar(scale); sp.position.set(px, py, pz); g.add(sp);
     };
@@ -313,6 +398,13 @@ function spawnRigs(scene: THREE.Scene, lightMats: LightMatEntry[]): Rig[] {
       beam(g, V(H + 3, 1.8, -1.5), V(H, top, -1.5), 0.15, steel);
       beam(g, V(H + 3, 1.8, 1.5), V(H, top, 1.5), 0.15, steel);
       for (const [px, pz] of [[-16, -16], [16, -16], [16, 16], [-16, 16], [0, 0]] as const) lamp(px, top + 7.5, pz);
+      // Escape: a free-fall boat raked off one corner and a pair of davits over the far side, so
+      // there is a way off whichever end the fire is not at — which is the entire reason a
+      // platform carries two sets in two places.
+      freefall(-17, top + 1.2, -14, Math.PI * 0.82);
+      davitBoat(16.5, top + 1.2, 13, -Math.PI / 2);
+      rail(0, 0, 34, 34, top + 0.6);
+      rail(0, 0, 30, 30, top + 7.1);
     } else if (kind === 'satellite') {
       // An unmanned wellhead: four short legs, one small deck, a cluster of capped wells and a
       // nav light. Nobody lives here and nothing burns — it just caps the well and blinks.
@@ -335,9 +427,8 @@ function spawnRigs(scene: THREE.Scene, lightMats: LightMatEntry[]): Rig[] {
       }
       box(3.6, 2.4, 2.6, whiteM, -4.6, top + 1.6, 4.4);
       // Handrail round the deck edge, which is most of what reads as "platform" at this size.
-      for (const [ax, az, bx, bz] of [[-7, -7, 7, -7], [7, -7, 7, 7], [7, 7, -7, 7], [-7, 7, -7, -7]] as const) {
-        beam(g, V(ax, top + 1.5, az), V(bx, top + 1.5, bz), 0.08, steel);
-      }
+      // No lifeboat here: an unmanned wellhead has nobody aboard to evacuate.
+      rail(0, 0, 14, 14, top + 0.5, 3);
       beam(g, V(6, top + 0.5, -6), V(6, top + 6, -6), 0.22, steel);
       lamp(6, top + 6.4, -6, 3.4);
     } else if (kind === 'semisub') {
@@ -390,6 +481,10 @@ function spawnRigs(scene: THREE.Scene, lightMats: LightMatEntry[]): Rig[] {
       }
       for (const [lx2, lz2] of [[-20, -14], [20, -14], [20, 14], [-20, 14]] as const) lamp(lx2, top + 2.5, lz2);
       lamp(9, dTop2 + 1.4, 0, 3.6);
+      freefall(20, top + 2, -14, Math.PI * 1.15);
+      davitBoat(-19, top + 2, 13, Math.PI / 2);
+      rail(0, 0, 42, 30, top + 1.6);
+      rail(0, 0, 38, 26, top + 7.6);
     } else if (kind === 'spar') {
       /**
        * A spar: one enormous vertical cylinder, most of it under water, with the deck balanced on
@@ -431,6 +526,9 @@ function spawnRigs(scene: THREE.Scene, lightMats: LightMatEntry[]): Rig[] {
       }
       for (const [lx3, lz3] of [[-12, -12], [12, -12], [12, 12], [-12, 12]] as const) lamp(lx3, top + 1.8, lz3);
       lamp(5, dTop3 + 1.2, 0, 3.4);
+      freefall(-12, top + 1.3, -11, Math.PI * 0.78);
+      rail(0, 0, 26, 26, top + 1.3);
+      rail(0, 0, 22, 22, top + 6.5);
     } else if (kind === 'derelict') {
       /**
        * A jacket nobody came back for. The well came up dry, the topsides were cut away and
@@ -507,6 +605,8 @@ function spawnRigs(scene: THREE.Scene, lightMats: LightMatEntry[]): Rig[] {
       lamp(R * 0.87, top + 28, R * 0.5, 3.6);
       lamp(-R * 0.87, top + 28, R * 0.5, 3.6);
       lamp(0, top + 6, 0);
+      freefall(-14, top + 3, 11, Math.PI * 0.25);
+      rail(0, 0, 30, 30, top + 3.2);
     }
 
     g.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = true; });
