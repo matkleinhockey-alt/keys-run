@@ -157,6 +157,20 @@ export const LOTS: readonly Lot[] = [
   { id: 'motel', venue: 'motel', style: 'motel', u0: 8, u1: 60, v0: 100, v1: 124, h: 7.6, door: 20, enterable: true },
   { id: 'icecream', venue: 'icecream', style: 'icecream', u0: 60, u1: 80, v0: 100, v1: 118, h: 4.0, door: 70, enterable: true },
   { id: 'stopngo', venue: 'convenience', style: 'convenience', u0: 80, u1: 100, v0: 100, v1: 122, h: 4.4, door: 90, enterable: true },
+  // Row 3 — the back street, either side of the casino's own lot. Two more bars: the town had one,
+  // and a fishing town's whole social life happens in them. Both reuse `style: 'bar'`, so the
+  // exterior, the sign painting and the interior shell all come for free (see entities/town/).
+  // Two dives in the service lane behind the strip, one at each end. The lane is the only ground
+  // left to build on: rows 1 and 3 are built out wall to wall with every interior using its full
+  // footprint, the one gap in row 3 is the planted alley the squirrel lives in, and the whole
+  // back lot (v 128-170) is platted as the four Harbor Row estates either side of the casino.
+  //
+  // Which suits them: a 6 m deep cinderblock box down an alley is exactly what a dive bar is, and
+  // the town already has a proper waterfront bar in the Rusty Anchor. Shallow means the bar runs
+  // the length of the room with the door at one end, so you are at it the moment you walk in.
+  // These two u stretches are the ones clear of the lane's dumpsters and AC units.
+  { id: 'tarpon', venue: 'tarpon', style: 'bar', u0: -100, u1: -78, v0: 74, v1: 80, h: 4.4, door: -82, enterable: true },
+  { id: 'hammered', venue: 'hammered', style: 'bar', u0: 82, u1: 100, v0: 74, v1: 80, h: 4.2, door: 97, enterable: true },
   // The Gaff & Gill Casino, in the back lot at the top of Palm Avenue (world/casino.ts says why there).
   CASINO_LOT,
 ];
@@ -304,6 +318,11 @@ const ib = (lot: string, id: string, a0: number, a1: number, b0: number, b1: num
 export const INTERIOR_BOXES: readonly InteriorBox[] = [
   // The Rusty Anchor: the bar runs along the back, booths against the east wall, a pool table.
   { id: 'bar-counter', lot: 'bar', u0: 11, u1: 31, v0: 60.4, v1: 62.4 },
+  // Neither dive has room for anything but the bar: it runs the length of a 5.2 m deep room, the
+  // drinkers in front of it and the barman in the 1.6 m behind. Each stops short of its own door
+  // so the entrance corridor the walker and test/town.test.ts both require stays open.
+  { id: 'tarpon-counter', lot: 'tarpon', u0: -98.6, u1: -84.5, v0: 76.6, v1: 78 },
+  { id: 'hammered-counter', lot: 'hammered', u0: 83.4, u1: 95.6, v0: 76.6, v1: 78 },
   { id: 'bar-booth-1', lot: 'bar', u0: 30, u1: 33.4, v0: 50, v1: 54 },
   { id: 'bar-booth-2', lot: 'bar', u0: 30, u1: 33.4, v0: 55.5, v1: 59.5 },
   { id: 'bar-pool', lot: 'bar', u0: 10.5, u1: 15.5, v0: 50, v1: 54.4 },
@@ -437,6 +456,8 @@ export const INTERACTS: readonly Interact[] = [
   // asserting every interaction point is somewhere a person can actually stand.
   { id: 'counter-bar', kind: 'venue', venue: 'bar', u: 21, v: 59.3, r: 2.6, prompt: 'F  Order at the bar' },
   { id: 'counter-diner', kind: 'venue', venue: 'diner', u: -21.5, v: 58.8, r: 2.6, prompt: 'F  Sit at the counter' },
+  { id: 'counter-tarpon', kind: 'venue', venue: 'tarpon', u: -91, v: 75.8, r: 2.6, prompt: 'F  Order at the bar' },
+  { id: 'counter-hammered', kind: 'venue', venue: 'hammered', u: 89, v: 75.4, r: 2.6, prompt: 'F  Order at the bar' },
   ...SHOP_COUNTERS.map((c): Interact => {
     const l = LOTS.find((x) => x.id === c.lot)!, b = INTERIOR_BOXES.find((x) => x.id === c.counter)!;
     return { id: `counter-${l.venue}`, kind: 'venue', venue: l.venue, u: l.u0 + c.a, v: b.v0 - 1.1, r: 2.6, prompt: c.prompt };
@@ -495,6 +516,20 @@ export const NPCS: readonly Npc[] = [
   { id: 'i-bartender', look: 'bartender', inside: 'bar', at: { u: 21, v: 63.6, yaw: -Math.PI / 2 } },
   { id: 'i-patron-1', look: 'patron', inside: 'bar', at: { u: 17, v: 58.6, yaw: Math.PI / 2 } },
   { id: 'i-patron-2', look: 'woman', inside: 'bar', at: { u: 26, v: 58.6, yaw: Math.PI / 2 } },
+  // The Tipsy Tarpon and Reel Hammered. Counters run along v 148.4-150.4, so the barman stands
+  // behind at v 151.6 facing the room (-PI/2 is back toward the door) and the drinkers sit in
+  // front at v 147.4. Spread along the rail rather than stacked, and turned at angles that read
+  // as a conversation nobody is winning.
+  { id: 'i-tarpon-bartender', look: 'bartender', inside: 'tarpon', at: { u: -91, v: 79, yaw: -Math.PI / 2 } },
+  { id: 'i-tarpon-drunk-1', look: 'patron', inside: 'tarpon', at: { u: -97, v: 75.8, yaw: Math.PI / 2 + 0.3 } },
+  { id: 'i-tarpon-drunk-2', look: 'local', inside: 'tarpon', at: { u: -94, v: 75.8, yaw: Math.PI / 2 - 0.25 } },
+  { id: 'i-tarpon-drunk-3', look: 'angler', inside: 'tarpon', at: { u: -89, v: 75.8, yaw: Math.PI / 2 + 0.12 } },
+  { id: 'i-tarpon-drunk-4', look: 'woman', inside: 'tarpon', at: { u: -85.5, v: 75.8, yaw: Math.PI / 2 - 0.4 } },
+  { id: 'i-hammered-bartender', look: 'bartender', inside: 'hammered', at: { u: 89, v: 79, yaw: -Math.PI / 2 } },
+  { id: 'i-hammered-drunk-1', look: 'local', inside: 'hammered', at: { u: 84.5, v: 75.8, yaw: Math.PI / 2 - 0.3 } },
+  { id: 'i-hammered-drunk-2', look: 'tourist', inside: 'hammered', at: { u: 87.5, v: 75.8, yaw: Math.PI / 2 + 0.2 } },
+  { id: 'i-hammered-drunk-3', look: 'patron', inside: 'hammered', at: { u: 91, v: 75.8, yaw: Math.PI / 2 - 0.15 } },
+  { id: 'i-hammered-drunk-4', look: 'angler', inside: 'hammered', at: { u: 94.5, v: 75.8, yaw: Math.PI / 2 + 0.25 } },
   { id: 'i-cook', look: 'cook', inside: 'diner', at: { u: -21.5, v: 63.6, yaw: -Math.PI / 2 } },
   // The Pink Flamingo, which you own. Two performers on the poles (INTERIOR_BOXES 'club-stage'
   // spans u 42..60, v 64..70, poles at u 47 and 55), an MC at the stage edge, a bartender behind

@@ -54,6 +54,10 @@ export const INTERIOR_RANGE = 36;
 interface RoomLook { wall: number; trim: number; ceil: number; floor: FloorKind; rep: number; lift: number; shade: number; ceilMax: number }
 const ROOMS: Readonly<Record<string, RoomLook>> = {
   bar:        { wall: 0x9a7048, trim: 0x4a3524, ceil: 0x4a3826, floor: 'boards',   rep: 2.2, lift: 2.5, shade: 0x2f6b4a, ceilMax: 99 },
+  // The Tipsy Tarpon: darker boards, green shade, the room of a place that has been open a while.
+  tarpon:     { wall: 0x7d5a3a, trim: 0x3a2a1a, ceil: 0x3c2e20, floor: 'boards',   rep: 2.2, lift: 2.6, shade: 0x2f6b4a, ceilMax: 99 },
+  // Reel Hammered: painted cinderblock and a concrete floor, because the rent is nothing.
+  hammered:   { wall: 0x8e9aa0, trim: 0x2b3338, ceil: 0x4a5257, floor: 'concrete', rep: 2.4, lift: 2.4, shade: 0xd9342b, ceilMax: 4.6 },
   diner:      { wall: 0xf1e8d6, trim: 0xc23a3a, ceil: 0xe6e2d6, floor: 'checker',  rep: 1.6, lift: 1.6, shade: 0xc23a3a, ceilMax: 99 },
   dive:       { wall: 0x4aa6b8, trim: 0xf1f4f5, ceil: 0xe6f0f2, floor: 'tile',     rep: 2.0, lift: 1.7, shade: 0x1ea5b8, ceilMax: 4.4 },
   tackle:     { wall: 0xd8c9a0, trim: 0x1f4f8c, ceil: 0xe9e4d4, floor: 'boards',   rep: 2.4, lift: 1.9, shade: 0x1f4f8c, ceilMax: 4.6 },
@@ -121,7 +125,8 @@ export function buildInterior(lot: Lot, kit: TownKit): Interior {
   const lights: LightSource[] = [];
   const geos: THREE.BufferGeometry[] = [];
   const mats: THREE.Material[] = [];
-  const isBar = lot.id === 'bar';
+  // Keyed on STYLE, not id — there are three bars now and the fit-out is what the style means.
+  const isBar = lot.style === 'bar';
   const isClub = lot.id === 'club';
   // The bar and diner keep their full-height rooms; a tall shop (the motel is 7.6 m, the tackle
   // store 5.2 m) gets a ceiling at a human 3.8-4.6 m instead of a barn. The outside roof does not
@@ -246,30 +251,92 @@ export function buildInterior(lot: Lot, kit: TownKit): Interior {
     solid.span(dj.u0, dj.u1, y0 + 1.2, y0 + 1.26, Zf(dj.v1), Zf(dj.v0), 0x3a1a34);
     glow.halo((dj.u0 + dj.u1) / 2, y0 + 1.5, Zf((dj.v0 + dj.v1) / 2), 1.6, 0x38ff9e);
   } else if (isBar) {
-    const c = box('bar-counter');
+    const c = box(`${lot.id}-counter`);
     solid.span(c.u0, c.u1, y0, y0 + 1.08, Zf(c.v1), Zf(c.v0), 0x3a2a1c);
     solid.span(c.u0 - 0.1, c.u1 + 0.1, y0 + 1.08, y0 + 1.16, Zf(c.v1 + 0.1), Zf(c.v0 - 0.15), 0x9a6a3c);
     solid.span(c.u0, c.u1, y0 + 0.25, y0 + 0.3, Zf(c.v0 - 0.18), Zf(c.v0 - 0.12), 0xe0b34a); // brass foot rail
-    stoolRow(c.u0 + 0.5, c.u1 - 0.5, c.v0 - 0.7, 7, 0xa11b1b);
+    // Stools and bottles are counted off the counter's own length: the two dives' bars are shorter
+    // than the Rusty Anchor's, and the fixed 7 and 18 ran them off the end of the wall.
+    stoolRow(c.u0 + 0.5, c.u1 - 0.5, c.v0 - 0.7, Math.max(4, Math.round((c.u1 - c.u0) / 2.9)), 0xa11b1b);
     // back bar: mirror, two shelves of bottles
     solid.span(c.u0, c.u1, y0 + 0.9, y0 + 2.9, Zf(v1) - 0.02, Zf(v1) - 0.0, 0xbfd3dc);
+    const nBottles = Math.max(4, Math.floor(c.u1 - c.u0 - 1.0));
     for (const sy of [1.55, 2.2]) {
       solid.span(c.u0, c.u1, y0 + sy, y0 + sy + 0.05, Zf(v1) + 0.35, Zf(v1) + 0.0, 0x8a5a36);
-      for (let i = 0; i < 18; i++) solid.cyl(c.u0 + 0.5 + i * 1.0, y0 + sy + 0.05, Zf(v1) + 0.18, 0.07, 0.09, 0.32, [0x2f6b4a, 0xb8741a, 0xc23a3a, 0x3a6ea5, 0xd9d4a0][i % 5], 6);
+      for (let i = 0; i < nBottles; i++) solid.cyl(c.u0 + 0.5 + i * 1.0, y0 + sy + 0.05, Zf(v1) + 0.18, 0.07, 0.09, 0.32, [0x2f6b4a, 0xb8741a, 0xc23a3a, 0x3a6ea5, 0xd9d4a0][i % 5], 6);
     }
     glow.halo(cx - 4, y0 + 3.3, Zf(v1) + 0.1, 1.8, 0x58b6ff); glow.halo(cx + 4, y0 + 3.3, Zf(v1) + 0.1, 1.8, 0xff4b3a);
     solid.span(cx - 5.2, cx - 2.8, y0 + 3.05, y0 + 3.55, Zf(v1) + 0.04, Zf(v1), 0x1a2a40); solid.span(cx + 2.8, cx + 5.2, y0 + 3.05, y0 + 3.55, Zf(v1) + 0.04, Zf(v1), 0x401a1a);
-    // jukebox by the back-left corner
-    const jx = x0 + 1.4, jv = v1 - 1.2;
-    solid.span(jx - 0.55, jx + 0.55, y0, y0 + 1.7, Zf(jv) + 0.35, Zf(jv) - 0.35, 0x7a2c1c); solid.span(jx - 0.4, jx + 0.4, y0 + 0.9, y0 + 1.5, Zf(jv) + 0.37, Zf(jv) + 0.34, 0xffd070);
-    glow.halo(jx, y0 + 1.2, Zf(jv) + 0.6, 1.6, 0xffb040);
-    // pool table
-    const p = box('bar-pool');
-    solid.span(p.u0, p.u1, y0 + 0.78, y0 + 0.9, Zf(p.v1), Zf(p.v0), 0x1f6b3a); solid.span(p.u0 - 0.15, p.u1 + 0.15, y0 + 0.9, y0 + 1.0, Zf(p.v1 + 0.15), Zf(p.v0 - 0.15), 0x5a3a20);
-    for (const [ux, vz] of [[p.u0, p.v0], [p.u1, p.v0], [p.u0, p.v1], [p.u1, p.v1]] as const) solid.span(ux - 0.15, ux + 0.15, y0, y0 + 0.78, Zf(vz) - 0.15, Zf(vz) + 0.15, 0x3a2412);
-    for (let i = 0; i < 5; i++) solid.ball(p.u0 + 3 + (i % 3) * 0.2, y0 + 0.96, Zf(p.v0 + 1.6 + i * 0.2), 0.06, [0xf2c14e, 0xc23a3a, 0x2b4a9a, 0xf2f2f2, 0x15171a][i], 1, 6);
-    booth(box('bar-booth-1'), 'e', 0x8e2a2a); booth(box('bar-booth-2'), 'e', 0x8e2a2a);
-    pend(14, 54, 0xffc070); pend(27, 54, 0xffc070); pend(21, 64, 0xffb060);
+    /**
+     * The walls. A bar in a fishing town is a wall of somebody else's best day, and without the
+     * mounts these rooms were a counter in an empty box.
+     *
+     * A mount is a stretched ball for the body, a cone for the head and a flattened cone laid on
+     * its side for the tail, on a dark backing board — cheap, and at the range you read a wall
+     * decoration from it is the silhouette that sells it. All of it goes into `solid`, so it
+     * costs no extra draw call over the room it is already batched into.
+     *
+     * `wall` picks the face. The long walls ('back', 'front') run along u and take the ordinary
+     * mounts; the end walls ('west', 'east') run along v, and they are the only place a 4 m fish
+     * fits in either dive, whose rooms are 5.2 m deep — which is also where a real bar hangs the
+     * one it wants you to walk in and see. `a` is the position ALONG the chosen wall.
+     */
+    const mount = (wall: 'back' | 'front' | 'west' | 'east', a: number, y: number, len: number, body: number): void => {
+      const half = len * 0.62;
+      if (wall === 'back' || wall === 'front') {
+        const dir = wall === 'back' ? -1 : 1;                 // into the room
+        const z = Zf(wall === 'back' ? v1 - 0.12 : v0 + 0.12), zo = (d: number): number => z + d * dir;
+        solid.span(a - half, a + half, y - len * 0.2, y + len * 0.2, z, zo(0.06), 0x2a1d12);                      // board
+        solid.ball(a, y, zo(0.17), len * 0.24, body, 0.52, 10);                                                    // body
+        solid.cyl(a + len * 0.36, y, zo(0.17), 0.0, len * 0.12, len * 0.38, body, 8, { rz: -Math.PI / 2 });        // head
+        solid.cyl(a - len * 0.46, y, zo(0.17), len * 0.18, 0.02, len * 0.22, body, 6, { rz: Math.PI / 2 });        // tail
+        solid.span(a - len * 0.1, a + len * 0.16, y + len * 0.12, y + len * 0.24, zo(0.15), zo(0.19), body);       // dorsal
+      } else {
+        const dir = wall === 'west' ? 1 : -1;
+        const u = wall === 'west' ? x0 + 0.12 : x1 - 0.12, uo = (d: number): number => u + d * dir;
+        solid.span(u, uo(0.06), y - len * 0.2, y + len * 0.2, Zf(a - half), Zf(a + half), 0x2a1d12);
+        solid.ball(uo(0.17), y, Zf(a), len * 0.24, body, 0.52, 10);
+        solid.cyl(uo(0.17), y, Zf(a + len * 0.36), 0.0, len * 0.12, len * 0.38, body, 8, { rx: Math.PI / 2 });
+        solid.cyl(uo(0.17), y, Zf(a - len * 0.46), len * 0.18, 0.02, len * 0.22, body, 6, { rx: Math.PI / 2 });
+        solid.span(uo(0.15), uo(0.19), y + len * 0.12, y + len * 0.24, Zf(a - len * 0.1), Zf(a + len * 0.16), body);
+      }
+    };
+    const mountY = y0 + 2.2;
+    // Back wall, in whatever the bottles leave either side of the bar. The dives' bars run nearly
+    // wall to wall, so each gets at most one.
+    if (c.u0 - x0 > 2.2) mount('back', (x0 + c.u0) / 2, mountY, 1.5, 0x6f8a9a);
+    if (x1 - c.u1 > 2.2) mount('back', (c.u1 + x1) / 2, mountY, 1.3, 0x7a6a45);
+    // A row down the front wall at eye height, skipping the doorway.
+    for (let i = 0, u = x0 + 1.6; u <= x1 - 1.6; u += 4.5, i++) {
+      if (Math.abs(u - lot.door) < DOOR_W / 2 + 1.1) continue;
+      mount('front', u, mountY, 1.1 + (i % 2) * 0.4, [0x4f7f8f, 0x8a5a3a, 0x5f8a5a][i % 3]);
+    }
+    // The one everybody looks at, on the end wall where it has the room to be as big as it is:
+    // the Tipsy Tarpon's canoe-sized tarpon, and Reel Hammered's hammerhead down the far end of
+    // the bar. Both are promised by the venue blurbs (content/venues.ts).
+    const vMid = (v0 + v1) / 2;
+    if (lot.id === 'tarpon') mount('east', vMid, y0 + 2.4, 2.9, 0xaebecb);
+    if (lot.id === 'hammered') mount('west', vMid, y0 + 2.3, 2.7, 0x8d9aa2);
+
+    if (lot.id === 'bar') {
+      // The Rusty Anchor's own fit-out. The two dives have no room for any of it and no
+      // INTERIOR_BOXES to hang it on, so it stays keyed on the id rather than the style.
+      // jukebox by the back-left corner
+      const jx = x0 + 1.4, jv = v1 - 1.2;
+      solid.span(jx - 0.55, jx + 0.55, y0, y0 + 1.7, Zf(jv) + 0.35, Zf(jv) - 0.35, 0x7a2c1c); solid.span(jx - 0.4, jx + 0.4, y0 + 0.9, y0 + 1.5, Zf(jv) + 0.37, Zf(jv) + 0.34, 0xffd070);
+      glow.halo(jx, y0 + 1.2, Zf(jv) + 0.6, 1.6, 0xffb040);
+      // pool table
+      const p = box('bar-pool');
+      solid.span(p.u0, p.u1, y0 + 0.78, y0 + 0.9, Zf(p.v1), Zf(p.v0), 0x1f6b3a); solid.span(p.u0 - 0.15, p.u1 + 0.15, y0 + 0.9, y0 + 1.0, Zf(p.v1 + 0.15), Zf(p.v0 - 0.15), 0x5a3a20);
+      for (const [ux, vz] of [[p.u0, p.v0], [p.u1, p.v0], [p.u0, p.v1], [p.u1, p.v1]] as const) solid.span(ux - 0.15, ux + 0.15, y0, y0 + 0.78, Zf(vz) - 0.15, Zf(vz) + 0.15, 0x3a2412);
+      for (let i = 0; i < 5; i++) solid.ball(p.u0 + 3 + (i % 3) * 0.2, y0 + 0.96, Zf(p.v0 + 1.6 + i * 0.2), 0.06, [0xf2c14e, 0xc23a3a, 0x2b4a9a, 0xf2f2f2, 0x15171a][i], 1, 6);
+      booth(box('bar-booth-1'), 'e', 0x8e2a2a); booth(box('bar-booth-2'), 'e', 0x8e2a2a);
+      pend(14, 54, 0xffc070); pend(27, 54, 0xffc070); pend(21, 64, 0xffb060);
+    } else {
+      // A dive's lighting is two bulbs over the drinkers and nothing else.
+      pend(cx - (x1 - x0) / 4, c.v0 - 1.0, 0xffb060);
+      pend(cx + (x1 - x0) / 4, c.v0 - 1.0, 0xffa850);
+    }
   } else if (lot.id === 'diner') {
     const c = box('diner-counter');
     solid.span(c.u0, c.u1, y0, y0 + 1.05, Zf(c.v1), Zf(c.v0), 0xe8edf1);
