@@ -39,7 +39,11 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   fastify.decorate('db', opts.db);
   fastify.decorate('pgPool', opts.pool);
 
-  await fastify.register(cors, { origin: opts.corsOrigin });
+  // @fastify/cors only allows GET, HEAD and POST by default, so every PUT was refused at the
+  // preflight — which silently broke `PUT /estates/:id/build` (routes/estates.ts), the request
+  // the client makes to build on a lot. Verified against production: the preflight for a PUT
+  // came back `access-control-allow-methods: GET,HEAD,POST`, so the browser never sent it.
+  await fastify.register(cors, { origin: opts.corsOrigin, methods: ['GET', 'HEAD', 'POST', 'PUT'] });
 
   // global: false — this instance only enforces limits on routes that opt in
   // via `config.rateLimit` (the /auth/* routes). Every other route is
