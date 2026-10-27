@@ -20,16 +20,30 @@
 import * as THREE from 'three';
 import type { BoatModel } from '../../entities/boat/model.js';
 
-/** Lure stations, in the boat's own frame: metres astern, and metres to one side. */
+/**
+ * Lure stations, in the boat's own frame: metres astern, and metres to one side.
+ *
+ * These are real spread distances. A rigger bait goes back 150-250 ft and a shotgun further still
+ * — the baits are spaced DOWN the wake, not clustered behind the transom, so each one is working
+ * a different piece of water and they do not tangle through a turn. The first version had
+ * everything inside 34 m, which put the whole spread in the white water and read as four lures
+ * trailing off the back of the boat rather than a spread being fished.
+ *
+ * The shotgun is the long one straight down the middle, run from the tower on a real boat. It is
+ * the bait that gets eaten when nothing else will, and at 96 m it is most of a football pitch
+ * behind you.
+ */
 const STATIONS: ReadonlyArray<{ back: number; side: number; rigger: 0 | 1 | null }> = [
-  { back: 34, side: -14, rigger: 0 },
-  { back: 30, side: 13, rigger: 1 },
-  { back: 20, side: -4.5, rigger: null },
-  { back: 23, side: 4.5, rigger: null },
+  { back: 64, side: -23, rigger: 0 },   // long rigger, port
+  { back: 56, side: 21, rigger: 1 },    // long rigger, starboard
+  { back: 38, side: -7.5, rigger: null },  // flat line, port
+  { back: 45, side: 7.5, rigger: null },   // flat line, starboard
+  { back: 96, side: 1.5, rigger: null },   // shotgun, way back down the middle
 ];
 
-/** Points down each line. Enough to bend, few enough to be free. */
-const SEG = 10;
+/** Points down each line. More than before because the lines are now two to three times as long
+ * and a 10-segment catenary across 96 m is a visible run of straight sticks. */
+const SEG = 16;
 
 export interface TrollSpread {
   group: THREE.Group;
@@ -113,10 +127,24 @@ export function createTrollSpread(scene: THREE.Scene): TrollSpread {
       const air = Math.max(0, beat) ** 2;
       const ly = water + 0.06 + air * 0.5;
 
-      _lure.set(lx, ly, lz);
+      // The SWIM. A skirted lure does not track straight — the whole point of the angled,
+      // weighted head is that it digs in, darts off to one side, rolls over, breaks the surface
+      // and falls back in. Without it these were four beads being towed in a straight line.
+      //
+      // It is a weave ACROSS the line of travel, strongest while the lure is in the water and
+      // dying out while it is in the air (nothing to bite on), with the nose leading the weave by
+      // a quarter cycle the way a thing that is actually swimming turns before it moves. Each
+      // station has its own frequency, so the spread never falls into step with itself.
+      const swimF = 2.15 + i * 0.43;
+      const swimPh = t * swimF + i * 2.3;
+      const bite = 1 - air * 0.75;                       // digging in, not skipping clear
+      const swim = Math.sin(swimPh) * 0.52 * bite;       // metres off the straight line
+      const wag = Math.cos(swimPh) * 0.42 * bite;        // radians of nose swing, leading it
+
+      _lure.set(lx + rx * swim, ly, lz + rz * swim);
       lures[i].position.copy(_lure);
-      // Nose down the line of travel, rolling a little as it digs in.
-      lures[i].rotation.set(-0.25 + air * 0.5, h, Math.sin(t * 2.3 + i) * 0.25, 'YXZ');
+      // Nose down the line of travel and across the weave, rolling hard as it digs and comes out.
+      lures[i].rotation.set(-0.3 + air * 0.6, h + wag, Math.sin(t * 2.3 + i) * 0.25 + wag * 0.55, 'YXZ');
 
       // Where the line leaves the boat.
       if (st.rigger !== null && model.outriggerTips[st.rigger]) {
@@ -125,8 +153,10 @@ export function createTrollSpread(scene: THREE.Scene): TrollSpread {
         _tip.set(bx - fx * 1.2 + rx * st.side * 0.22, model.group.position.y + 1.5, bz - fz * 1.2 + rz * st.side * 0.22);
       }
 
-      // Slack follows the ride: taut while the lure is digging, bowed while it is in the air.
-      const slack = 0.1 + air * 0.5;
+      // Slack follows the ride: taut while the lure is digging, bowed while it is in the air —
+      // and scaled by how much line is out, since a 96 m shotgun line carries a far bigger belly
+      // than a 38 m flat line at the same tension.
+      const slack = (0.1 + air * 0.5) * (0.55 + back / 60);
       const pos = lines[i].geometry.getAttribute('position') as THREE.BufferAttribute;
       for (let s = 0; s <= SEG; s++) {
         const u = s / SEG;
