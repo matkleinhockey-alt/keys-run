@@ -45,6 +45,7 @@ import { applyBoatVisuals, sampleWaterHeight } from '../entities/boat/visuals.js
 import { createBoatInput, bindBoatInput, type BoatStateBox } from '../entities/boat/input.js';
 import { createTrolling, type Trolling } from './fishing/trolling.js';
 import { createTrollSpread } from './fishing/troll-spread.js';
+import { createTrollRaise, RAISE_S } from './fishing/troll-raise.js';
 import { createFishCam } from './fishing/fish-cam.js';
 import { createCamState, createFpState, updateCamera, cycleView, bindCameraPointerControls, snapChaseRig } from '../entities/camera.js';
 
@@ -264,6 +265,18 @@ export function initWorld(wrap: HTMLElement): World {
   scene.add(channelBuoys.group);
   // The lines and lures actually in the water while trolling (game/fishing/troll-spread.ts).
   const trollSpread = createTrollSpread(scene);
+  // The fish coming up behind a lure, in the seconds before it eats (fishing/troll-raise.ts).
+  const trollRaise = createTrollRaise(scene);
+  /**
+   * True while the fish cam is already running on a fish climbing to a lure.
+   *
+   * The cut normally fires on the hookset, which for trolling is the eat — i.e. after the whole
+   * approach is over. Firing it when the fish STARTS up instead is the point of the feature: the
+   * chase camera looks forward over the bow and puts the spread at the bottom edge of the screen,
+   * so without a cut the fish comes up off-camera and the player sees a splash. This flag stops
+   * the hookset from restarting the shot halfway through the eat.
+   */
+  let raiseCamShot = false;
 
   // 11. particles (wake + spray)
   const particles = createParticleSystem(renderer.getPixelRatio());
@@ -572,7 +585,8 @@ export function initWorld(wrap: HTMLElement): World {
   const fishCam = createFishCam();
 
   const fishing = createFishing({
-    onHookset: (x, z) => fishCam.trigger(x, z),
+    // Not when a raise already has the camera on this fish — it is the same fish, mid-shot.
+    onHookset: (x, z) => { if (!raiseCamShot) fishCam.trigger(x, z); },
     getModifiers: () => buffs.mods,
     // Rod, reel, bait and leader. Without this the rod is permanently the stock outfit no matter
     // what the tackle store sold you.
@@ -653,8 +667,13 @@ export function initWorld(wrap: HTMLElement): World {
   // out, the throttle held at seven knots, and a strike that arrives at speed. It hands off to
   // `fishing.setHook` — the same hookup the cast's strike window uses — so everything from the
   // fight to the jumps to the catch card is the machinery that already exists.
+  const _lureV = new THREE.Vector3();
   const trolling: Trolling = createTrolling({
     setHook: () => fishing.setHook(),
+    spreadCount: () => trollSpread.count,
+    lurePos: (station) => (trollSpread.lurePos(station, _lureV) ? { x: _lureV.x, z: _lureV.z } : null),
+    onRaise: (color, lenM, station) => trollRaise.begin(color, lenM, station),
+    onRaiseEnd: () => { trollRaise.end(); raiseCamShot = false; },
     outriggers: () => model.setOutriggers,
     zone: () => zoneAt(stateBox.state.x, stateBox.state.z),
     // A weedline or a hump fishes faster than open water. `life.spots` already answers "what is
@@ -1247,6 +1266,15 @@ export function initWorld(wrap: HTMLElement): World {
     }
     channelBuoys.update((x, z) => sampleWaterHeight(curState, x, z, simTime, ampAt(x, z), sw, ch));
     trollSpread.update(simTime, model, trolling.rigOut(), (x, z) => sampleWaterHeight(curState, x, z, simTime, ampAt(x, z), sw, ch));
+    // After the spread, so the fish climbs to where the lure is THIS frame rather than last.
+    trollRaise.update(simTime, trolling.raiseProgress(), (station, out) => trollSpread.lurePos(station, out), (x, z) => sampleWaterHeight(curState, x, z, simTime, ampAt(x, z), sw, ch));
+    // Cut to the fish the moment it starts up, and hold through the eat and the first jump. The
+    // trigger waits for the first update rather than firing in `onRaise` because that is when the
+    // fish first has a position to point a camera at.
+    if (!raiseCamShot) {
+      const rs = trollRaise.debug();
+      if (rs.active) { raiseCamShot = true; fishCam.trigger(rs.x, rs.z, RAISE_S + 1.3); }
+    }
 
     if (diver.mode === 'diver' && diverState) {
       // applyBoatVisuals above already kept the (drifting) boat's own transform/wake current —
@@ -1281,10 +1309,17 @@ export function initWorld(wrap: HTMLElement): World {
       // override for the same reason that one is: it has to win for this frame rather than be
       // recomputed away, and a verification script that pins the camera must still beat it.
       // A broken-off fish is not worth filming, and a catch card is its own moment.
-      if (fishCam.active() && FishF.state !== 'fight') fishCam.cancel();
+      // ...unless a fish is still on its way up to a lure, which is a shot about something that
+      // has not happened yet and so is legitimately not a fight. Without this exception the cut
+      // triggered on the raise was cancelled on the very frame it started.
+      const raising = trollRaise.debug();
+      if (fishCam.active() && FishF.state !== 'fight' && !raising.active) fishCam.cancel();
       if (fishCam.active()) {
-        const col = fishWorld.waterColumnAt(FishF.fx, FishF.fz, simTime);
-        const shot = { fx: FishF.fx, fz: FishF.fz, surfaceY: col.surf, floorY: col.floor, bx: stateBox.state.x, bz: stateBox.state.z };
+        // Track the climbing fish while it is climbing, then the hooked one — `FishF.fx/fz` is
+        // not the fish until the eat sets it.
+        const fx = raising.active ? raising.x : FishF.fx, fz = raising.active ? raising.z : FishF.fz;
+        const col = fishWorld.waterColumnAt(fx, fz, simTime);
+        const shot = { fx, fz, fy: raising.active ? raising.y : undefined, surfaceY: col.surf, floorY: col.floor, bx: stateBox.state.x, bz: stateBox.state.z };
         // REAL dt, not `clamped`: the physics clamp runs slower than the wall below 20 fps, and
         // on this sandbox's ~3 fps a 2.3 s shot would last the better part of twenty seconds.
         // Same trap the start screen's splash hit — see SplashScene.frame.
@@ -1445,6 +1480,17 @@ export function initWorld(wrap: HTMLElement): World {
     /** Verification-only: does THIS hull carry outriggers? Tower boats only. */
     hasRiggers: () => ({ boat: boatSpec.id, riggers: !!model.setOutriggers }),
     trollStrikeNow: () => trolling.debugStrikeNow(stateBox.state),
+    trollRaiseNow: () => trolling.debugRaiseNow(stateBox.state),
+    trollRaiseState: () => trollRaise.debug(),
+    /** Verification-only: hold the fish-cam on the fish currently climbing to a lure, which the
+     * chase camera cannot see (the spread sits behind it). */
+    trollRaiseCam: (seconds: number) => {
+      const r = trollRaise.debug();
+      if (!r.active) return false;
+      fishCam.cancel();
+      fishCam.trigger(r.x, r.z, seconds);
+      return true;
+    },
     fishCam: () => fishCam.debug(),
     /** Verification-only: a long fish-cam shot on the fish currently on, so it can be looked at. */
     fishCamHold: (seconds: number) => { fishCam.cancel(); fishCam.trigger(FishF.fx, FishF.fz, seconds); },

@@ -44,6 +44,15 @@ export interface FishCamShot {
   /** Water surface height at the fish, and the sea floor under it. */
   surfaceY: number;
   floorY: number;
+  /**
+   * The fish's own height, for a fish that is not where a hooked one always is.
+   *
+   * A hooked fish rides just under the surface for the whole fight, so the shot below pins
+   * itself near the top of the column and never needed to be told. A fish climbing to a trolled
+   * lure starts nine metres down — framing the surface filmed nothing but blue water. Omit it
+   * and the original surface-hugging framing is used unchanged.
+   */
+  fy?: number;
   /** The boat. The shot is composed AROUND it — see `apply`. */
   bx: number;
   bz: number;
@@ -113,8 +122,18 @@ export function createFishCam(): FishCam {
       look.set(shot.fx, 0, shot.fz);
       // Low in the column, looking a little up so the surface is in frame — but never below the
       // sea floor, which in six feet of backcountry is a real constraint rather than a nicety.
-      const deep = Math.max(shot.floorY + 0.7, shot.surfaceY - 1.9);
-      look.y = Math.min(shot.surfaceY - 0.5, deep + 0.6);
+      const lo = shot.floorY + 0.7, hi = shot.surfaceY - 0.5;
+      let deep: number;
+      if (shot.fy === undefined) {
+        deep = Math.max(lo, shot.surfaceY - 1.9);
+        look.y = Math.min(hi, deep + 0.6);
+      } else {
+        // Told where the fish is: look straight at it and sit a little under it, so a fish on its
+        // way up is climbing across frame with the surface above it rather than away from a
+        // camera parked at the top of the water.
+        look.y = Math.min(hi, Math.max(lo, shot.fy));
+        deep = Math.min(hi, Math.max(lo, shot.fy - 0.9));
+      }
 
       // Composed around the BOAT, not around wherever the bait happened to be when it was eaten.
       // The camera sits on the far side of the fish from the hull and looks back along the line,

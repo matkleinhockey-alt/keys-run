@@ -33,6 +33,17 @@ const SEG = 10;
 
 export interface TrollSpread {
   group: THREE.Group;
+  /** How many lures are in the water. A strike picks one of these to come up on. */
+  readonly count: number;
+  /**
+   * World position of lure `i` as of the last `update`, written into `out`. False if the spread
+   * is stowed or `i` is not a station, in which case `out` is untouched.
+   *
+   * This exists so a fish can be raised on a lure the player can actually see rather than at an
+   * invented point astern: game/fishing/troll-raise.ts tracks whichever station is being worked,
+   * and the lure keeps skipping and swinging through the turn while the fish climbs to it.
+   */
+  lurePos(i: number, out: THREE.Vector3): boolean;
   /**
    * `out` is how far the spread is deployed, 0..1 — the same number the riggers swing on, so
    * the lines come out with the poles instead of appearing fully set.
@@ -130,5 +141,11 @@ export function createTrollSpread(scene: THREE.Scene): TrollSpread {
     }
   }
 
-  return { group, update };
+  function lurePos(i: number, out: THREE.Vector3): boolean {
+    if (!group.visible || i < 0 || i >= lures.length) return false;
+    out.copy(lures[i].position);
+    return true;
+  }
+
+  return { group, count: STATIONS.length, lurePos, update };
 }
