@@ -28,7 +28,7 @@
  *  4. **Radius.** See `hitRadius`.
  */
 import type { CreatureVis } from '@keysrun/shared/content/creatures';
-import { lateralSwimAmp, SWIM_ANG_BASE, swimPhaseAt } from './swim.js';
+import { lateralSwimAmp, swimAngSpeed, swimWavenumber, swimPhaseAt } from './swim.js';
 
 export interface HitCapsule {
   ax: number; ay: number; az: number;
@@ -71,7 +71,7 @@ export interface HitPose {
 }
 
 /** Capsule for `V` at `pose`, with the swim wave sampled at clock `swimT` (swim-clock.ts). */
-export function fishCapsule(V: CreatureVis, pose: HitPose, swimT: number): HitCapsule {
+export function fishCapsule(key: string, V: CreatureVis, pose: HitPose, swimT: number): HitCapsule {
   const sy = Math.sin(pose.yaw), cy = Math.cos(pose.yaw);
   const sp = Math.sin(pose.pitch), cp = Math.cos(pose.pitch);
   const sr = Math.sin(pose.roll), cr = Math.cos(pose.roll);
@@ -95,8 +95,11 @@ export function fishCapsule(V: CreatureVis, pose: HitPose, swimT: number): HitCa
   let off = 0;
   if (lateral) {
     // Displacement is in geometry units (len-scaled by the instance's scale, applied after it).
-    const theta = swimPhaseAt(swimT, SWIM_ANG_BASE, pose.swimPhase);
-    off = lateralSwimAmp(V, REAR_U) * Math.sin(theta - REAR_U * 2.6) * pose.worldScale * BEND_FIT;
+    // Beat rate and wavelength are per-species now, so the capsule has to ask for this fish's
+    // rather than assume the old global constants — otherwise the hitbox swims to a different
+    // tune from the body the player can see.
+    const theta = swimPhaseAt(swimT, swimAngSpeed(key, V), pose.swimPhase);
+    off = lateralSwimAmp(key, V, REAR_U) * Math.sin(theta - REAR_U * swimWavenumber(key, V)) * pose.worldScale * BEND_FIT;
   }
   // rear end: tail-ward along the body axis, pushed sideways by the wave
   const bx = pose.wx - nx * reach + lx * off, by = pose.wy - ny * reach + ly * off, bz = pose.wz - nz * reach + lz * off;

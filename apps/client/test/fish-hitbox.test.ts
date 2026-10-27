@@ -20,7 +20,7 @@ import { SPECIES } from '@keysrun/shared/content/species';
 import { segmentHitsCapsule } from '@keysrun/shared/sim/spear';
 import { mulberry32 } from '@keysrun/shared/rng';
 import { buildCreatureGeo } from '../src/entities/fish/geometry.js';
-import { computeSwimProfile, lateralSwimAmp, SWIM_ANG_BASE, swimPhaseAt } from '../src/entities/fish/swim.js';
+import { computeSwimProfile, lateralSwimAmp, SWIM_ANG_BASE, swimWavenumber, swimPhaseAt } from '../src/entities/fish/swim.js';
 import { fishCapsule, hitRadius, type HitCapsule, type HitPose } from '../src/entities/fish/hitbox.js';
 
 /** The construction `pushSchoolTargets` had before this pass (index.ts), verbatim in effect. */
@@ -79,7 +79,9 @@ function seedOf(key: string): number {
 }
 
 interface Score { tp: number; fp: number; fn: number }
-function measure(key: string, capsuleOf: (V: CreatureVis, p: HitPose, t: number) => HitCapsule, seed: number): Score {
+type CapsuleOf = (V: CreatureVis, p: HitPose, t: number, key: string) => HitCapsule;
+
+function measure(key: string, capsuleOf: CapsuleOf, seed: number): Score {
   const V = VIS[key];
   const rng = mulberry32(seed);
   const s: Score = { tp: 0, fp: 0, fn: 0 };
@@ -93,7 +95,7 @@ function measure(key: string, capsuleOf: (V: CreatureVis, p: HitPose, t: number)
     };
     const swimT = rng() * 100;
     const mesh = worldMesh(key, pose, swimT);
-    const cap = capsuleOf(V, pose, swimT);
+    const cap = capsuleOf(V, pose, swimT, key);
     // view direction: random, aimed from 5 m
     const az = rng() * Math.PI * 2, el = (rng() - 0.5) * 1.2;
     const dir = new THREE.Vector3(-Math.cos(az) * Math.cos(el), -Math.sin(el), -Math.sin(az) * Math.cos(el)).normalize();
@@ -114,7 +116,7 @@ function measure(key: string, capsuleOf: (V: CreatureVis, p: HitPose, t: number)
   return s;
 }
 
-function aggregate(capsuleOf: (V: CreatureVis, p: HitPose, t: number) => HitCapsule): { precision: number; recall: number; perSpecies: Record<string, { p: number; r: number }> } {
+function aggregate(capsuleOf: CapsuleOf): { precision: number; recall: number; perSpecies: Record<string, { p: number; r: number }> } {
   let tp = 0, fp = 0, fn = 0;
   const perSpecies: Record<string, { p: number; r: number }> = {};
   SPECIES_KEYS.forEach((key) => {
@@ -141,8 +143,10 @@ describe('fish spear hitbox vs the rendered mesh', () => {
       let checked = 0;
       for (let i = 0; i < p.count; i += 7) {
         const u = Math.min(1.25, Math.max(0, p.getZ(i) / V.len + 0.5));
-        expect(prof.amp[i]).toBeCloseTo(lateralSwimAmp(V, u), 6);
-        expect(prof.phase[i]).toBeCloseTo(u * 2.6, 6);
+        expect(prof.amp[i]).toBeCloseTo(lateralSwimAmp(key, V, u), 6);
+        // Wavenumber is per-species now (swim.ts's modes), so this asks the same function the
+        // bake and the hitbox ask rather than repeating a constant that used to be global.
+        expect(prof.phase[i]).toBeCloseTo(u * swimWavenumber(key, V), 6);
         checked++;
       }
       expect(checked).toBeGreaterThan(20);
@@ -153,7 +157,7 @@ describe('fish spear hitbox vs the rendered mesh', () => {
     // identity pose: nose points -Z. The rounded end must land on the loft's nose (z = -len/2).
     for (const key of SPECIES_KEYS) {
       const V = VIS[key];
-      const c = fishCapsule(V, { wx: 0, wy: 0, wz: 0, yaw: 0, pitch: 0, roll: 0, worldScale: 1, swimPhase: 0 }, 0);
+      const c = fishCapsule(key, V, { wx: 0, wy: 0, wz: 0, yaw: 0, pitch: 0, roll: 0, worldScale: 1, swimPhase: 0 }, 0);
       const noseReach = -(c.az - c.radius); // distance of the capsule's front surface ahead of the origin
       expect(noseReach).toBeLessThanOrEqual(V.len / 2 + 1e-6);
       const old = legacyCapsule(V, { wx: 0, wy: 0, wz: 0, yaw: 0, pitch: 0, roll: 0, worldScale: 1, swimPhase: 0 });
@@ -163,7 +167,7 @@ describe('fish spear hitbox vs the rendered mesh', () => {
 
   it('is more precise AND no less able to hit than the legacy capsule (aggregate over spearable species)', () => {
     const legacy = aggregate((V, p) => legacyCapsule(V, p));
-    const next = aggregate((V, p, t) => fishCapsule(V, p, t));
+    const next = aggregate((V, p, t, k) => fishCapsule(k, V, p, t));
     console.log('legacy', JSON.stringify({ precision: +legacy.precision.toFixed(3), recall: +legacy.recall.toFixed(3) }));
     console.log('new   ', JSON.stringify({ precision: +next.precision.toFixed(3), recall: +next.recall.toFixed(3) }));
     const worst = Object.entries(next.perSpecies).sort((a, b) => a[1].r - b[1].r).slice(0, 4).map(([k, v]) => `${k} p=${v.p.toFixed(2)} r=${v.r.toFixed(2)}`);
