@@ -51,7 +51,25 @@ function hullProfile(H: HullSpec, st: HullStation, B: number): Profile {
   return { pts, segc };
 }
 
-export interface HullGeoOptions { xo?: number; deck?: boolean }
+export interface HullGeoOptions {
+  xo?: number;
+  deck?: boolean;
+  /**
+   * Build this hull ASYMMETRICALLY — the shape that makes a performance catamaran a catamaran
+   * rather than two pontoons.
+   *
+   * A real offshore cat (Freeman's among them) does not carry a little symmetrical V on each
+   * side. Each sponson has a near-vertical INBOARD wall and much less deadrise on the inboard
+   * bottom, so the inner faces are the primary planing surfaces and they throw their spray
+   * outward instead of into the tunnel, where two inside wakes would meet and fight. The outboard
+   * side keeps the deep V that does the work in a head sea.
+   *
+   * `side` is which half (-1 = -x, +1 = +x) faces the tunnel, and `k` scales the chine height
+   * above the keel on that half — so k < 1 flattens the inboard bottom and drops the chine,
+   * which lengthens the topside above it into the vertical inner wall.
+   */
+  asym?: { side: -1 | 1; k: number };
+}
 
 /** legacy `buildHullGeo` (index.html:1023-1054). */
 export function buildHullGeo(H: HullSpec, L: number, B: number, o: HullGeoOptions = {}): THREE.BufferGeometry {
@@ -71,18 +89,30 @@ export function buildHullGeo(H: HullSpec, L: number, B: number, o: HullGeoOption
   const sts: HullStation[] = [];
   for (let i = 0; i <= NS; i++) sts.push(hullStation(H, L, B, i / NS));
   const pr = sts.map((st) => hullProfile(H, st, B));
+  // The inboard half of an asymmetric hull: same stations, chine pulled down toward the keel, so
+  // the bottom flattens and the side above it stands up.
+  const prIn = o.asym
+    ? sts.map((st) => hullProfile(H, { ...st, yc: st.yk + (st.yc - st.yk) * o.asym!.k }, B))
+    : pr;
+  const half = (i: number, sx: number): Profile => (o.asym && sx === o.asym.side ? prIn[i] : pr[i]);
   const V = (st: HullStation, x: number, y: number): number[] => [x + xo, y, zRake(H, st, y)];
   for (let i = 0; i < NS; i++) {
-    const A = sts[i], Z = sts[i + 1], pa = pr[i].pts, pb = pr[i + 1].pts;
-    for (let k = 0; k < pa.length - 1; k++) {
-      for (const sx of [1, -1]) {
-        quad(V(A, sx * pa[k][0], pa[k][1]), V(A, sx * pa[k + 1][0], pa[k + 1][1]), V(Z, sx * pb[k + 1][0], pb[k + 1][1]), V(Z, sx * pb[k][0], pb[k][1]), pr[i].segc[k]);
+    const A = sts[i], Z = sts[i + 1];
+    for (const sx of [1, -1]) {
+      const pa = half(i, sx).pts, pb = half(i + 1, sx).pts, sc = half(i, sx).segc;
+      for (let k = 0; k < pa.length - 1; k++) {
+        quad(V(A, sx * pa[k][0], pa[k][1]), V(A, sx * pa[k + 1][0], pa[k + 1][1]), V(Z, sx * pb[k + 1][0], pb[k + 1][1]), V(Z, sx * pb[k][0], pb[k][1]), sc[k]);
       }
     }
   }
   // transom
   const S0 = sts[0];
-  const ring: Array<[number, number]> = [...pr[0].pts.map((p) => [-p[0], p[1]] as [number, number]).reverse(), ...pr[0].pts.slice(1)];
+  // Each half of the transom ring comes from its own profile, or an asymmetric hull closes off
+  // with a symmetric face and the chines visibly jump at the stern.
+  const ring: Array<[number, number]> = [
+    ...half(0, -1).pts.map((p) => [-p[0], p[1]] as [number, number]).reverse(),
+    ...half(0, 1).pts.slice(1),
+  ];
   const cy = (S0.yk + S0.ys) / 2;
   for (let j = 0; j < ring.length - 1; j++) {
     const my = (ring[j][1] + ring[j + 1][1]) / 2;

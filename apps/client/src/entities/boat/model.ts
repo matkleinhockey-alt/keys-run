@@ -202,11 +202,24 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
   // boat id (+ sub-part, for the catamaran's two sponsons + upper deck) — every instance of the
   // same boat type shares one geometry instead of re-lofting ~36 stations per joining player.
   if (H.cat) {
-    const Bs = B * 0.33;
-    const Hs: HullSpec = { ...H, F: H.tunnel! + 0.2, spring: 0, entry: 0.55, dr0: H.dr0 + 4, dr1: H.dr1 };
+    // A performance catamaran, not two pontoons. Three things carry that:
+    //
+    //  - NARROW sponsons and a wide tunnel. 33% of the beam each left a tunnel barely wider than
+    //    one hull; a real offshore cat runs slim, high-length-to-beam sponsons with most of the
+    //    beam between them, which is where the ride comes from.
+    //  - A FINE entry. 0.55 is a blunt forefoot. These hulls are knives forward — that is the
+    //    whole argument for the type in a head sea.
+    //  - ASYMMETRY, which is the one that actually stops it reading as a tube: each sponson gets
+    //    a near-vertical inboard wall and a much flatter inboard bottom, so the inner faces do
+    //    the planing and throw their spray outward rather than into the tunnel. See
+    //    `HullGeoOptions.asym` in hull.ts.
+    const Bs = B * 0.29;
+    const Hs: HullSpec = { ...H, F: H.tunnel! + 0.2, spring: 0.16, entry: 0.4, dr0: H.dr0 + 4, dr1: H.dr1 };
     const Hu: HullSpec = { ...H, yk: -H.tunnel!, dr0: 0, dr1: 0, steps: [], entry: 0.5 };
     for (const sx of [-1, 1]) {
-      const geo = sharedGeometry(`hull:${S.id}:sponson:${sx}`, () => buildHullGeo(Hs, L * 0.99, Bs, { xo: sx * (B / 2 - Bs / 2) }));
+      // `-sx` is the half of this sponson that faces the centreline.
+      const inboard = (-sx) as -1 | 1;
+      const geo = sharedGeometry(`hull:${S.id}:sponson:${sx}`, () => buildHullGeo(Hs, L * 0.99, Bs, { xo: sx * (B / 2 - Bs / 2), asym: { side: inboard, k: 0.34 } }));
       add(new THREE.Mesh(geo, hullMat));
     }
     const upperGeo = sharedGeometry(`hull:${S.id}:upper`, () => buildHullGeo(Hu, L, B, { deck: true }));
