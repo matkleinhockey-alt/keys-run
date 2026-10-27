@@ -48,6 +48,11 @@ export interface TrollingDeps {
   onRaise(color: string, lenM: number, station: number): void;
   /** The raise is over, eaten or abandoned. */
   onRaiseEnd(): void;
+  /**
+   * It ate: haul lure `station` under. A trolled fish does not nibble — it takes the bait going
+   * the other way at speed, and the bait disappearing is the first thing anyone aboard sees.
+   */
+  onEaten(station: number): void;
   /** Swing the outriggers; null on a hull with nothing to bolt them to. */
   outriggers(): ((t: number) => void) | null;
   /** The zone the boat is in right now, keyed into `ZONE_TABLE`. */
@@ -193,6 +198,8 @@ export function createTrolling(deps: TrollingDeps): Trolling {
     F.bob = { x: fx, y: 0, z: fz };
     F.hs = null;
 
+    // The bait goes under before anything else happens, because that is the order it happens in.
+    deps.onEaten(p.station);
     deps.onStrike(fx, fz);
     toast(`LINE OUT! ${p.S.name} — ${Math.round(p.weight)} lb on the ${sideName(boat, p.station).toLowerCase()}.`);
     deps.setHook();
@@ -205,6 +212,9 @@ export function createTrolling(deps: TrollingDeps): Trolling {
     // rest — so this does not invent a mechanic, it guarantees the roll that a trolling hookup
     // would almost always win anyway, and only for a fish that can actually do it. A grouper
     // dragged out of a wreck still will not fly, and it should not.
+    // Only fish that actually jump, jump. A tuna hit at seven knots goes DOWN and sideways and
+    // keeps going — that is the whole character of the fight — and dragging it into the air
+    // would be a lie about the one species this mode catches most.
     const f = F.fight, pr = F.fightParams;
     if (f && pr && (pr.jump || pr.kingfish)) {
       f.jumpQ = Math.max(f.jumpQ, pr.billfish ? 3 : pr.jump ? 2 : 1);
