@@ -884,6 +884,10 @@ export function initWorld(wrap: HTMLElement): World {
   let netRemoteBoats: readonly MinimapContact[] = [];
 
   // 15. start screen
+  /** True once the player has picked a hull on the start screen this session — see
+   * `setHullIndexForNet` for why the server's idea of their hull must not override it. */
+  let hullChosenLocally = false;
+
   function placeBoat(spec: Boat): void {
     boatSpec = spec;
     scene.remove(model.group);
@@ -905,7 +909,7 @@ export function initWorld(wrap: HTMLElement): World {
 
   populateBoatCards(BOATS, boatSpec, {
     market: econ.market,
-    onSelectBoat(spec) { if (!game.running) placeBoat(spec); else boatSpec = spec; },
+    onSelectBoat(spec) { hullChosenLocally = true; if (!game.running) placeBoat(spec); else boatSpec = spec; },
     onGo() {
       // legacy `if(F.state!=='idle'&&F.state!=='caught') reelIn();` — switching boats mid-cast
       // would otherwise leave the fishing state machine holding a rod-tip/station reference into
@@ -1626,6 +1630,25 @@ export function initWorld(wrap: HTMLElement): World {
       curState = stateBox.state;
     },
     setHullIndexForNet(hullIndex) {
+      /**
+       * The server does not know which boat the player picked, and this used to apply its answer
+       * anyway — which put them in the robalo.
+       *
+       * HELLO carries only a session token (net/protocol.ts), so there is no field in which to
+       * tell the sim which hull was chosen, and apps/sim's `defaultHullIndex()` returns 0 — the
+       * robalo — with a comment saying "Phase 2 has no boat-selection UI". There is one now. The
+       * client also connects at boot, before the start screen has been used, and `onWelcome`
+       * fires again on every reconnect, so the override landed at an arbitrary moment and the
+       * boat flipped back to the robalo for no reason the player could see.
+       *
+       * A hull the player chose this session wins. The server's value is still honoured when
+       * they have not chosen — that is the restore-your-last-boat path and it is worth keeping.
+       *
+       * NOTE: this fixes what the player sees, not the underlying gap. The sim still has them on
+       * hull 0, so other players see a robalo until `hullIndex` is carried in HELLO — a protocol
+       * change across both the client and the sim service, which have to ship together.
+       */
+      if (hullChosenLocally) return;
       placeBoat(BOATS[hullIndex] ?? BOATS[0]);
     },
     setRemoteBoatsForNet(remotes) {
