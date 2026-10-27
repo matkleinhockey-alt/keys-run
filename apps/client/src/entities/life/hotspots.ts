@@ -190,14 +190,30 @@ export interface Rig extends GullSite {
  * the same silhouette four times. These are the three things that actually stand in a field:
  * the big manned production platform, a small unmanned wellhead that just caps a well, and a
  * jack-up drilling rig whose legs run right through its hull and tower above the deck. */
-export type RigKind = 'platform' | 'satellite' | 'jackup';
+export type RigKind = 'platform' | 'satellite' | 'jackup' | 'semisub' | 'spar' | 'derelict';
 
-/** The platforms' (x, dz-from-chain, kind) sites, exported so test/wrecks.test.ts can assert a
+/**
+ * The platforms' (x, dz-from-chain, kind) sites, exported so test/wrecks.test.ts can assert a
  * wreck never overlaps one. Every site is checked for >= 20 m of water by `spawnRigs`, which
- * silently skips any that is too shallow — see test/rigs.test.ts, which asserts none are. */
+ * silently skips any that is too shallow — see test/rigs.test.ts, which asserts none are.
+ *
+ * Sites must also sit inside `WB`, the box the boat is clamped to. A rig outside it is built and
+ * drawn and completely unreachable — you steer at it and stop dead on an invisible wall a few
+ * hundred metres short. The first western satellite sat at x -4400 against a limit of -4150 and
+ * had been in that state since the field was built; test/rigs.test.ts now asserts it cannot
+ * happen again.
+ */
 export const RIG_SITES: ReadonlyArray<readonly [number, number, RigKind]> = [
-  [-4400, 2900, 'satellite'], [-3250, 2950, 'platform'], [-2100, 2650, 'jackup'], [-900, 3150, 'platform'],
+  // The inshore row: everything here stands on the bottom, which is what limits it. A jack-up
+  // jacks its hull up its own legs and a jacket is welded to the seabed, so both run out of
+  // reach past about 120 m — and this row is in 46-144 m.
+  [-3950, 2900, 'satellite'], [-3250, 2950, 'platform'], [-2100, 2650, 'jackup'], [-900, 3150, 'platform'],
   [400, 3250, 'satellite'], [1550, 2800, 'jackup'], [2500, 2700, 'satellite'], [3350, 3100, 'platform'],
+  // The deep row, further offshore, where standing on the bottom stops being an option and the
+  // structures float and are moored instead — which is why they look nothing like the row inside
+  // them. Plus two wrecks of the industry: jackets left to rust after the well came up dry.
+  [-3980, 3950, 'spar'], [-3300, 3780, 'semisub'], [-2600, 3700, 'derelict'],
+  [-1450, 3800, 'semisub'], [950, 3900, 'derelict'], [2950, 3850, 'semisub'],
 ];
 
 /** legacy `RIGS` (index.html:2091-2129): 4 fixed offshore platforms — no randomness at all, so
@@ -301,6 +317,132 @@ function spawnRigs(scene: THREE.Scene, lightMats: LightMatEntry[]): Rig[] {
       }
       beam(g, V(6, top + 0.5, -6), V(6, top + 6, -6), 0.22, steel);
       lamp(6, top + 6.4, -6, 3.4);
+    } else if (kind === 'semisub') {
+      /**
+       * A semi-submersible. It does not stand on anything: two long pontoons are ballasted down
+       * below the wave zone, four fat columns carry the deck above it, and the whole thing is
+       * held over the well on mooring chains. That is the entire reason it looks the way it does
+       * — the gap of open water under the deck is the structure's defining feature, and no fixed
+       * platform has one.
+       */
+      const top = 15, colR = 3.4, px = 15, pz = 9;
+      // Pontoons, ballasted under the surface. Visible as dark hulls through the water.
+      for (const sz of [-1, 1] as const) {
+        const pon = new THREE.Mesh(new THREE.BoxGeometry(44, 6, 9), rust);
+        pon.position.set(0, -9, sz * pz * 1.5); g.add(pon);
+        // Columns up from the pontoons to the deck.
+        for (const sx of [-1, 1] as const) {
+          // The column has to run from inside the pontoon (which spans y -12..-6) right up into
+          // the underside of the deck at y 13.4, or the deck floats detached above a gap — which
+          // is exactly what the first version drew, columns stopping 4.4 m short of it.
+          const c = new THREE.Mesh(new THREE.CylinderGeometry(colR, colR, 25, 14), steel);
+          c.position.set(sx * px, 2.5, sz * pz * 1.5); g.add(c);
+          // The boot-top band every floater carries at its waterline.
+          const bt = new THREE.Mesh(new THREE.CylinderGeometry(colR + 0.12, colR + 0.12, 2.2, 14), orangeM);
+          bt.position.set(sx * px, 0, sz * pz * 1.5); g.add(bt);
+          // Diagonal bracing between the columns — the lattice that makes it read as a floater.
+          beam(g, V(sx * px, 4, sz * pz * 1.5), V(sx * px * 0.1, -6, sz * pz * 0.2), 0.42, steel);
+        }
+      }
+      box(42, 3.2, 30, deckM, 0, top, 0);
+      box(38, 1.1, 26, deckM, 0, top + 7, 0);
+      for (const [cx2, cz2] of [[-17, -12], [17, -12], [17, 12], [-17, 12]] as const) beam(g, V(cx2, top + 1.6, cz2), V(cx2, top + 6.6, cz2), 0.5, steel);
+      // Accommodation forward, derrick over the moonpool amidships.
+      box(16, 6, 12, whiteM, -12, top + 6.2, 0);
+      box(16, 1, 12, orangeM, -12, top + 9.7, 0);
+      const dTop2 = top + 30;
+      const dfeet: ReadonlyArray<readonly [number, number]> = [[5, -5], [13, -5], [13, 5], [5, 5]];
+      dfeet.forEach(([fx, fz]) => beam(g, V(fx, top + 1.6, fz), V(9 + (fx - 9) * 0.2, dTop2, (fz) * 0.2), 0.32, steel));
+      for (const y of [top + 10, top + 18, top + 25]) {
+        const k = 1 - ((y - (top + 1.6)) / (dTop2 - (top + 1.6))) * 0.8;
+        const P = dfeet.map(([fx, fz]) => V(9 + (fx - 9) * k, y, fz * k));
+        for (let i = 0; i < 4; i++) beam(g, P[i], P[(i + 1) % 4], 0.15, steel);
+      }
+      box(3, 1.2, 3, orangeM, 9, dTop2 + 0.6, 0);
+      const heli2 = new THREE.Mesh(new THREE.CylinderGeometry(7, 7, 0.5, 22), heliM);
+      heli2.position.set(-14, top + 10.4, 0); g.add(heli2);
+      // Mooring chains, angling down and away to the anchors that actually hold it on station.
+      for (const [mx, mz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const) {
+        beam(g, V(mx * px, -8, mz * pz * 1.5), V(mx * 46, seabed, mz * 40), 0.16, rust);
+      }
+      for (const [lx2, lz2] of [[-20, -14], [20, -14], [20, 14], [-20, 14]] as const) lamp(lx2, top + 2.5, lz2);
+      lamp(9, dTop2 + 1.4, 0, 3.6);
+    } else if (kind === 'spar') {
+      /**
+       * A spar: one enormous vertical cylinder, most of it under water, with the deck balanced on
+       * top of it. It is the simplest silhouette in the field and the most unmistakable — a
+       * lighthouse with a drilling rig on it, standing in water far too deep to build in.
+       */
+      const top = 20, R2 = 7.5;
+      const hull = new THREE.Mesh(new THREE.CylinderGeometry(R2, R2, 62, 20), steel);
+      hull.position.set(0, -12, 0); g.add(hull);
+      // Strakes: the helical fins up a real spar that stop it shedding vortices and humming.
+      for (let i = 0; i < 3; i++) {
+        const st = new THREE.Mesh(new THREE.BoxGeometry(R2 * 2.3, 20, 0.5), rust);
+        st.position.set(0, -6 - i * 0.5, 0); st.rotation.y = i * 1.05; g.add(st);
+      }
+      const boot = new THREE.Mesh(new THREE.CylinderGeometry(R2 + 0.15, R2 + 0.15, 3, 20), orangeM);
+      boot.position.set(0, 0, 0); g.add(boot);
+      box(26, 2.6, 26, deckM, 0, top, 0);
+      box(22, 1, 22, deckM, 0, top + 6, 0);
+      for (const [cx3, cz3] of [[-10, -10], [10, -10], [10, 10], [-10, 10]] as const) beam(g, V(cx3, top + 1.3, cz3), V(cx3, top + 5.6, cz3), 0.42, steel);
+      box(12, 5, 9, whiteM, -6, top + 5.5, -6);
+      box(12, 1, 9, orangeM, -6, top + 8.5, -6);
+      const dTop3 = top + 26;
+      const sfeet: ReadonlyArray<readonly [number, number]> = [[2, -3], [8, -3], [8, 3], [2, 3]];
+      sfeet.forEach(([fx, fz]) => beam(g, V(fx, top + 1.3, fz), V(5 + (fx - 5) * 0.22, dTop3, fz * 0.22), 0.3, steel));
+      for (const y of [top + 9, top + 16, top + 22]) {
+        const k = 1 - ((y - (top + 1.3)) / (dTop3 - (top + 1.3))) * 0.78;
+        const P = sfeet.map(([fx, fz]) => V(5 + (fx - 5) * k, y, fz * k));
+        for (let i = 0; i < 4; i++) beam(g, P[i], P[(i + 1) % 4], 0.14, steel);
+      }
+      box(2.6, 1, 2.6, orangeM, 5, dTop3 + 0.5, 0);
+      // Flare boom out one side, well clear of the deck.
+      beam(g, V(11, top + 5, 8), V(27, top + 13, 16), 0.34, steel);
+      fl = new THREE.Mesh(new THREE.PlaneGeometry(7, 7), flameM);
+      fl.position.set(28, top + 14, 16.6); g.add(fl);
+      const heli3 = new THREE.Mesh(new THREE.CylinderGeometry(5.5, 5.5, 0.5, 20), heliM);
+      heli3.position.set(7, top + 9.6, 6); g.add(heli3);
+      for (const [mx, mz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const) {
+        beam(g, V(mx * R2 * 0.8, -26, mz * R2 * 0.8), V(mx * 40, seabed, mz * 36), 0.16, rust);
+      }
+      for (const [lx3, lz3] of [[-12, -12], [12, -12], [12, 12], [-12, 12]] as const) lamp(lx3, top + 1.8, lz3);
+      lamp(5, dTop3 + 1.2, 0, 3.4);
+    } else if (kind === 'derelict') {
+      /**
+       * A jacket nobody came back for. The well came up dry, the topsides were cut away and
+       * barged off, and what is left is four legs and their bracing going quietly orange.
+       *
+       * It is the best fishing structure out here for exactly that reason — no lights, no flare,
+       * no noise, and twenty years of growth on the steel. The lean is the tell: it is the only
+       * thing in the field that is not plumb.
+       */
+      const H = 9, base = seabed, top = 7;
+      g.rotation.z = 0.085;                       // settled on one side
+      g.rotation.x = -0.05;
+      const legs: ReadonlyArray<readonly [number, number]> = [[-H, -H], [H, -H], [H, H], [-H, H]];
+      legs.forEach(([lx, lz], li) => {
+        beam(g, V(lx * 1.22, base, lz * 1.22), V(lx * 1.03, -0.6, lz * 1.03), 0.8, rust);
+        // One leg is sheared off below the waterline — the structure is visibly incomplete.
+        const cut = li === 2 ? -2.5 : top;
+        beam(g, V(lx * 1.03, -0.6, lz * 1.03), V(lx, cut, lz), 0.74, rust);
+      });
+      for (const y of [-14, -5, 3]) {
+        const k = y < 0 ? 1.03 + (-0.6 - y) / (-0.6 - base) * 0.19 : 1.0;
+        const P = legs.map(([lx, lz]) => V(lx * k, y, lz * k));
+        // A couple of braces have gone: the ring is not closed any more.
+        for (let i = 0; i < 4; i++) {
+          if (y === 3 && i === 1) continue;
+          if (y === -5 && i === 3) continue;
+          beam(g, P[i], P[(i + 1) % 4], 0.3, rust);
+        }
+      }
+      // Stub of the deck that was cut away, and a crumpled piece of it hanging off.
+      box(17, 0.9, 17, rust, 0, top, 0);
+      box(5, 0.5, 7, rust, 11, top - 2.2, 3);
+      beam(g, V(8, top, 2), V(13, top - 2, 4), 0.2, rust);
+      // One dead nav light, unlit, left on a pole. Nothing here blinks.
+      beam(g, V(-6, top + 0.5, 6), V(-6, top + 5, 6), 0.18, rust);
     } else {
       // A jack-up: the legs run through the hull and tower well above the deck, which is the one
       // silhouette nobody mistakes for a fixed platform. Three legs, a drilling derrick, and the
