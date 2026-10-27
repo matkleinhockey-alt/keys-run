@@ -56,8 +56,11 @@ export function updateHUD(dt: number, boat: BoatState, ctx: HudCtx): void {
 
   let h: string;
   if (kn > 3) h = isTouch() ? '▲ ▼ throttle · ◀ ▶ steer · follow the chart' : 'W/S throttle · A/D steer · H changes the sea state';
-  else if (boat.trimMode) h = 'Trim mode: ▲ trim up, ▼ trim down · W/S throttle · T to exit';
-  else h = 'Hold W to get on the throttle · A/D to steer · 1 switches camera view';
+  // Both of these needed a touch wording too. The moving case above already had one; stopped and
+  // trimming did not, so a phone player sitting still was told to hold a key their device has not
+  // got — which is the first instruction they ever see, since the boat starts stopped.
+  else if (boat.trimMode) h = isTouch() ? 'Trim mode: ▲ trim up, ▼ trim down · T to exit' : 'Trim mode: ▲ trim up, ▼ trim down · W/S throttle · T to exit';
+  else h = isTouch() ? 'Hold ▲ to get on the throttle · ◀ ▶ to steer · 🎥 switches camera view' : 'Hold W to get on the throttle · A/D to steer · 1 switches camera view';
   if (h !== lastHint) { setText('hint', h); lastHint = h; }
 }
 

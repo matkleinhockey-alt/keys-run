@@ -216,19 +216,39 @@ button:focus-visible{outline:3px solid var(--sun);outline-offset:2px}
 @media (max-width:760px){
   .boats{grid-template-columns:1fr}
   .bcard svg{max-height:70px}
-  #gauges{padding:9px 12px;min-width:140px}
-  .speed{font-size:40px}
-  #map{width:120px;height:120px}
-  #scorebox{top:auto;bottom:178px;left:14px;transform:none;padding:7px 12px;gap:12px}
+  /* The gauges panel measured 376x253 at 390 px wide — 38% of the screen, running clean under
+     the minimap, which is why the boat name came out clipped in half. Cap it short of the map's
+     own column and stop the name wrapping to two lines. */
+  #gauges{padding:8px 11px;min-width:0;max-width:calc(100vw - 176px)}
+  #gBoat{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .speed{font-size:34px}
+  #map{width:116px;height:116px}
+  /* The control bar is a single non-wrapping flex row of ~14 children. At 390 px it measured
+     742 px wide anchored at left:14px, which put everything from the race flag rightwards —
+     camera, quality, gear, cooler, dive, speargun — off the side of the screen with no way to
+     reach any of it. Pin BOTH edges, let it wrap, and shrink the controls enough that it lands
+     in two rows rather than six. */
+  #scorebox{top:auto;bottom:178px;left:10px;right:10px;transform:none;padding:6px 10px;gap:6px 8px;flex-wrap:wrap;justify-content:center}
+  #scorebox>button{padding:5px 7px;font-size:11px;line-height:1.15}
+  /* The radio names the station and the track, which on a phone is a 300 px button and a whole
+     extra row of wrapping on its own. */
+  #btnMusic{max-width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #btnCooler{max-width:104px;overflow:hidden;white-space:nowrap}
+  #scorebox .sc b{font-size:19px}
+  #scorebox .sc span{font-size:10px}
+  #coolerTxt{font-size:10px}
   .slams,#btnMarina,#btnSea{display:none}
   #scorebox.marina #btnMarina,#scorebox.marina #btnSea{display:block}
-  #castbar{bottom:160px}
+  /* Everything that stacks above the control bar has to clear it. The bar wraps to ~111 px on a
+     phone (it was a single 40 px row before it had to fit), and at the old offsets the toast, the
+     fight panel and the cast bar all drew straight across the buttons. */
+  #castbar{bottom:296px}
   #card.photo{justify-content:center;align-items:flex-end;background:none}
   #card.photo .catch{margin:0 0 10px;max-height:52vh;padding:16px}
   .catch h2{font-size:34px}
   #hint{bottom:118px;font-size:13px}
-  #fight{bottom:160px}
-  #toast{top:auto;bottom:230px}
+  #fight{bottom:300px}
+  #toast{top:auto;bottom:300px}
 }
 @media (prefers-reduced-motion: reduce){ #strike{animation:none} .thr i{transition:none} }
 
