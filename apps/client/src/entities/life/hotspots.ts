@@ -32,7 +32,7 @@ import { frenzyActive } from '@keysrun/shared/world/frenzy';
 import { WORLD_SEED, SALT } from '../../state/constants.js';
 import { lerp, rand } from '../../core/math.js';
 import { toast } from '../../ui/toast.js';
-import { setHotspotCallout, compassWord } from '../../ui/hud.js';
+import { compassWord } from '../../ui/hud.js';
 import type { ParticleSystem } from '../../world/particles.js';
 
 const HS_COUNTS: Record<Zone, number> = { Creek: 3, Flats: 7, Backcountry: 6, Bridge: 4, 'Hawk Channel': 5, Reef: 6, Offshore: 9 };
@@ -394,7 +394,6 @@ export function createHotspotWorld(scene: THREE.Scene, lightMats: LightMatEntry[
       // Wall clock, not `t`: `t` is this client's sim time, so two players would never agree on
       // when a spot is boiling — and a frenzy only works as an event if everyone can race to it.
       const nowS = Date.now() / 1000;
-      let call: { dist: number; dx: number; dz: number } | null = null;
       for (const h of hotspots) {
         h.active = frenzyActive(WORLD_SEED, h.site, nowS);
         h.fr = lerp(h.fr, h.active ? 1 : 0, Math.min(1, dt * 0.7));
@@ -404,7 +403,6 @@ export function createHotspotWorld(scene: THREE.Scene, lightMats: LightMatEntry[
         // speed: far enough to be a decision, close enough to still be on when you arrive.
         const hdx = h.x - boat.x, hdz = h.z - boat.z, hd = Math.hypot(hdx, hdz);
         if (h.active && hd < HOTSPOT_CALL_M) {
-          if (!call || hd < call.dist) call = { dist: hd, dx: hdx, dz: hdz };
           if (!h.told) { h.told = true; toast('Birds working, ' + Math.round(hd / 10) * 10 + ' m ' + compassWord(hdx, hdz)); }
         } else if (!h.active && h.fr < 0.05) h.told = false; // re-arm so the next frenzy here is announced too
         const dCam = Math.hypot(h.x - camera.x, h.z - camera.z);
@@ -452,7 +450,6 @@ export function createHotspotWorld(scene: THREE.Scene, lightMats: LightMatEntry[
         }
       }
 
-      setHotspotCallout(call && boat.h !== undefined ? { dist: call.dist, dx: call.dx, dz: call.dz, h: boat.h } : null);
 
       // ---- weedlines: drift slowly, frigatebirds circle overhead ----
       for (const w of weeds) {
