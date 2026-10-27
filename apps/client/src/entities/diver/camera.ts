@@ -51,20 +51,61 @@ export function cycleDiverView(cam: DiverCamState): string {
   return cam.mode === 'mask' ? 'Dive mask view' : 'Chase view';
 }
 
-/** Pointer-drag look, gated by `isActive` exactly like entities/diver/input.ts's key handlers —
- * bound/unbound per dive (see controller.ts) rather than left live, so a drag that started while
- * driving the boat never bleeds a diver-mode look delta in.
+/** True while the diver owns the mouse — see `bindDiverPointerControls`. Exported so
+ * entities/speargun/input.ts can fire on the press instead of classifying it as a tap or a drag,
+ * because under the lock there is no drag to tell it apart from. */
+export function diverMouseLocked(canvas: HTMLCanvasElement): boolean {
+  return document.pointerLockElement === canvas;
+}
+
+/**
+ * Mouse look, gated by `isActive` exactly like entities/diver/input.ts's key handlers —
+ * bound/unbound per dive (see controller.ts) rather than left live, so a look that started while
+ * driving the boat never bleeds a diver-mode delta in.
  *
- * A press does NOT start a look until it has moved `LOOK_DRAG_PX` (gesture.ts) — the same press
- * may be a click that entities/speargun/input.ts fires the gun on at release, and the two must
- * agree on which it is. Only the primary button looks/fires; right/middle presses used to start a
- * look too, which is how a stray context-menu click rotated the view. */
+ * Aiming is the mouse, not a drag. It used to be drag-only: you held the left button and pulled
+ * to swing the view, which meant the one button you aim with is the same one you shoot with, and
+ * every shot had to be disambiguated from a turn by how far the press travelled. Clicking the
+ * canvas now takes the pointer lock and the gun follows the mouse directly, the way the pistol
+ * already works (entities/handgun/input.ts, whose refusal handling this mirrors).
+ *
+ * The drag path stays as the fallback, because the lock can be refused and touch has no lock at
+ * all: without a button held, `moveGesture` is never started and nothing moves, so on a phone
+ * this would be a camera you cannot turn.
+ */
 export function bindDiverPointerControls(canvas: HTMLCanvasElement, cam: DiverCamState, isActive: () => boolean): () => void {
   let g: Gesture | null = null;
+  const locked = (): boolean => document.pointerLockElement === canvas;
+  const requestLock = (): void => {
+    if (locked()) return;
+    // A refusal arrives two ways and both must be swallowed — see the pistol's own note. The
+    // synchronous throw is the dangerous one: letting it escape would abort the rest of `onDown`
+    // and the drag fallback would never start, leaving a diver who cannot look at all.
+    try {
+      const r = canvas.requestPointerLock() as unknown as Promise<void> | undefined;
+      if (r && typeof r.catch === 'function') r.catch(() => undefined);
+    } catch { /* refused — the drag fallback below is the answer */ }
+  };
+  const onMouseMove = (e: MouseEvent): void => {
+    if (!isActive() || !locked()) return;
+    cam.yaw -= e.movementX * 0.0022;
+    cam.pitch = clamp(cam.pitch - e.movementY * 0.0022, -1.3, 1.3);
+  };
+  document.addEventListener('mousemove', onMouseMove);
+
   const onDown = (e: PointerEvent): void => {
-    if (!isActive() || e.button !== 0 || g) return;
+    if (!isActive() || e.button !== 0) return;
+    // Mouse: take the lock and aim with the mouse from here on. Touch (and a refused lock) fall
+    // through to the drag gesture.
+    if (e.pointerType === 'mouse' && !locked()) requestLock();
+    if (locked()) return; // the mouse owns the aim; nothing to drag
+    if (g) return;
     g = beginGesture(e.pointerId, e.clientX, e.clientY);
-    canvas.setPointerCapture(e.pointerId);
+    // `requestPointerLock` resolves asynchronously, so the line above still runs on the click
+    // that takes the lock — and capturing a pointer the lock is in the middle of claiming throws
+    // `InvalidStateError`. Capture is only a nicety for the drag fallback (it keeps a drag alive
+    // if the cursor leaves the canvas), so a refusal is not worth propagating.
+    try { canvas.setPointerCapture(e.pointerId); } catch { /* fallback drag works without it */ }
   };
   const onMove = (e: PointerEvent): void => {
     if (!g || e.pointerId !== g.id || !isActive()) return;
@@ -83,6 +124,8 @@ export function bindDiverPointerControls(canvas: HTMLCanvasElement, cam: DiverCa
   canvas.addEventListener('pointerup', onUp);
   canvas.addEventListener('pointercancel', onUp);
   return () => {
+    document.removeEventListener('mousemove', onMouseMove);
+    if (locked()) document.exitPointerLock();
     canvas.removeEventListener('pointerdown', onDown);
     canvas.removeEventListener('pointermove', onMove);
     canvas.removeEventListener('pointerup', onUp);
