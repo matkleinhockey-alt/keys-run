@@ -101,6 +101,68 @@ export function createTrollSpread(scene: THREE.Scene): TrollSpread {
 
   const _tip = new THREE.Vector3(), _lure = new THREE.Vector3(), _p = new THREE.Vector3();
 
+  /**
+   * The boat's recent track, so the baits can TRAIL rather than pivot.
+   *
+   * Stations used to be resolved in the boat's current frame, which meant the whole spread
+   * rotated rigidly about the hull the instant it turned — a lure 96 m astern swung through a
+   * 96 m arc in one frame, as if it were on the end of a boom. A trolled bait does nothing of
+   * the kind: it is dragged along the water the boat has already been through, so in a turn the
+   * spread strings out along the wake and falls inside the curve, and only straightens once the
+   * boat does.
+   *
+   * Stored by DISTANCE rather than by time: what decides where a bait sits is how much line is
+   * out, not how long ago. One sample every `TRACK_STEP_M`, enough of them to cover the longest
+   * station with room to spare.
+   */
+  const TRACK_STEP_M = 0.6;
+  const TRACK_LEN = Math.ceil((STATIONS[STATIONS.length - 1].back + 24) / TRACK_STEP_M);
+  const trkX = new Float64Array(TRACK_LEN), trkZ = new Float64Array(TRACK_LEN), trkH = new Float64Array(TRACK_LEN);
+  /** Index of the newest sample, and how many are valid. */
+  let trkHead = -1, trkCount = 0;
+
+  function pushTrack(x: number, z: number, h: number): void {
+    if (trkHead < 0) { trkHead = 0; trkX[0] = x; trkZ[0] = z; trkH[0] = h; trkCount = 1; return; }
+    const d = Math.hypot(x - trkX[trkHead], z - trkZ[trkHead]);
+    // A jump means a teleport (the debug hooks, a respawn) rather than a boat; start the track
+    // again or the spread spends the next 160 m dragging itself across the map.
+    if (d > 24) { trkHead = 0; trkX[0] = x; trkZ[0] = z; trkH[0] = h; trkCount = 1; return; }
+    if (d < TRACK_STEP_M) return;
+    const n = Math.min(8, Math.floor(d / TRACK_STEP_M));
+    for (let k = 1; k <= n; k++) {
+      const f = k / n, px = trkX[trkHead], pz = trkZ[trkHead], ph = trkH[trkHead];
+      trkHead = (trkHead + 1) % TRACK_LEN;
+      trkX[trkHead] = px + (x - px) * f;
+      trkZ[trkHead] = pz + (z - pz) * f;
+      // Shortest-way heading interpolation, or a boat crossing north spins its whole spread.
+      let dh = ((h - ph + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+      trkH[trkHead] = ph + dh * f;
+      trkCount = Math.min(TRACK_LEN, trkCount + 1);
+    }
+  }
+
+  /**
+   * The point on the track `back` metres behind the boat, and the heading there. Null until
+   * enough track has been laid — on the first seconds of a set the caller falls back to the
+   * boat's own frame, which is right anyway because the gear is still going out.
+   */
+  function trackBack(back: number): { x: number; z: number; h: number } | null {
+    if (trkCount < 3) return null;
+    let acc = 0;
+    for (let k = 0; k < trkCount - 1; k++) {
+      const i = (trkHead - k + TRACK_LEN * 2) % TRACK_LEN;
+      const j = (i - 1 + TRACK_LEN) % TRACK_LEN;
+      const seg = Math.hypot(trkX[i] - trkX[j], trkZ[i] - trkZ[j]);
+      if (acc + seg >= back) {
+        const f = seg > 1e-6 ? (back - acc) / seg : 0;
+        let dh = ((trkH[j] - trkH[i] + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+        return { x: trkX[i] + (trkX[j] - trkX[i]) * f, z: trkZ[i] + (trkZ[j] - trkZ[i]) * f, h: trkH[i] + dh * f };
+      }
+      acc += seg;
+    }
+    return null; // not enough track yet for a station this far back
+  }
+
   function update(t: number, model: BoatModel, out: number, sample: (x: number, z: number) => number): void {
     group.visible = out > 0.02;
     if (!group.visible) return;
@@ -111,13 +173,28 @@ export function createTrollSpread(scene: THREE.Scene): TrollSpread {
     const fx = -Math.sin(h), fz = -Math.cos(h);
     const rx = Math.cos(h), rz = -Math.sin(h);
     const bx = model.group.position.x, bz = model.group.position.z;
+    pushTrack(bx, bz, h);
 
     for (let i = 0; i < STATIONS.length; i++) {
       const st = STATIONS[i];
       // The spread opens as the gear goes out rather than snapping to full length.
       const back = st.back * out, side = st.side * out;
-      const lx = bx - fx * back + rx * side;
-      const lz = bz - fz * back + rz * side;
+      // Where the water under this bait actually is: back along the boat's own track, offset
+      // across the heading IT had there. Falls back to the current frame only while the track is
+      // still being laid (a fresh set, or just after a teleport).
+      const tp = trackBack(back);
+      // The bait's own frame: the heading of the track where it is sitting, not the hull's. In a
+      // turn these differ by most of the turn, which is the whole point.
+      const lh = tp ? tp.h : h;
+      const lrx = Math.cos(lh), lrz = -Math.sin(lh);
+      let lx: number, lz: number;
+      if (tp) {
+        lx = tp.x + lrx * side;
+        lz = tp.z + lrz * side;
+      } else {
+        lx = bx - fx * back + rx * side;
+        lz = bz - fz * back + rz * side;
+      }
       const water = sample(lx, lz);
 
       // The skip. A lure does not sit on the surface, it porpoises: mostly in the face of a wave
@@ -141,10 +218,10 @@ export function createTrollSpread(scene: THREE.Scene): TrollSpread {
       const swim = Math.sin(swimPh) * 0.52 * bite;       // metres off the straight line
       const wag = Math.cos(swimPh) * 0.42 * bite;        // radians of nose swing, leading it
 
-      _lure.set(lx + rx * swim, ly, lz + rz * swim);
+      _lure.set(lx + lrx * swim, ly, lz + lrz * swim);
       lures[i].position.copy(_lure);
-      // Nose down the line of travel and across the weave, rolling hard as it digs and comes out.
-      lures[i].rotation.set(-0.3 + air * 0.6, h + wag, Math.sin(t * 2.3 + i) * 0.25 + wag * 0.55, 'YXZ');
+      // Nose down ITS line of travel and across the weave, rolling as it digs and comes out.
+      lures[i].rotation.set(-0.3 + air * 0.6, lh + wag, Math.sin(t * 2.3 + i) * 0.25 + wag * 0.55, 'YXZ');
 
       // Where the line leaves the boat.
       if (st.rigger !== null && model.outriggerTips[st.rigger]) {

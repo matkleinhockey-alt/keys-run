@@ -117,9 +117,17 @@ export function updateCamera(
     fp.eyeL.lerp(m.fishSpot, Math.min(1, dt * 3));
     const eye = m.group.localToWorld(tmpV.copy(fp.eyeL).add(tmpV2.set(0, 1.62, 0)));
     camera.position.copy(eye);
-    let tgt: THREE.Vector3 | null = null;
-    if (F.state === 'fight') tgt = tmpV2.set(F.fx, 0, F.fz);
-    else if (lineOut()) tgt = tmpV2.copy(F.bob as unknown as THREE.Vector3);
+    // Only the BOBBER is worth steering the view to, and only before anything is on: it is small,
+    // it is where the next thing will happen, and finding it in open water is a chore.
+    //
+    // A hooked fish is not. It was tracked here too, which meant that for the whole fight the
+    // camera turned itself to follow a fish running a hundred metres off the beam — you lost the
+    // boat, the rod and any sense of which way you were pointing, and every attempt to look
+    // somewhere else was dragged back as soon as `userT` expired. The fight is the part you
+    // steer; the view during it belongs to the player. The rod still aims itself at the fish
+    // (game/fishing/visuals.ts's `aimRod`), and the hookset still gets its one cut away
+    // (game/fishing/fish-cam.ts), so the fish is still shown — just not chased.
+    const tgt: THREE.Vector3 | null = F.state === 'fight' ? null : lineOut() ? tmpV2.copy(F.bob as unknown as THREE.Vector3) : null;
     if (tgt && fp.userT <= 0 && !F.charging) {
       const dx = tgt.x - eye.x, dz = tgt.z - eye.z, hd = Math.hypot(dx, dz) || 1;
       fp.yaw = angLerp(fp.yaw, Math.atan2(-dx, -dz), dt * 2.5);
@@ -153,9 +161,11 @@ export function updateCamera(
       tmpV.set(boat.x + Math.sin(tt) * dist * 1.3, boat.y + ht * 1.2, boat.z + Math.cos(tt) * dist * 1.3);
     }
     camPos.lerp(tmpV, rigSnap ? 1 : 1 - Math.exp(-dt * 4));
+    // Same here, and for the same reason: the chase rig used to pull its look point 35% of the
+    // way toward a hooked fish, so the whole frame swung with every run the fish made. It holds
+    // the boat now. The bobber still gets the pull, because that is a cast you are waiting on.
     let lx = boat.x - Math.sin(boat.h) * 4, lz = boat.z - Math.cos(boat.h) * 4;
-    if (F.state === 'fight') { lx = THREE.MathUtils.lerp(boat.x, F.fx, 0.35); lz = THREE.MathUtils.lerp(boat.z, F.fz, 0.35); }
-    else if (lineOut()) { lx = THREE.MathUtils.lerp(boat.x, F.bob.x, 0.35); lz = THREE.MathUtils.lerp(boat.z, F.bob.z, 0.35); }
+    if (F.state !== 'fight' && lineOut()) { lx = THREE.MathUtils.lerp(boat.x, F.bob.x, 0.35); lz = THREE.MathUtils.lerp(boat.z, F.bob.z, 0.35); }
     tmpV2.set(lx, boat.y + 1.8, lz);
     camLook.lerp(tmpV2, rigSnap ? 1 : 1 - Math.exp(-dt * 5));
     rigSnap = false;
