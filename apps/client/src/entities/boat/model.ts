@@ -259,10 +259,41 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
   const legs: Array<[number, number, number, number]> = [[cw / 2 + 0.05, cz - cl * 0.25, tw * 0.4, tz - tl * 0.38], [cw / 2 + 0.3, cz + cl / 2 + 0.95, tw * 0.4, tz + tl * 0.4]];
   for (const sx of [-1, 1]) for (const [bx, bz, ux, uz] of legs) g.add(beamBetween(V3(sx * bx, cs, bz), V3(sx * ux, topY, uz), 0.042, frame));
   for (const sx of [-1, 1]) g.add(beamBetween(V3(sx * tw * 0.4, topY - 0.02, tz - tl * 0.38), V3(sx * tw * 0.4, topY - 0.02, tz + tl * 0.4), 0.035, frame));
-  const glass = sharedMaterial('glass', () => new THREE.MeshStandardMaterial({ color: 0x6f97a8, transparent: true, opacity: 0.38, roughness: 0.05, metalness: 0.3 }));
+  // Glass is a dielectric. `metalness: 0.3` tinted every reflection by the base colour and
+  // flattened the Fresnel falloff, which is what made the screen read as sheet plastic rather
+  // than glass. There is no environment map in this scene, so the specular highlight off the sun
+  // is the only reflection there is to get right — hence metalness 0 and a near-mirror roughness,
+  // and a cooler, weaker tint so it looks like something you see through rather than a blue slab.
+  const glass = sharedMaterial('glass', () => new THREE.MeshStandardMaterial({
+    color: 0x9fc0cc, transparent: true, opacity: 0.3, roughness: 0.02, metalness: 0,
+  }));
+
+  /**
+   * The frame around a windscreen: a capping rail along the top, a post down each side and a
+   * centre mullion. A real screen is glass held in metal, and that metal is most of what makes
+   * it read as a windscreen at a glance — a bare pane is just a tinted rectangle floating off
+   * the console. `panelBetween` already orients a box along p1->p2, so each piece is the same
+   * span as the glass with the width and thickness swapped around.
+   */
+  const screenFrame = (p1: THREE.Vector3, p2: THREE.Vector3, w: number): THREE.Object3D[] => {
+    const out: THREE.Object3D[] = [];
+    const half = w / 2, r = 0.028;
+    const at = (x: number) => [new THREE.Vector3(x, p1.y, p1.z), new THREE.Vector3(x, p2.y, p2.z)] as const;
+    // Side posts and the centre mullion, following the rake of the glass.
+    for (const x of [-half, 0, half]) {
+      const [a, b] = at(x);
+      out.push(beamBetween(a, b, x === 0 ? r * 0.72 : r, frame));
+    }
+    // Capping rail across the top, which is the edge you actually see against the sky.
+    out.push(beamBetween(new THREE.Vector3(-half, p2.y, p2.z), new THREE.Vector3(half, p2.y, p2.z), r, frame));
+    return out;
+  };
   if (st.top === 'hardtop') {
-    const ws = panelBetween(V3(0, cs + ch + 0.02, cz - cl / 2 + 0.04), V3(0, topY - 0.04, tz - tl / 2 + 0.18), st.enclosed ? tw * 0.82 : cw * 1.25, 0.025, glass);
+    const wsA = V3(0, cs + ch + 0.02, cz - cl / 2 + 0.04), wsB = V3(0, topY - 0.04, tz - tl / 2 + 0.18);
+    const wsW = st.enclosed ? tw * 0.82 : cw * 1.25;
+    const ws = panelBetween(wsA, wsB, wsW, 0.025, glass);
     ws.castShadow = false; g.add(ws);
+    for (const b of screenFrame(wsA, wsB, wsW)) g.add(b);
   }
   if (st.enclosed) {
     const blk = M(0x111316, { roughness: 0.3 });
@@ -289,8 +320,11 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
     const dm = add(new THREE.Mesh(new THREE.SphereGeometry(0.42, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), M(0xf7f7f5, { roughness: 0.25, flatShading: false })), 0, topY + 0.12, tz + tl * 0.1);
     dm.scale.set(1, 0.75, 1);
   } else {
-    const ws = panelBetween(V3(0, cs + ch, cz - cl / 2 + 0.06), V3(0, cs + ch + 0.5, cz - cl * 0.15), cw * 1.05, 0.025, glass);
+    const wsA = V3(0, cs + ch, cz - cl / 2 + 0.06), wsB = V3(0, cs + ch + 0.5, cz - cl * 0.15);
+    const wsW = cw * 1.05;
+    const ws = panelBetween(wsA, wsB, wsW, 0.025, glass);
     ws.castShadow = false; g.add(ws);
+    for (const b of screenFrame(wsA, wsB, wsW)) g.add(b);
   }
   for (const sx of [-1, 1]) g.add(beamBetween(V3(sx * tw * 0.32, topY + 0.12, tz + tl * 0.3), V3(sx * tw * 0.32, topY + 2.4, tz + tl * 0.3 + 0.9), 0.022, M(0xf4f4f4)));
   if (st.radar) { box(0.18, 0.18, 0.18, 0xe9e9e9, 0, topY + 0.22, tz); box(1.3, 0.1, 0.16, 0xf2f2f2, 0, topY + 0.36, tz); }

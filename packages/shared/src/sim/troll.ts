@@ -31,8 +31,17 @@ export const TROLL_SPEED_MAX = 4.6;
 /** m/s. ~7 knots, the middle of the band — what the autopilot holds. */
 export const TROLL_SPEED_TARGET = 3.6;
 
-/** Seconds between strikes at the best speed over ordinary water, before the zone multiplier. */
-export const TROLL_BASE_GAP_S = 95;
+/**
+ * Seconds between strikes at the best speed over ordinary water, before the zone multiplier.
+ *
+ * Was 95, which with the 0.55-1.45 roll meant 52 to 138 seconds of holding seven knots in a
+ * straight line before anything happened — and the whole mode is "hold a speed and wait", so
+ * that wait IS the gameplay and it was too long to be one. Halved: 26 to 70 seconds at the top
+ * of the band, less again over rich water. Still long enough that the speed window is something
+ * you manage rather than a button, and `TROLL_MIN_GAP_S` still stops rich water turning it into
+ * a slot machine.
+ */
+export const TROLL_BASE_GAP_S = 48;
 /**
  * Never less than this many SECONDS between strikes, however good the water.
  *
@@ -109,8 +118,8 @@ export interface TrollStep {
  *
  * The clock is spent in PROPORTION to how well the lures are swimming, which is what makes the
  * speed window a thing you manage rather than a gate you pass once. At dead-on seven knots over
- * rich water a strike is a minute or two away; at the ragged edge of the band it is many times
- * that; outside it, never.
+ * rich water a strike is well under a minute away; at the ragged edge of the band it is many
+ * times that; outside it, never.
  */
 export function stepTroll(state: TrollState, input: TrollInput, dt: number, rng: () => number = Math.random): TrollStep {
   if (!state.out || dt <= 0) return { state, strike: false, quality: 0 };
