@@ -508,7 +508,7 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
       // follows the drawn body including the VAT swim bend. See that file for what the previous
       // inline construction got wrong, and test/fish-hitbox.test.ts for the measured agreement with
       // the real mesh (precision 0.24 -> 0.50 at recall 0.975 -> 0.86).
-      const cap = fishCapsule(V, m, swimClock.value);
+      const cap = fishCapsule(state.type, V, m, swimClock.value);
       const id = `${state.id}#${i}`;
       // Lead is ON, carried by the SCHOOL's own translation (`SchoolState.vx/vz`, written by
       // stepSchool where the centroid advances). Measured in the real game before this, firing

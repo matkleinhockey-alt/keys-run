@@ -31,7 +31,7 @@ import { ampFor, waveHBase } from '@keysrun/shared/waves';
 import type { CreatureVis } from '@keysrun/shared/content/creatures';
 import { chumPull, CARCASS_MILL_R } from '@keysrun/shared/sim/chum';
 import { clamp, lerp, rand } from '../../core/math.js';
-import { SWIM_ANG_BASE } from './swim.js';
+import { swimAngSpeed } from './swim.js';
 import {
   angLerp, fleeClassFor, fleeParamsFor, nearestTrigger, ACT_DUR, ACT_CD,
   isBowRider, bowRideTarget, fleeHeadingFrom, BOW_RIDE_RADIUS, BOW_RIDE_MIN_SPEED, BOW_RIDE_MAX_SPEED,
@@ -424,13 +424,18 @@ function stepMember(
     roll += m.bank;
   }
 
-  // Tail-beat rate follows how fast this fish is ACTUALLY going. The VAT runs at one global rate,
-  // so without this a school milling over its patch at 0.75x cruise and a school bolting at 2.2x
-  // beat identically — which is the single most obviously wrong thing about a school at rest.
-  // Only the DIFFERENCE from cruise is accumulated, so a fish at cruise looks exactly as it did.
+  // Tail-beat rate follows how fast this fish is ACTUALLY going. The VAT bakes one rate per
+  // species, so without this a school milling over its patch at 0.75x cruise and a school
+  // bolting at 2.2x beat identically — which is the single most obviously wrong thing about a
+  // school at rest. Only the DIFFERENCE from cruise is accumulated, so a fish at cruise looks
+  // exactly as it did.
+  //
+  // Scaled by THIS species' baked rate, not the old global 7.5: that constant is no longer what
+  // anything beats at (swim.ts derives the rate from length and swimming mode), so using it here
+  // would have over-driven a slow-beating marlin and under-driven a baitfish.
   const spd = Math.hypot(g.vx, g.vz);
   const rate = clamp(spd / Math.max(0.05, V.speed), BEAT_MIN, BEAT_MAX);
-  m.swimPhase += (rate - 1) * SWIM_ANG_BASE * dt;
+  m.swimPhase += (rate - 1) * swimAngSpeed(g.type, V) * dt;
 
   const yaw = g.heading + Math.sin(t * wf + m.seed) * (g.glide > 0 ? 0 : wa);
   m.wx = mx; m.wy = y; m.wz = mz;
