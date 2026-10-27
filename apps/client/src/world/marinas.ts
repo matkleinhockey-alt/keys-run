@@ -59,6 +59,49 @@ function makeSailboat(hull: number): THREE.Group {
   return g;
 }
 
+/**
+ * A trawler: the other half of a liveaboard anchorage. Displacement hull, deep house right
+ * forward, a stack, and a dinghy on the boat deck — nothing about it is a sailboat.
+ */
+function makeTrawler(hull: number): THREE.Group {
+  const H = { ...HULLS.grady, F: 1.35, spring: 0.3, dr0: 22, dr1: 44, rake: 0.9, colors: { ...HULLS.grady.colors, hull, boot: 0x2c3a2a, cove: null, deck: 0xcfc6ad } };
+  const g = new THREE.Group();
+  const L = 11.5, B = 3.8;
+  g.add(new THREE.Mesh(buildHullGeo(H, L, B, { deck: true }), new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.4, side: THREE.DoubleSide })));
+  const M = (c: number) => new THREE.MeshStandardMaterial({ color: c, flatShading: true, roughness: 0.6 });
+  const house = new THREE.Mesh(new THREE.BoxGeometry(2.9, 2.1, 4.6), M(0xf2efe6));
+  house.position.set(0, 2.1, -1.1); g.add(house);
+  const upper = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.9, 2.6), M(0xf2efe6));
+  upper.position.set(0, 3.6, -1.6); g.add(upper);
+  const stack = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.3, 1.5, 8), M(0x2a2d31));
+  stack.position.set(0.6, 4.6, -2.6); g.add(stack);
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 4.2, 6), M(0xd9dde2));
+  mast.position.set(0, 6.1, -1.4); g.add(mast);
+  // Tender on the boat deck, which is how you know somebody lives aboard.
+  const tender = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.4, 2.8), M(0x9aa0a6));
+  tender.position.set(0, 4.3, 1.6); g.add(tender);
+  return g;
+}
+
+/** A cruising catamaran: two slim hulls and a bridgedeck, which reads as nothing else on the water. */
+function makeCatamaran(hull: number): THREE.Group {
+  const H = { ...HULLS.grady, F: 0.95, spring: 0.18, dr0: 20, dr1: 42, rake: 1.1, colors: { ...HULLS.grady.colors, hull, boot: 0x1f4f8c, cove: null, deck: 0xdad2bd } };
+  const g = new THREE.Group();
+  const L = 11, B = 1.7, SPREAD = 2.6;
+  for (const sx of [-1, 1]) {
+    const m = new THREE.Mesh(buildHullGeo(H, L, B, { deck: true }), new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.35, side: THREE.DoubleSide }));
+    m.position.x = sx * SPREAD; g.add(m);
+  }
+  const M = (c: number) => new THREE.MeshStandardMaterial({ color: c, flatShading: true, roughness: 0.5 });
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(SPREAD * 2 + B, 0.25, L * 0.52), M(0xeae3d2));
+  deck.position.set(0, 1.25, -0.4); g.add(deck);
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(SPREAD * 1.7, 1.1, 3.4), M(0xf4f2ea));
+  cab.position.set(0, 1.9, -0.8); g.add(cab);
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 14, 6), M(0xd9dde2));
+  mast.position.set(0, 8.4, -0.9); g.add(mast);
+  return g;
+}
+
 export interface MarinasResult {
   group: THREE.Group;
   dockRects: DockRect[];
@@ -106,6 +149,74 @@ export function createMarinas(): MarinasResult {
     addBox(11, 4, 7, sx + 13, 2.8, Z(-9), new THREE.MeshStandardMaterial({ color: [0xa8e0d8, 0xfde2a7, 0xf7c6d0, 0xb9d4f5][mi], flatShading: true }), false);
     const roof = new THREE.Mesh(new THREE.ConeGeometry(7.4, 2.4, 4).rotateY(Math.PI / 4), new THREE.MeshStandardMaterial({ color: 0xb8bcc2, flatShading: true, metalness: 0.3 }));
     roof.scale.set(1, 1, 0.7); roof.position.set(sx + 13, 6, Z(-9)); group.add(roof);
+    /*
+     * Dry stack. This is what "stored" means at a Florida marina and the harbour had none of it:
+     * an open steel rack three tiers high with hulls slid in on their bunks, a forklift that can
+     * reach the top one, and nobody's boat touching the water until somebody asks for it. It is
+     * also, from the water, the most recognisable thing about a working marina — a wall of hulls
+     * stacked above the seawall.
+     *
+     * Two of the marinas get one. A rack is a real investment; every little dock does not have
+     * one, and giving them all one would be the same mistake as every mooring being a sailboat.
+     */
+    if (mi % 2 === 0) {
+      const rx = sx - 19, rz = Z(-4), bays = 5, tiers = 3;
+      const BAY_W = 3.4, TIER_H = 3.1, RACK_D = 9;
+      const steel = new THREE.MeshStandardMaterial({ color: 0x8d949b, roughness: 0.6, metalness: 0.45, flatShading: true });
+      const rackW = bays * BAY_W;
+      // Uprights front and back of every bay division, and a rail at each tier.
+      for (let i = 0; i <= bays; i++) {
+        const px = rx - rackW / 2 + i * BAY_W;
+        for (const dz2 of [-RACK_D / 2, RACK_D / 2]) {
+          const col = new THREE.Mesh(new THREE.BoxGeometry(0.22, TIER_H * tiers + 0.6, 0.22), steel);
+          col.position.set(px, (TIER_H * tiers + 0.6) / 2, rz + dz2); col.castShadow = true; group.add(col);
+        }
+      }
+      for (let tI = 0; tI < tiers; tI++) {
+        const y = 0.6 + tI * TIER_H;
+        for (const dz2 of [-RACK_D / 2, RACK_D / 2]) {
+          const rail = new THREE.Mesh(new THREE.BoxGeometry(rackW + 0.3, 0.18, 0.18), steel);
+          rail.position.set(rx, y, rz + dz2); group.add(rail);
+        }
+        // Bunks: the pair of timbers each hull actually sits on.
+        for (let bI = 0; bI < bays; bI++) {
+          const bx = rx - rackW / 2 + (bI + 0.5) * BAY_W;
+          for (const o of [-0.75, 0.75]) {
+            const bunk = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.14, RACK_D - 0.6), pile);
+            bunk.position.set(bx + o, y + 0.12, rz); group.add(bunk);
+          }
+          // Not every bay is full — a rack in use always has gaps where boats are out.
+          if (hashCell(WORLD_SEED, mi * 37 + tI * 7 + bI, 0, SALT.MOORING_HARBOR_ROT) < 0.26) continue;
+          const c = BOATC[(bI + tI + mi) % 4];
+          const stored = makeDockBoat(c[0], c[1]);
+          stored.position.set(bx, y + 0.5, rz);
+          stored.rotation.y = Math.PI / 2;
+          stored.scale.setScalar(0.82);
+          group.add(stored);
+        }
+      }
+      // The forklift that puts them there: a tall mast on a squat truck, parked at the end.
+      const fl = new THREE.Group();
+      fl.position.set(rx + rackW / 2 + 4.5, 0, rz + 1.5); fl.rotation.y = -0.5; group.add(fl);
+      const flM = new THREE.MeshStandardMaterial({ color: 0xe0a21e, roughness: 0.6, flatShading: true });
+      const body = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.5, 4.4), flM);
+      body.position.y = 1.25; body.castShadow = true; fl.add(body);
+      const cab = new THREE.Mesh(new THREE.BoxGeometry(2, 1.4, 1.8), new THREE.MeshStandardMaterial({ color: 0x2a2d31, flatShading: true }));
+      cab.position.set(0, 2.7, -0.6); fl.add(cab);
+      for (const o of [-1.05, 1.05]) {
+        const mastB = new THREE.Mesh(new THREE.BoxGeometry(0.22, 9.5, 0.22), steel);
+        mastB.position.set(o, 5, 2.3); fl.add(mastB);
+      }
+      for (const o of [-1.4, 1.4]) {
+        const fork = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 3.4), steel);
+        fork.position.set(o, 1.1, 4); fl.add(fork);
+      }
+      for (const [wx, wz] of [[-1.2, -1.4], [1.2, -1.4], [-1.2, 1.5], [1.2, 1.5]] as const) {
+        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.4, 10), new THREE.MeshStandardMaterial({ color: 0x15171a }));
+        wheel.rotation.z = Math.PI / 2; wheel.position.set(wx, 0.55, wz); fl.add(wheel);
+      }
+    }
+
     const scale = new THREE.Mesh(new THREE.BoxGeometry(0.25, 4, 0.25), pile);
     scale.position.set(sx + 2.2, 3.2, Z(46.5)); group.add(scale);
     const bar = new THREE.Mesh(new THREE.BoxGeometry(3, 0.2, 0.2), pile);
@@ -119,8 +230,18 @@ export function createMarinas(): MarinasResult {
   });
   group.add(pm);
 
-  // Boot Key Harbor mooring field: sailboats swinging on their balls
+  /*
+   * Boot Key Harbor mooring field.
+   *
+   * It was twenty-two identical sailboats, which is both monotonous and not quite true. Boot Key
+   * genuinely IS a sailboat field — that is its whole character and sailboats still take two
+   * thirds of the balls — but an anchorage people live in is never one kind of boat. There are
+   * trawlers, there are cruising cats, and there is always at least one hulk nobody has moved in
+   * years, sitting lower than it should with its rig gone.
+   */
   const SAILC = [0xffffff, 0xf3efe5, 0xe8eef2, 0x1f4f8c, 0xf6f1e4];
+  const TRAWC = [0xf2efe6, 0x5e7f8c, 0xe8e2d2, 0x7a6a52];
+  const CATC = [0xffffff, 0xeef3f5, 0xf6f1e4];
   let placed = 0;
   for (let k = 0; k < 400 && placed < 22; k++) {
     const x = lerp(-1650, -500, hashCell(WORLD_SEED, k, 0, SALT.MOORING_HARBOR_X));
@@ -131,12 +252,30 @@ export function createMarinas(): MarinasResult {
       || Math.hypot(x - SPAWN_X, z - (chainZ(SPAWN_X) + SPAWN_DZ)) < 80
       || DOCK_RECTS.some((r) => Math.hypot(x - (r.x0 + r.x1) / 2, z - (r.z0 + r.z1) / 2) < 14)
     ) continue;
-    const b = makeSailboat(SAILC[placed % SAILC.length]);
+    // Deterministic per ball, so the fleet is the same fleet every session.
+    const pick = hashCell(WORLD_SEED, k, 1, SALT.MOORING_HARBOR_ROT);
+    let b: THREE.Group, halfW = 2.2, halfL = 4.6;
+    if (pick < 0.66) {
+      b = makeSailboat(SAILC[placed % SAILC.length]);
+    } else if (pick < 0.84) {
+      b = makeTrawler(TRAWC[placed % TRAWC.length]);
+      halfW = 2.4; halfL = 5.4;
+    } else if (pick < 0.95) {
+      b = makeCatamaran(CATC[placed % CATC.length]);
+      halfW = 3.6; halfL = 5.2;
+    } else {
+      // The derelict: rig gone, down on her lines, going green. Every anchorage has one.
+      b = makeSailboat(0x8e9a86);
+      b.traverse((o) => { if (o instanceof THREE.Mesh && o.geometry instanceof THREE.CylinderGeometry) o.visible = false; });
+      // Read by the per-frame bob in game/world.ts, which otherwise floats everything level.
+      b.userData.sink = 0.45;
+      b.rotation.z = 0.12;
+    }
     b.position.set(x, 0, z);
     b.rotation.y = 0.4 + lerp(-0.25, 0.25, hashCell(WORLD_SEED, k, 0, SALT.MOORING_HARBOR_ROT));
     group.add(b);
     dockBoats.push(b);
-    DOCK_RECTS.push({ x0: x - 2.2, x1: x + 2.2, z0: z - 4.6, z1: z + 4.6 });
+    DOCK_RECTS.push({ x0: x - halfW, x1: x + halfW, z0: z - halfL, z1: z + halfL });
     placed++;
   }
 

@@ -1267,7 +1267,10 @@ export function initWorld(wrap: HTMLElement): World {
     catchFlow.updateReleased(clamped, simTime, (x, z, t) => sampleWaterHeight(curState, x, z, t, ampAt(x, z), sw, ch));
 
     for (const b of marinas.dockBoats) {
-      b.position.y = sampleWaterHeight(curState, b.position.x, b.position.z, simTime, ampAt(b.position.x, b.position.z), sw, ch) - 0.05;
+      // `sink` lets a hull ride lower than her lines — the derelict on the mooring field, which
+      // would otherwise be bobbed back up to float level like everything else every frame.
+      const sink = (b.userData.sink as number | undefined) ?? 0;
+      b.position.y = sampleWaterHeight(curState, b.position.x, b.position.z, simTime, ampAt(b.position.x, b.position.z), sw, ch) - 0.05 - sink;
     }
     // REAL dt: the buoys' heave is a spring, and it should ride the wall clock like the water
     // it is floating on rather than the physics-clamped step.
