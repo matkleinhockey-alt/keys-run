@@ -219,6 +219,25 @@ const FORCE_K = 1.7;
 
 /** Local species groups for failure rates. Kept here, not in content/species.ts, because they are
  * fight-tuning and not catalogue facts; keys are checked by fight.test.ts. */
+/**
+ * Peak height of a jump, metres, before the fish's own size is taken into account.
+ *
+ * This used to be a flat 1.4 m in the renderer for everything that could jump, which put a
+ * seventy-pound tarpon and a schoolie mahi at exactly the same altitude. A tarpon's whole
+ * reputation is the jump — it is the reason people fish for something they will never eat, and a
+ * big one throws its entire body clear and lands on its side hard enough to hear. The billfish
+ * greyhound rather than leap, which is long and low, and a kingfish mostly just skyrockets once.
+ */
+const JUMP_HEIGHT_M: Readonly<Record<string, number>> = {
+  tarpon: 3.1,
+  mako: 2.4,          // the one shark that genuinely clears the water
+  blacktip: 1.9,
+  ladyfish: 1.6,      // "poor man's tarpon", and it earns the name
+  sailfish: 1.5, marlin: 1.5, blackmarlin: 1.5, swordfish: 1.4,  // greyhounding: long, not high
+  mahi: 1.5, snook: 1.0, kingfish: 1.1, jackcrevalle: 0.9, barracuda: 1.3,
+};
+const JUMP_HEIGHT_DEFAULT = 1.2;
+
 const TOOTHY = new Set(['wahoo', 'barracuda', 'kingfish', 'cero', 'spanishmack', 'bluerunner', 'blacktip', 'bullshark', 'lemonshark', 'hammerhead']);
 const SOFT_MOUTH = new Set(['trout', 'tarpon', 'ladyfish', 'mahi', 'sheepshead', 'lookdown']);
 
@@ -260,6 +279,9 @@ export interface FightParams {
   pullN: number;
   /** Stamina scale: bigger fish last longer under the same pressure. */
   endure: number;
+  /** Peak jump height for THIS fish, metres — species tendency scaled by how big it is. Purely
+   * presentational: `sim` never reads it, the renderer draws the arc with it. */
+  jumpHeightM: number;
   /** Relative hook-throw tendency: jumpers and soft-mouthed fish are worse. */
   hookRisk: number;
   /** Relative leader-chafe rate: teeth, rocks, wrecks. */
@@ -346,6 +368,9 @@ export function fightParamsFor(key: string, weight: number, drag: number, baseTa
     billfish: BILLFISH.has(key),
     sounder,
     lenM: scaledLenM(key, weight),
+    // A big fish of a species jumps higher than a small one, but not in proportion — it is
+    // throwing a much heavier body, so the gain is gentle and capped.
+    jumpHeightM: (JUMP_HEIGHT_M[key] ?? JUMP_HEIGHT_DEFAULT) * clamp(0.78 + 0.5 * sizeT, 0.78, 1.28),
     drag,
     tackle, ratingLb, forceLb, pullN: forceLb / ratingLb,
     endure: 0.8 + 0.5 * Math.log10(1 + weight),

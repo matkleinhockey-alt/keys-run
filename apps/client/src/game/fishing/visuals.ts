@@ -80,7 +80,10 @@ export function createFishingVisuals(scene: THREE.Scene): FishingVisuals {
     if (airborne) airElapsed += dt;
     wasAirborne = airborne;
     const airFrac = clamp(airElapsed / AIR_VISUAL_DUR, 0, 1);
-    const hop = airborne ? Math.sin(airFrac * Math.PI) * 1.4 : 0;
+    // Height comes from the fish, not a constant — a tarpon leaves the water, a jack barely
+    // clears it (see JUMP_HEIGHT_M in sim/fight.ts).
+    const peak = F.fightParams?.jumpHeightM ?? 1.4;
+    const hop = airborne ? Math.sin(airFrac * Math.PI) * peak : 0;
     hookMesh.position.set(F.fx, base + hop, F.fz);
     const pitch = airborne ? -(airFrac < 0.5 ? 1 : -1) * 0.6 : -0.1;
     hookMesh.rotation.set(
