@@ -53,6 +53,8 @@ export interface AudioSystem {
   /** One call per frame: engine ambience/engines/remote boats, underwater muffle/ambience, and
    * the radio's DJ-line timer + LED/pan update. `speaker` is optional (see integration point 5). */
   update(frame: AudioFrameInputs, speaker?: SpeakerSink): void;
+  /** VERIFICATION ONLY: how muffled the topside world currently is, and from what depth. */
+  underwaterDebug(): { depth: number; cutoffHz: number };
   /** Caelen's spoken line (the squawk sound itself is `engine.caelenSquawk()`). */
   sayCaelenLine(): void;
   dispose(): void;
@@ -63,7 +65,18 @@ const ALWAYS_SURFACED: SurfaceTransitionSource = { isUnderwater: () => false };
 export function createAudioSystem(surface: SurfaceTransitionSource = ALWAYS_SURFACED, breath?: BreathSource): AudioSystem {
   const engine = createAudioEngine();
   const music = createMusicController(engine);
-  const underwater = createUnderwaterAudio(engine, surface, breath);
+  /*
+   * The underwater graph needs a live AudioContext, and the context cannot exist until a user
+   * gesture — but this factory runs at world boot, long before anyone has clicked. So this call
+   * always returned the module's no-op stub, and NOTHING ever replaced it afterwards: the
+   * muffle, the breathing, the bubbles, the reef crackle and the breath-hold heartbeat were all
+   * built once, against a context that did not exist, and were silent for the rest of the
+   * session. The stub was meant to be a temporary stand-in and became permanent.
+   *
+   * Built again on the first frame after the engine comes up instead.
+   */
+  let underwater = createUnderwaterAudio(engine, surface, breath);
+  let underwaterLive = engine.isReady();
   let unbindVisibility: (() => void) | null = null;
 
   function init(): void {
@@ -81,6 +94,11 @@ export function createAudioSystem(surface: SurfaceTransitionSource = ALWAYS_SURF
 
   function update(frame: AudioFrameInputs, speaker?: SpeakerSink): void {
     engine.update(frame);
+    if (!underwaterLive && engine.isReady()) {
+      underwater.dispose();                       // a no-op on the stub
+      underwater = createUnderwaterAudio(engine, surface, breath);
+      underwaterLive = true;
+    }
     underwater.update(frame.dt);
     music.update(frame.dt, frame.t, speaker);
   }
@@ -97,5 +115,7 @@ export function createAudioSystem(surface: SurfaceTransitionSource = ALWAYS_SURF
     engine.dispose();
   }
 
-  return { engine, music, init, toggleMute, isMuted: engine.isMuted, update, sayCaelenLine, dispose };
+  // Through a closure, not a captured reference: `underwater` is replaced the moment the engine
+  // comes up, and a bound method would keep reporting the dead stub forever.
+  return { engine, music, init, toggleMute, isMuted: engine.isMuted, update, underwaterDebug: () => underwater.debug(), sayCaelenLine, dispose };
 }

@@ -19,6 +19,15 @@ export interface SurfaceTransitionSource {
   /** True while the camera/listener head is currently below the water surface. */
   isUnderwater(): boolean;
   /**
+   * How deep the listener is, metres below the surface (0 at or above it).
+   *
+   * Optional so an existing caller that only knows "under or not" still works — it just gets the
+   * muffle at its shallow end, which is what the binary version always gave. With it, the
+   * topside world goes on getting quieter and duller the further down you are, which is the
+   * whole point: the music is playing on a boat up there and you are swimming away from it.
+   */
+  depthM?(): number;
+  /**
    * Optional push-based variant: subscribe to the exact crossing frame instead of relying on the
    * per-frame poll. Returns an unsubscribe function. `goingUnder` is true diving in, false
    * breaking the surface.
