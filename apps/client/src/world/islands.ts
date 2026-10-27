@@ -428,19 +428,74 @@ uniform float uTime;`)
   trunks.castShadow = fronds.castShadow = true;
   group.add(trunks, fronds);
 
+  /*
+   * Conch houses. The colours were already varied per instance, but every one of them was the
+   * same 6 x 3.4 x 7 box under the same roof, so a street of them read as a row of filing
+   * cabinets in different colours.
+   *
+   * Four things, all per-instance and all free — same geometry, same two draw calls, plus two
+   * more for the porch and the piers:
+   *
+   *  - SIZE. Each house gets its own footprint and wall height, and the roof follows it.
+   *  - A PORCH on the front, which is the single most Key West thing a small house has.
+   *  - PIERS. A good third of them stand on short concrete piers with an open skirt under the
+   *    floor, because that is what you do on a key that floods.
+   *  - ROOF PITCH and overhang vary, so the ridge line is not identical down the row.
+   *
+   * Everything derives from the house's own position, so a rebuild is identical and nothing
+   * depends on the order houses were generated in.
+   */
   const PASTEL = [0xf7c6d0, 0xfde2a7, 0xa8e0d8, 0xb9d4f5, 0xf9f3e3, 0xd8c6f0, 0xffffff, 0xc9e8c2];
   const hm = new THREE.InstancedMesh(new THREE.BoxGeometry(6, 3.4, 7), new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true }), houses.length);
   const rm = new THREE.InstancedMesh(new THREE.ConeGeometry(5.4, 2.4, 4).rotateY(Math.PI / 4), new THREE.MeshStandardMaterial({ color: 0xb8bcc2, flatShading: true, metalness: 0.3, roughness: 0.5 }), houses.length);
+  const pm = new THREE.InstancedMesh(new THREE.BoxGeometry(5.6, 0.22, 2.3), new THREE.MeshStandardMaterial({ color: 0xf4f2ec, flatShading: true, roughness: 0.85 }), houses.length);
+  const sm = new THREE.InstancedMesh(new THREE.BoxGeometry(5.4, 1.2, 6.4), new THREE.MeshStandardMaterial({ color: 0x8e8b82, flatShading: true, roughness: 0.95 }), houses.length);
   const col = new THREE.Color();
+  const ZERO_M = new THREE.Matrix4().makeScale(0, 0, 0);
   houses.forEach((h, i) => {
-    dummy.position.set(h.x, h.y + 1.6, h.z); dummy.rotation.set(0, h.r, 0); dummy.scale.set(1, 1, 1); dummy.updateMatrix();
+    // Hashed off the house's own metre position, not its index: adding one house must not
+    // re-roll every house after it.
+    const hx = Math.round(h.x), hz = Math.round(h.z);
+    const r1 = hashCell(WORLD_SEED, hx, hz, SALT.HOUSE_ROT);
+    const r2 = hashCell(WORLD_SEED, hz, hx, SALT.HOUSE_ROT);
+    const r3 = hashCell(WORLD_SEED, hx + 7919, hz, SALT.HOUSE_ROT);
+    const r4 = hashCell(WORLD_SEED, hx, hz + 7919, SALT.HOUSE_ROT);
+
+    const sx = lerp(0.82, 1.3, r1), sz = lerp(0.86, 1.26, r2), sy = lerp(0.88, 1.38, r3);
+    const onPiers = r4 < 0.34;
+    const lift = onPiers ? 1.15 : 0;
+    const wallH = 3.4 * sy;
+    const base = h.y + lift;                       // underside of the floor
+
+    dummy.position.set(h.x, base + wallH / 2, h.z); dummy.rotation.set(0, h.r, 0);
+    dummy.scale.set(sx, sy, sz); dummy.updateMatrix();
     hm.setMatrixAt(i, dummy.matrix);
-    hm.setColorAt(i, col.setHex(PASTEL[i % PASTEL.length]));
-    dummy.position.y = h.y + 4.5; dummy.scale.set(1, 1, 1.3); dummy.updateMatrix();
+    hm.setColorAt(i, col.setHex(PASTEL[Math.abs(hx * 31 + hz) % PASTEL.length]));
+
+    // Roof: follows the walls, with its own pitch and a little extra overhang.
+    const pitch = lerp(0.82, 1.35, r2), over = lerp(1.0, 1.12, r1);
+    dummy.position.set(h.x, base + wallH + 1.2 * pitch, h.z);
+    dummy.scale.set(sx * over, pitch, sz * 1.3 * over); dummy.updateMatrix();
     rm.setMatrixAt(i, dummy.matrix);
+
+    // Porch deck across the front (local +z), at floor level.
+    const pz = (7 * sz) / 2 + 1.15;
+    dummy.position.set(h.x + Math.sin(h.r) * pz, base + 0.11, h.z + Math.cos(h.r) * pz);
+    dummy.rotation.set(0, h.r, 0); dummy.scale.set(sx, 1, 1); dummy.updateMatrix();
+    pm.setMatrixAt(i, dummy.matrix);
+
+    // The pier skirt, only under the raised ones. A zero matrix is how the rest of this file
+    // hides an instance, and `clearScenery` restores to exactly this, so it stays hidden.
+    if (onPiers) {
+      dummy.position.set(h.x, h.y + lift / 2, h.z);
+      dummy.rotation.set(0, h.r, 0); dummy.scale.set(sx, lift / 1.2, sz); dummy.updateMatrix();
+      sm.setMatrixAt(i, dummy.matrix);
+    } else {
+      sm.setMatrixAt(i, ZERO_M);
+    }
   });
-  hm.castShadow = rm.castShadow = true;
-  group.add(hm, rm);
+  hm.castShadow = rm.castShadow = pm.castShadow = sm.castShadow = true;
+  group.add(hm, rm, pm, sm);
 
   const mm = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: 0x2c5a2a, flatShading: true }), mg.length);
   mg.forEach((m, i) => {
@@ -455,13 +510,19 @@ uniform float uTime;`)
   // matrix and restored from a copy of the original, so nothing is rebuilt.
   const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
   const keep = (m: THREE.InstancedMesh) => Float32Array.from(m.instanceMatrix.array as Float32Array);
-  const orig = { hm: keep(hm), rm: keep(rm), trunks: keep(trunks), fronds: keep(fronds), mm: keep(mm) };
+  const orig = { hm: keep(hm), rm: keep(rm), pm: keep(pm), sm: keep(sm), trunks: keep(trunks), fronds: keep(fronds), mm: keep(mm) };
   const show = (m: THREE.InstancedMesh, a: Float32Array, i: number, on: boolean) => {
     if (on) m.instanceMatrix.array.set(a.subarray(i * 16, i * 16 + 16), i * 16);
     else m.setMatrixAt(i, ZERO);
   };
   const clear: ClearScenery = (house, plant) => {
-    houses.forEach((h, i) => { const on = !house(h.x, h.z); show(hm, orig.hm, i, on); show(rm, orig.rm, i, on); });
+    // Every part of a house has to go together, or clearing a lot leaves a porch and a set of
+    // piers standing in the buyer's garden.
+    houses.forEach((h, i) => {
+      const on = !house(h.x, h.z);
+      show(hm, orig.hm, i, on); show(rm, orig.rm, i, on);
+      show(pm, orig.pm, i, on); show(sm, orig.sm, i, on);
+    });
     palms.forEach((p, i) => {
       const on = !plant(p.x, p.z);
       show(trunks, orig.trunks, i, on);
