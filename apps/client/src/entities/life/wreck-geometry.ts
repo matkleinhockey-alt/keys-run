@@ -23,6 +23,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Wreck, WreckKind } from '@keysrun/shared/world/wrecks';
+import { chainTangent } from '@keysrun/shared/world/current';
 
 type RGB = readonly [number, number, number];
 
@@ -38,6 +39,13 @@ const RUST_DK: RGB = [0.28, 0.17, 0.12];
 const PAINT_RED: RGB = [0.56, 0.17, 0.12];
 const PAINT_GREY: RGB = [0.68, 0.70, 0.68];
 const ALUM: RGB = [0.55, 0.57, 0.58];
+/* Living growth, which is its own thing rather than a stain on the steel. Deliberately saturated:
+ * the red channel is gone by 10 m (fog-override.ts), so purples and ochres are what survives to
+ * read as life at the range you actually see a wreck from. */
+const GORG_PURPLE: RGB = [0.44, 0.30, 0.52];
+const GORG_OCHRE: RGB = [0.62, 0.45, 0.22];
+const SPONGE_BARREL: RGB = [0.46, 0.26, 0.22];
+const SPONGE_TUBE: RGB = [0.52, 0.34, 0.50];
 const GROWTH: RGB = [0.30, 0.31, 0.17];
 const SAND: RGB = [0.62, 0.55, 0.38];
 const ENC_PALE: RGB = [0.78, 0.78, 0.68];
@@ -89,8 +97,14 @@ class Bag {
     private readonly ps: number = 1,
   ) {}
 
-  /** Adds `g` transformed by `m`, painted `base` with position noise and growth on up-facing faces. */
-  add(g: THREE.BufferGeometry, m: THREE.Matrix4, base: RGB, growth = 0.45): void {
+  /**
+   * Adds `g` transformed by `m`, painted `base` with position noise and growth on up-facing faces.
+   *
+   * `enc` turns off the encrustation-patch pass. Everything bolted to a wreck wants it; the
+   * living growth in `growthOn` does NOT, because it IS the encrustation — running a sponge
+   * through a pass that repaints half of it pale-green coralline just turns it back into hull.
+   */
+  add(g: THREE.BufferGeometry, m: THREE.Matrix4, base: RGB, growth = 0.45, enc = true): void {
     const ng = g.index ? g.toNonIndexed() : g.clone();
     ng.deleteAttribute('uv');
     ng.applyMatrix4(m);
@@ -115,7 +129,7 @@ class Bag {
       // bright part of a wreck - rust goes black with the red extinction by 10 m, but pale growth
       // survives it, which is what makes a hull read as a *wreck* rather than a dark slab. Patch
       // cells are position-hashed, so a rebuild is identical.
-      const pc = hash3(Math.floor(_v.x / (3 * this.ps)), Math.floor(_v.y / (2.4 * this.ps)), Math.floor(_v.z / (3 * this.ps)));
+      const pc = enc ? hash3(Math.floor(_v.x / (3 * this.ps)), Math.floor(_v.y / (2.4 * this.ps)), Math.floor(_v.z / (3 * this.ps))) : 0;
       if (pc > 0.5) {
         const kind = hash3(Math.floor(_v.z / 3), Math.floor(_v.x / 3), 11.3);
         const e = Math.min(1, (pc - 0.5) / 0.25) * 0.85 * (0.55 + 0.45 * n2);
@@ -143,6 +157,11 @@ class Bag {
     const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.divideScalar(len));
     const m = new THREE.Matrix4().compose(new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5), q, new THREE.Vector3(1, 1, 1));
     this.add(new THREE.CylinderGeometry(r, r, len, seg, 1), m, base, 0.3);
+  }
+
+  /** A piece of living growth: its own colour, no silt, and exempt from the encrustation pass. */
+  live(g: THREE.BufferGeometry, m: THREE.Matrix4, base: RGB): void {
+    this.add(g, m, base, 0, false);
   }
 
   /** Raw triangles (positions xyz triples) painted `base`. */
@@ -374,6 +393,100 @@ function planeSection(bag: Bag, w: Wreck, tail: boolean, detail: number): void {
 
 /** Builds one section's merged geometry. `part`: 0 = the whole wreck or the bow section of a
  * snapped one, 1 = the stern section of a snapped one. */
+/**
+ * What is living on the steel.
+ *
+ * Encrustation was painted into the vertex colours and nothing more, so a wreck read as a hull
+ * someone had repainted in patches rather than something the sea had been working on for forty
+ * years. On a Keys wreck the growth is the first thing you see: sea fans standing a metre off
+ * the rail, barrel sponges the size of a bucket sitting on the deck plating, tube sponges in
+ * clumps down the shaded side. It is also what the red-channel extinction leaves you — rust is
+ * near-black by 10 m, and a purple gorgonian is still purple.
+ *
+ * **Sea fans are oriented, and that is the interesting part.** A gorgonian grows its plane ACROSS
+ * the prevailing flow, because the whole animal is a filter held broadside to the water. The
+ * prevailing flow here is the steady one — the Florida Current running up the chain tangent —
+ * rather than the tide, which reverses twice a cycle and averages to nothing over the years a fan
+ * takes to grow. So the fan plane is set from `chainTangent` at the wreck's own x, rotated into
+ * the wreck's local frame by its heading. Wrecks lying on different headings therefore carry
+ * their fans at different angles across the deck, which is exactly what you see on a real one.
+ */
+function growthOn(bag: Bag, w: Wreck, u0: number, u1: number): void {
+  const L = w.len, B = w.beam, H = w.height;
+  // The flow direction in the HULL's frame: world tangent angle minus the hull's heading. A fan
+  // stands with its plane across that, so it is rotated a further quarter turn.
+  const t = chainTangent(w.x);
+  const flowWorld = Math.atan2(t.tx, t.tz);
+  const fanYaw = flowWorld - w.heading + Math.PI / 2;
+
+  const n = Math.round(10 + w.mass * 16);
+  for (let i = 0; i < n; i++) {
+    const h1 = hash3(w.index * 31 + i, i * 7.3, 3.1);
+    const h2 = hash3(i * 2.9, w.index * 17 + i, 8.7);
+    const h3 = hash3(i * 5.1, 4.4, w.index * 11 + i);
+    const u = u0 + (u1 - u0) * h1;
+    const lz = -u * L;                                  // bow is -z, same as the hull loft
+    // Along the rail on alternating sides, or in from it onto the deck.
+    const side = h2 < 0.5 ? -1 : 1;
+    const inboard = h3 * h3;                            // most of it clings to the edge
+    const lx = side * (B * 0.5) * (1 - inboard * 0.85);
+    const deckY = H * (0.52 + 0.3 * (1 - Math.abs(u) * 1.6));
+
+    const pick = hash3(i * 13.7, w.index * 5 + i, 2.2);
+    if (pick < 0.45) {
+      /*
+       * Sea fan. Built as branching RODS rather than a blade, because a gorgonian is a net and
+       * the first version — a flat tapered box — read as a sheet of plywood bolted to the rail.
+       * The reef's own fans get their lattice from an alpha-mapped plane, which is a second
+       * material and a transparency pass; this module is deliberately one opaque vertex-coloured
+       * mesh per hull section, so the lattice is geometry instead. Only at detail 1, on a handful
+       * of wrecks, so a few dozen thin cylinders is nothing.
+       *
+       * All of it lies in the fan's plane, which is held across the prevailing flow.
+       */
+      const fh = 0.55 + h2 * 1.25, fw = fh * (0.72 + h3 * 0.5);
+      const col = h3 < 0.6 ? GORG_PURPLE : GORG_OCHRE;
+      const ca = Math.sin(fanYaw), cz2 = Math.cos(fanYaw);
+      // (across, up) in the fan's own plane -> a point on the hull.
+      const P = (a: number, up: number): THREE.Vector3 => V3(lx + ca * a * fw, deckY + up * fh, lz + cz2 * a * fw);
+      const jx = (k: number): number => (hash3(i, k, w.index) - 0.5) * 0.12;
+      // Stem, two main limbs, four secondaries, and a couple of cross-links so it reads as a net
+      // in silhouette rather than a candelabra.
+      const seg: ReadonlyArray<readonly [number, number, number, number, number]> = [
+        [0, 0, 0, 0.34, 0.05],
+        [0, 0.34, -0.3, 0.62, 0.042], [0, 0.34, 0.3, 0.62, 0.042],
+        [-0.3, 0.62, -0.5, 0.9, 0.032], [-0.3, 0.62, -0.1, 0.96, 0.03],
+        [0.3, 0.62, 0.5, 0.9, 0.032], [0.3, 0.62, 0.1, 0.96, 0.03],
+        [-0.3, 0.62, 0.3, 0.62, 0.022], [-0.5, 0.9, -0.1, 0.96, 0.02], [0.1, 0.96, 0.5, 0.9, 0.02],
+      ];
+      seg.forEach(([a0, u0b, a1, u1b, r], k) => {
+        bag.beam(P(a0 + jx(k), u0b), P(a1 + jx(k + 7), u1b), r * (0.8 + h2 * 0.5), col, 4);
+      });
+    } else if (pick < 0.72) {
+      // Barrel sponge: squat, open-topped, sitting on whatever is flat.
+      const r = 0.22 + h2 * 0.3, bh = r * (1.6 + h3 * 0.9);
+      const m = new THREE.Matrix4().compose(V3(lx, deckY + bh * 0.5, lz), new THREE.Quaternion(), V3(1, 1, 1));
+      bag.live(new THREE.CylinderGeometry(r * 0.92, r * 0.62, bh, 9, 1, true), m, SPONGE_BARREL);
+      // The dark well down the middle, which is the whole silhouette of a barrel.
+      const mi = new THREE.Matrix4().compose(V3(lx, deckY + bh * 0.86, lz), new THREE.Quaternion(), V3(1, 1, 1));
+      bag.live(new THREE.CylinderGeometry(r * 0.66, r * 0.66, 0.05, 9), mi, DARK);
+    } else {
+      // Tube sponges: a clump leaning off the vertical, all from one holdfast.
+      const tubes = 2 + Math.floor(h3 * 3);
+      for (let k = 0; k < tubes; k++) {
+        const a = (k / tubes) * Math.PI * 2 + h1 * 6;
+        const th = 0.35 + hash3(i, k, 9.9) * 0.75;
+        const lean = 0.18 + h2 * 0.3;
+        bag.beam(
+          V3(lx, deckY, lz),
+          V3(lx + Math.cos(a) * th * lean, deckY + th, lz + Math.sin(a) * th * lean),
+          0.055 + h2 * 0.04, SPONGE_TUBE, 5,
+        );
+      }
+    }
+  }
+}
+
 export function buildSection(w: Wreck, part: 0 | 1, detail: 0 | 1): THREE.BufferGeometry | null {
   const bag = new Bag();
   const split = w.broken;
@@ -388,6 +501,12 @@ export function buildSection(w: Wreck, part: 0 | 1, detail: 0 | 1): THREE.Buffer
     case 'tug': tugSection(bag, w, detail); break;
     case 'barge': bargeSection(bag, w, detail); break;
     case 'plane': planeSection(bag, w, part === 1, detail); break;
+  }
+  // Only up close. At detail 0 a wreck is a silhouette through 20 m of water and a sea fan is
+  // below the resolution of the thing you are looking at.
+  if (detail === 1 && w.kind !== 'plane') {
+    const [g0, g1] = !split ? [-0.5, 0.5] : part === 0 ? [0, 0.5] : [-0.5, 0];
+    growthOn(bag, w, g0, g1);
   }
   return bag.build();
 }
