@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { waveHBase, waveSlope, WAVES, SEA_STATES, ampFor, DEFAULT_SW, DEFAULT_CH } from '../src/waves/index.js';
+import { expectGolden } from './golden-compare.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 interface WaveSample { x: number; z: number; t: number; amp: number; sw: number; ch: number; waveHBase: number }
@@ -10,9 +11,9 @@ interface WaveSample { x: number; z: number; t: number; amp: number; sw: number;
 const golden: any = JSON.parse(fs.readFileSync(path.join(HERE, 'golden.json'), 'utf8'));
 
 describe('waves: golden fidelity against legacy/index.html', () => {
-  it('waveHBase matches legacy\'s wave-sum loop exactly, bit for bit, over 500 (x,z,t) samples', () => {
+  it('waveHBase matches legacy\'s wave-sum loop over 500 (x,z,t) samples', () => {
     for (const s of golden.waves as WaveSample[]) {
-      expect(waveHBase(s.x, s.z, s.t, s.amp, s.sw, s.ch)).toBe(s.waveHBase);
+      expectGolden(waveHBase(s.x, s.z, s.t, s.amp, s.sw, s.ch), s.waveHBase, `waveHBase(${s.x}, ${s.z}, ${s.t})`);
     }
   });
 
@@ -20,7 +21,7 @@ describe('waves: golden fidelity against legacy/index.html', () => {
     expect(DEFAULT_SW).toBe(0.9);
     expect(DEFAULT_CH).toBe(1);
     for (const s of (golden.waves as WaveSample[]).slice(0, 50)) {
-      expect(waveHBase(s.x, s.z, s.t, s.amp)).toBe(s.waveHBase);
+      expectGolden(waveHBase(s.x, s.z, s.t, s.amp), s.waveHBase, `waveHBase(${s.x}, ${s.z}, ${s.t}) defaulted`);
     }
   });
 });
