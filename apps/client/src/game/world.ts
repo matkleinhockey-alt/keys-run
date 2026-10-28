@@ -15,7 +15,7 @@ import { depthAt, zoneAt, WB } from '@keysrun/shared/world/depth';
 import { BOATS, SPEED_SCALE, type Boat } from '@keysrun/shared/content/boats';
 import { SEA_STATES } from '@keysrun/shared/waves';
 import { ampAt } from '@keysrun/shared/sim/depth-grid';
-import { createBoatState, stepBoat, type BoatState, type BoatEnv, type DockRect, type Piling, type SimEvent, type FightTarget } from '@keysrun/shared/sim/boat';
+import { createBoatState, stepBoat, type BoatState, type BoatEnv, type DockRect, type Piling, type SimEvent } from '@keysrun/shared/sim/boat';
 
 import { createScene, isTouch } from '../core/scene.js';
 import { createTimeOfDay } from '../core/time-of-day.js';
@@ -1036,10 +1036,9 @@ export function initWorld(wrap: HTMLElement): World {
     // legacy's `updateBoat(dt,t); updateFishing(dt,t);` (fishing.update runs below, after
     // stepBoat, using the boat position this step just produced).
     const fightActive = FishF.state === 'fight';
-    const fightTarget: FightTarget | null = fightActive && FishF.fight ? { x: FishF.fx, z: FishF.fz, running: FishF.fight.running } : null;
     const env: BoatEnv = {
       t: simTime, hull: hullOf(boatSpec), sw, ch, worldBounds: WB, pilings, dockRects,
-      canDrive: game.running && FishF.state !== 'caught', fightActive, fightTarget, lineOut: fishingLineOut(), luigiOn: false,
+      canDrive: game.running && FishF.state !== 'caught', fightActive, lineOut: fishingLineOut(), luigiOn: false,
     };
     // While diving, the boat's "driver" is over the side: it keeps stepping (so it keeps existing,
     // and keeps drifting under its own wave/current forces — stepBoat already applies those at

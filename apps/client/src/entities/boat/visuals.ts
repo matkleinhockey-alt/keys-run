@@ -33,7 +33,7 @@ export interface VisualsCtx {
   water: WaterHandles;
 }
 
-const msgCooldown = { collide: -99, slam: -99, vent: -99, autoChase: -99 };
+const msgCooldown = { collide: -99, slam: -99, vent: -99 };
 const SLAM_MESSAGES = ['Stuffed it! Trim up and ease off a little.', 'Big air — hang on!', 'That one hurt. Back off in the slop.'];
 
 /** Combines the boat's own wake (physics ring) with the base wave sum — the same `waveH` legacy
@@ -115,9 +115,6 @@ export function applyBoatVisuals(state: BoatState, model: BoatModel, ctx: Visual
         break;
       case 'propVentilation':
         if (t - msgCooldown.vent > 5) { msgCooldown.vent = t; toast('Relax, Chum Lee — your props are out of the water!'); }
-        break;
-      case 'autoChaseShallow':
-        if (t - msgCooldown.autoChase > 5) { msgCooldown.autoChase = t; toast('Auto-chase stopped: shallow water. Steer it yourself.'); }
         break;
       default:
         break;
