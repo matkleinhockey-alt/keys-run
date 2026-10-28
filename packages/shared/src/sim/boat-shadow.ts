@@ -15,7 +15,7 @@
  *   - collision resolution (land/piling/dock) — collisions legitimately move the client's hull by
  *     metres in ways the shadow can't predict; envelope.ts's `landH`/`depthAt` checks catch the
  *     cheat case (driving *through* land) without the shadow needing to model bounce physics
- *   - `autoChaseControl` — gated on fight state, which doesn't exist until Phase 3
+ *   - auto-chase — removed from the sim entirely; the boat no longer drives itself on a fish
  *   - live trim tracking — the shadow uses a fixed `trimV = 0.2` (stepBoat's own initial/rest
  *     value) rather than integrating trimUp/trimDn. Trim shifts top speed by single-digit
  *     percent (`trimK`'s `off*off` term is small near the optimum); modelling it exactly would

@@ -2,9 +2,13 @@
  * Pure boat physics: the 15-point buoyancy integrator, trim curve, prop ventilation, throttle
  * lag, turn rate, wake generation and collision resolution.
  *
- * Ported faithfully from legacy/index.html's `updateBoat` (3897-3984), `autoChaseControl`
- * (3869-3888), `slam` (3890-3892) and `dockCollide` (1727-1737) — see docs/ARCHITECTURE.md's
- * Phase 0 scope table. Every magic number and evaluation order is preserved exactly; this is
+ * Ported faithfully from legacy/index.html's `updateBoat` (3897-3984), `slam` (3890-3892) and
+ * `dockCollide` (1727-1737) — see docs/ARCHITECTURE.md's Phase 0 scope table. Legacy's
+ * `autoChaseControl` (3869-3888) was ported too and has since been removed: it drove the boat
+ * around on its own whenever a fish was on and the player's hands were off the controls, which
+ * is a real technique and the wrong default. The oracle in boat-trajectory.test.ts still carries
+ * legacy's copy, so the port is still checked against the original.
+ * Every magic number and evaluation order is preserved exactly; this is
  * verified against an independent oracle extracted straight from legacy/index.html in
  * apps/client/test/boat-trajectory.test.ts (tolerance 1e-9 on x/z/heading/speed, 1e-6 on
  * y/pitch/roll — see that file for the one known, documented exception).
@@ -27,7 +31,7 @@
 
 import { depthAt, landH } from '../world/depth.js';
 import { waveHBase, waveSlope } from '../waves/index.js';
-import { ampAt, chopAt, depthFast } from './depth-grid.js';
+import { ampAt, chopAt } from './depth-grid.js';
 import { clamp, lerp } from '../internal/math.js';
 import { SPEED_SCALE } from '../content/boats.js';
 
@@ -77,12 +81,6 @@ export interface DockRect {
   z1: number;
 }
 
-export interface FightTarget {
-  x: number;
-  z: number;
-  running: boolean;
-}
-
 export interface BoatEnv {
   /** Absolute sim time in seconds (legacy's closure-captured `t`; never read from a clock here). */
   t: number;
@@ -105,9 +103,8 @@ export interface BoatEnv {
    * job — proving the rest of the integrator still matches legacy exactly.
    */
   chop?: number;
-  /** legacy `F.state==='fight'`. Always false until Phase 0b's fishing lands — see autoChaseControl. */
+  /** legacy `F.state==='fight'`. Gates the fight brake above — with a fish on, the boat stops. */
   fightActive: boolean;
-  fightTarget: FightTarget | null;
   /** legacy `lineOut()`. Always false until fishing lands. */
   lineOut: boolean;
   /** legacy `LUIGI.on`; only gates a toast message, kept for interface completeness. */
@@ -120,8 +117,7 @@ export type SimEvent =
   | { type: 'bumpedDock' }
   | { type: 'chartEdge' }
   | { type: 'slam'; k: number }
-  | { type: 'propVentilation' }
-  | { type: 'autoChaseShallow' };
+  | { type: 'propVentilation' };
 
 export interface BoatState {
   x: number;
@@ -146,9 +142,6 @@ export interface BoatState {
   trimMode: boolean;
   trimV: number;
   trimVent: number;
-  autoChaseEnabled: boolean;
-  autoOn: boolean;
-  autoMode: string;
   /** legacy `boat.wakeT`: accumulator gating how often a new wake ring is emitted. */
   wakeTimer: number;
   /** Flat [x,z,t,packed]×WAKE_N ring (legacy module-level `wakeP: THREE.Vector4[]`, plain here). */
@@ -172,20 +165,10 @@ export function createBoatState(x: number, z: number, h: number): BoatState {
     gear: 'D', gearRev: 0,
     engineOn: true,
     trimMode: false, trimV: 0.2, trimVent: 0,
-    // Off. Legacy's auto-chase backs the boat down on a hooked fish at up to half throttle
-    // astern whenever you are not touching the controls — which is a real technique, and is
-    // also the boat driving itself around behind your back the moment you hook up. The player
-    // can still back down; they just have to do it. `autoChaseControl` is kept intact behind
-    // this flag rather than deleted, because it is a faithful port of legacy's.
-    autoChaseEnabled: false, autoOn: false, autoMode: '',
     wakeTimer: 0,
     wakeRing, wakeRingIndex: 0,
     events: [],
   };
-}
-
-function wrapAngle(a: number): number {
-  return ((a + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
 }
 
 /** legacy `wakeH` (index.html:454-460), over a plain [x,z,t,packed]×N ring instead of `THREE.Vector4[]`. */
@@ -233,41 +216,6 @@ function emitWakeInto(ring: Float64Array, index: number, x: number, z: number, v
 /** How fast the way comes off with a fish on and nobody driving, per second. */
 const FIGHT_BRAKE = 1.6;
 
-/** legacy `autoChaseControl` (index.html:3869-3888). Gated off by default — see `createBoatState`. */
-function autoChaseControl(
-  state: BoatState,
-  input: BoatInput,
-  env: BoatEnv,
-  topMs: number,
-): { thr: number; steer: number; autoMode: string } | null {
-  if (!state.autoChaseEnabled || !env.canDrive || !env.fightActive || input.fwd || input.left || input.right) {
-    return null;
-  }
-  const target = env.fightTarget;
-  if (!target) return null;
-  const dx = target.x - state.x, dz = target.z - state.z, dist = Math.hypot(dx, dz);
-  const want = Math.atan2(-dx, -dz);
-  const diff = wrapAngle(want - state.h), diffStern = wrapAngle(want - (state.h + Math.PI));
-  let thr = 0, steer = 0, autoMode: string;
-  if (!(Math.abs(diff) < 0.9 && dist > 90)) {
-    steer = clamp(-diffStern * 2.2, -1, 1);
-    const v = clamp((dist - 14) * 0.22 + (target.running ? 2.5 : 0), 0, 6) * (Math.abs(diffStern) > 0.8 ? 0.35 : 1);
-    thr = -Math.min(0.5, v / topMs);
-    autoMode = thr < 0 ? 'Backing down on the fish' : 'Holding the stern on the fish';
-  } else {
-    steer = clamp(diff * 2.5, -1, 1);
-    const v = clamp((dist - 60) * 0.3 + (target.running ? 3 : 0), 0, 12) * (Math.abs(diff) > 1 ? 0.4 : 1);
-    thr = v / topMs;
-    autoMode = 'Running up on the fish';
-  }
-  const fx = -Math.sin(state.h), fz = -Math.cos(state.h), dir = thr < 0 ? -1 : 1;
-  const ahead = depthFast(state.x + fx * 16 * dir, state.z + fz * 16 * dir);
-  if (ahead < env.hull.draft + 0.35 || landH(state.x + fx * 12 * dir, state.z + fz * 12 * dir) > -0.3) {
-    thr = 0;
-    autoMode = 'Stopped — shallow water';
-  }
-  return { thr, steer, autoMode };
-}
 
 /** legacy `dockCollide` (index.html:1727-1737), minus the `boat.speed`/`toast` side effects. */
 function resolveDockCollision(
@@ -314,8 +262,6 @@ export function stepBoat(state: BoatState, input: BoatInput, env: BoatEnv, dt: n
   next.gearRev = lerp(next.gearRev, (next.gear === 'N' && next.engineOn && input.fwd) ? 1 : 0, Math.min(1, dt * (input.fwd ? 2.2 : 1.4)));
   if (next.trimMode && canDrive && !input.fwd && !input.back) tt = next.thr;
 
-  const ac = autoChaseControl(next, input, env, topMs);
-  if (ac) tt = ac.thr;
   next.thr += (tt - next.thr) * Math.min(1, dt * 2.5);
 
   if (input.trimUp) next.trimV = Math.min(1, next.trimV + dt * 0.35);
@@ -349,9 +295,8 @@ export function stepBoat(state: BoatState, input: BoatInput, env: BoatEnv, dt: n
   const d = depthAt(next.x, next.z);
   if (d < hull.draft) next.speed = clamp(next.speed, -1.2, 1.5);
 
-  const st = ac ? ac.steer : canDrive ? (input.left ? 1 : input.right ? -1 : 0) : 0;
+  const st = canDrive ? (input.left ? 1 : input.right ? -1 : 0) : 0;
   next.steer += (st - next.steer) * Math.min(1, dt * 4);
-  if (ac) { next.autoOn = true; next.autoMode = ac.autoMode; } else { next.autoOn = false; }
 
   const f = Math.abs(next.speed) / topMs;
   next.h += hull.turn * next.steer * (0.3 + Math.min(1, Math.abs(next.speed) / 8) * 0.9) * (1 - 0.35 * f) * (1.15 - 0.35 * next.trimV) * (next.speed < -0.2 ? -1 : 1) * dt;
