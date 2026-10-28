@@ -172,7 +172,12 @@ export function createBoatState(x: number, z: number, h: number): BoatState {
     gear: 'D', gearRev: 0,
     engineOn: true,
     trimMode: false, trimV: 0.2, trimVent: 0,
-    autoChaseEnabled: true, autoOn: false, autoMode: '',
+    // Off. Legacy's auto-chase backs the boat down on a hooked fish at up to half throttle
+    // astern whenever you are not touching the controls — which is a real technique, and is
+    // also the boat driving itself around behind your back the moment you hook up. The player
+    // can still back down; they just have to do it. `autoChaseControl` is kept intact behind
+    // this flag rather than deleted, because it is a faithful port of legacy's.
+    autoChaseEnabled: false, autoOn: false, autoMode: '',
     wakeTimer: 0,
     wakeRing, wakeRingIndex: 0,
     events: [],
@@ -225,7 +230,10 @@ function emitWakeInto(ring: Float64Array, index: number, x: number, z: number, v
   return (index + 1) % WAKE_N;
 }
 
-/** legacy `autoChaseControl` (index.html:3869-3888). Always returns null until fishing (Phase 0b) lands. */
+/** How fast the way comes off with a fish on and nobody driving, per second. */
+const FIGHT_BRAKE = 1.6;
+
+/** legacy `autoChaseControl` (index.html:3869-3888). Gated off by default — see `createBoatState`. */
 function autoChaseControl(
   state: BoatState,
   input: BoatInput,
@@ -320,6 +328,22 @@ export function stepBoat(state: BoatState, input: BoatInput, env: BoatEnv, dt: n
   const target = next.thr * topMs * trimK * (next.thr > 0 ? 1 : 1);
   const holeShot = fr < 0.4 && next.thr > 0.5 ? 1 + 0.45 * (0.3 - next.trimV) : 1;
   next.speed += (target - next.speed) * dt * (next.thr === 0 ? hull.accel * 0.5 : hull.accel * holeShot);
+  /*
+   * Fish on: the boat stops.
+   *
+   * Cutting the throttle alone is not enough — a hull at seven knots coasts for the better part
+   * of half a minute, so hooking up still meant sliding away from the fish while you reeled.
+   * This takes the way off in a couple of seconds, which is what happens when a boat comes out
+   * of gear with a fish pulling against it.
+   *
+   * Only when the player's hands are off the controls. Driving during a fight is legitimate —
+   * backing down, or just keeping the line clear of the motors — and a brake you cannot override
+   * would read as broken steering.
+   */
+  if (env.fightActive && !input.fwd && !input.back) {
+    next.speed *= Math.exp(-dt * FIGHT_BRAKE);
+    if (Math.abs(next.speed) < 0.04) next.speed = 0;
+  }
   if (next.trimVent > 0.2 && !env.luigiOn) next.events.push({ type: 'propVentilation' });
 
   const d = depthAt(next.x, next.z);
