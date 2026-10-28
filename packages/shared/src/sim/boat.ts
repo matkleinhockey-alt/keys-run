@@ -95,21 +95,16 @@ export interface BoatEnv {
   /** legacy `game.running && F.state!=='caught'`. Always true in Phase 0 (no fishing state machine yet). */
   canDrive: boolean;
   /**
-   * How much short wind chop the hull feels, 0..1. Defaults to 1 (the sea as drawn).
+   * How much of the sea the hull feels, 0..1. Defaults to 1 — the sea as drawn.
    *
-   * Exists for one caller: the legacy fidelity oracle in boat-trajectory.test.ts. That oracle is
-   * extracted from legacy/index.html, which has no chop at all, so comparing against it with
-   * chop on would only ever measure the chop. Setting this to 0 keeps that test doing its real
-   * job — proving the rest of the integrator still matches legacy exactly.
+   * One switch for the three things legacy's integrator does not have: the short wind chop under
+   * the hull, the speed a seaway costs (added resistance in waves), and the bow being pushed
+   * around at speed. It exists for one caller — the legacy fidelity oracle in
+   * boat-trajectory.test.ts, which is extracted from legacy/index.html and predates all of them.
+   * With it at 0 that test goes on doing its real job: proving everything ELSE still matches
+   * legacy exactly.
    */
-  chop?: number;
-  /**
-   * How much the sea slows the boat down, 0..1. Defaults to 1 (added resistance in waves, as
-   * felt). Same purpose as `chop` above and the same one caller: the legacy oracle in
-   * boat-trajectory.test.ts predates both, so it sets them to 0 and goes on checking that
-   * everything ELSE still matches legacy exactly.
-   */
-  seakeeping?: number;
+  seaEffects?: number;
   /** legacy `F.state==='fight'`. Gates the fight brake above — with a fish on, the boat stops. */
   fightActive: boolean;
   /** legacy `lineOut()`. Always false until fishing lands. */
@@ -252,6 +247,17 @@ const SEA_LOSS_MAX = 0.55;
 /** Seconds of smoothing on `seaWork`; raw |vy| swings at wave frequency and would surge the engine. */
 const SEA_WORK_TAU = 1.5;
 
+/**
+ * How hard a beam or quartering sea pushes the bow around once the boat is up and running.
+ *
+ * Small on purpose. This is the wander you hold off with a thumb on the wheel, not something
+ * that takes the boat away from you — a sea that steered for you would be worse than one that
+ * did nothing. Measured max excursion over thirty seconds, unsteered: about 6 degrees in a big
+ * beam swell, 3 in a chop, under 2 head-on. At twice this the same beam sea took the boat 21
+ * degrees off course, which is a fight rather than a correction.
+ */
+const SEA_YAW = 0.18;
+
 
 /** legacy `dockCollide` (index.html:1727-1737), minus the `boat.speed`/`toast` side effects. */
 function resolveDockCollision(
@@ -313,7 +319,7 @@ export function stepBoat(state: BoatState, input: BoatInput, env: BoatEnv, dt: n
    * either way.
    */
   next.seaWork += (Math.abs(state.vy) - next.seaWork) * Math.min(1, dt / SEA_WORK_TAU);
-  const seaLoss = Math.min(1, next.seaWork / SEA_WORK_REF) * SEA_LOSS_MAX * (env.seakeeping ?? 1);
+  const seaLoss = Math.min(1, next.seaWork / SEA_WORK_REF) * SEA_LOSS_MAX * (env.seaEffects ?? 1);
   const target = next.thr * topMs * trimK * (1 - seaLoss);
   const holeShot = fr < 0.4 && next.thr > 0.5 ? 1 + 0.45 * (0.3 - next.trimV) : 1;
   next.speed += (target - next.speed) * dt * (next.thr === 0 ? hull.accel * 0.5 : hull.accel * holeShot);
@@ -386,14 +392,26 @@ export function stepBoat(state: BoatState, input: BoatInput, env: BoatEnv, dt: n
   const amp = ampAt(next.x, next.z), rx = Math.cos(next.h), rz = -Math.sin(next.h);
   // Short chop is what a hull this size actually pitches and slams on — see waves/index.ts's
   // CHOP. One lookup per step, shared by the slope term and every hull sample below.
-  const cAmp = chopAt(next.x, next.z) * (env.chop ?? 1);
+  const cAmp = chopAt(next.x, next.z) * (env.seaEffects ?? 1);
   const plane = 0.11 * Math.sin(Math.min(f * 2.6, 1) * Math.PI) * (1.25 - 0.5 * next.trimV) + 0.035 * f + (next.trimV - 0.3) * 0.11 * Math.min(1, f * 2) + next.trimVent * 0.05 * Math.sin(t * 9);
   const sl = waveSlope(next.x, next.z, t, amp, env.sw, env.ch, cAmp), along = sl[0] * fx + sl[1] * fz, beamSl = sl[0] * rx + sl[1] * rz;
   if (!next.air) {
     next.speed -= along * 9.8 * 0.5 * dt;
     next.dvx = next.dvx - sl[0] * 9.8 * 0.22 * dt;
     next.dvz = next.dvz - sl[1] * 9.8 * 0.22 * dt;
-    if (f < 0.25) next.h += beamSl * 0.35 * dt * (1 - f * 4);
+    /*
+     * The sea pushing the bow around.
+     *
+     * Legacy applied this only below a quarter of top speed and nothing above, so at any real
+     * speed the boat tracked as if on rails: measured heading drift over thirty seconds was 0.0
+     * to 0.5 degrees in a big quartering swell, with a beam slope of 0.06 sitting right there
+     * doing nothing. Correcting for a quartering sea is most of what steering in a seaway is.
+     *
+     * Legacy's curve is kept exactly where it used to apply and is NOT behind `seaEffects` — only
+     * the residual is, or switching the sea off for the oracle would take legacy's own
+     * slow-speed behaviour with it, which is how this first went in.
+     */
+    next.h += beamSl * Math.max(0.35 * (1 - f * 4), SEA_YAW * Math.min(1, f * 4) * (env.seaEffects ?? 1)) * dt;
   }
   next.dvx *= 1 - Math.min(1, dt * 0.7); next.dvz *= 1 - Math.min(1, dt * 0.7);
   next.x += next.dvx * dt; next.z += next.dvz * dt;

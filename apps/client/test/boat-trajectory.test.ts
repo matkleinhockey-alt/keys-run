@@ -106,12 +106,11 @@ function baseEnv(sw: number, ch: number, dockRects: readonly DockRect[], pilings
   return {
     hull: HULL, sw, ch, worldBounds: WB, pilings, dockRects,
     canDrive: true, fightActive: false, lineOut: false, luigiOn: false,
-    // The oracle is extracted from legacy, which has no short wind chop (waves/index.ts's CHOP).
-    // With chop on, this test would measure nothing but the chop; with it off it keeps doing its
-    // real job, which is proving the rest of the integrator still matches legacy exactly.
-    chop: 0,
-    // ...and added resistance in waves, for the same reason.
-    seakeeping: 0,
+    // The oracle is extracted from legacy, which has none of the sea effects added since: the
+    // short wind chop under the hull, the speed a seaway costs, or the bow being pushed around
+    // at speed. With them on this test would measure nothing else; with them off it keeps doing
+    // its real job, which is proving the rest of the integrator still matches legacy exactly.
+    seaEffects: 0,
   };
 }
 
