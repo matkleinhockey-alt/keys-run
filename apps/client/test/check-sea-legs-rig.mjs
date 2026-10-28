@@ -7,9 +7,10 @@
  * Needs the dev server (CLIENT_URL, default http://localhost:5174).
  */
 import { chromium } from 'playwright';
+import { CLIENT_URL } from './server.mjs';
 const b = await chromium.launch(); const p = await b.newPage(); p.setDefaultTimeout(300000);
 p.on('pageerror', (e) => console.log('pageerror', String(e)));
-await p.goto(process.env.CLIENT_URL || 'http://localhost:5174', { waitUntil: 'load' });
+await p.goto(process.env.CLIENT_URL || CLIENT_URL, { waitUntil: 'load' });
 await p.waitForTimeout(1500);
 const out = await p.evaluate(async () => {
   const THREE = await import('/node_modules/.vite/deps/three.js').catch(() => import('three'));

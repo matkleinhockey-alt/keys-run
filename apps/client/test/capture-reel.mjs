@@ -9,11 +9,12 @@
  */
 import { chromium } from 'playwright';
 import fs from 'node:fs';
+import { CLIENT_URL } from './server.mjs';
 const OUT='test/screenshots/rod'; fs.mkdirSync(OUT,{recursive:true});
 const b=await chromium.launch({args:['--use-gl=swiftshader','--enable-unsafe-swiftshader']});
 const p=await b.newPage({viewport:{width:900,height:700},deviceScaleFactor:2});
 p.setDefaultTimeout(120000); p.on('pageerror',e=>console.log('pageerror',String(e)));
-await p.goto((process.env.CLIENT_URL || 'http://localhost:5174') + '/test/rod-harness.html',{waitUntil:'load'});
+await p.goto((process.env.CLIENT_URL || CLIENT_URL) + '/test/rod-harness.html',{waitUntil:'load'});
 await p.waitForTimeout(2500);
 await p.evaluate(()=>window.__rod.setFp(true));
 await p.evaluate(()=>window.__rod.inspect(true));

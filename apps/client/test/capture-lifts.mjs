@@ -7,13 +7,14 @@
  */
 import { chromium } from 'playwright';
 import fs from 'node:fs';
+import { CLIENT_URL } from './server.mjs';
 const OUT = 'test/screenshots/lifts'; fs.mkdirSync(OUT, { recursive: true });
 const b = await chromium.launch();
 const p = await b.newPage({ viewport: { width: 1280, height: 800 } });
 p.setDefaultTimeout(120000);
 const errs = []; p.on('pageerror', (e) => errs.push(String(e)));
 p.on('crash', () => errs.push('PAGE CRASHED'));
-await p.goto('http://localhost:5174', { waitUntil: 'load' }); await p.waitForTimeout(800);
+await p.goto(CLIENT_URL, { waitUntil: 'load' }); await p.waitForTimeout(800);
 const off = await p.$('button:has-text("Play offline")'); if (off) { await off.click(); await p.waitForTimeout(900); }
 // Default quality on purpose. Cycling to High with KeyG schedules a navigation, and the #btnGo
 // click then blocks on it until the timeout — and geometry is what this shot is checking, not

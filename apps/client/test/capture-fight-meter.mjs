@@ -6,12 +6,13 @@
  */
 import { chromium } from 'playwright';
 import fs from 'node:fs';
+import { CLIENT_URL } from './server.mjs';
 const OUT = 'test/screenshots/fight'; fs.mkdirSync(OUT, { recursive: true });
 const b = await chromium.launch();
 const p = await b.newPage({ viewport: { width: 1280, height: 800 } });
 p.setDefaultTimeout(120000);
 const errs = []; p.on('pageerror', (e) => errs.push(String(e)));
-await p.goto('http://localhost:5174', { waitUntil: 'load' }); await p.waitForTimeout(800);
+await p.goto(CLIENT_URL, { waitUntil: 'load' }); await p.waitForTimeout(800);
 const off = await p.$('button:has-text("Play offline")'); if (off) { await off.click(); await p.waitForTimeout(900); }
 await p.waitForTimeout(3500); await p.click('#btnGo'); await p.waitForTimeout(2000);
 const chainZ = (x) => 0.000012 * x * x;

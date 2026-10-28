@@ -16,9 +16,10 @@ import { chromium } from 'playwright';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { CLIENT_URL } from './server.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const BASE = process.env.CLIENT_URL || 'http://localhost:5173';
+const BASE = process.env.CLIENT_URL || CLIENT_URL;
 const OUT = path.join(HERE, 'screenshots', 'fishing');
 fs.mkdirSync(OUT, { recursive: true });
 

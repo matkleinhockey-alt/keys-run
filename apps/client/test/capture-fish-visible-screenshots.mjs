@@ -25,9 +25,10 @@ import { chromium } from 'playwright';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { CLIENT_URL } from './server.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const URL = process.env.CLIENT_URL || 'http://localhost:5191';
+const URL = CLIENT_URL;
 
 // Species with V.level === 'surface' in packages/shared/src/content/creatures.ts — pelagics that
 // swim just under the surface regardless of total water-column depth. A mid-column eye height

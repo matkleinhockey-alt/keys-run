@@ -18,6 +18,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { CLIENT_URL } from './server.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '../../..');
@@ -25,7 +26,6 @@ const OUT_DIR = path.join(HERE, 'screenshots');
 fs.mkdirSync(OUT_DIR, { recursive: true });
 
 const LEGACY_PORT = 4411;
-const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 
 function serveLegacy(port) {
   const html = fs.readFileSync(path.join(REPO_ROOT, 'legacy/index.html'));

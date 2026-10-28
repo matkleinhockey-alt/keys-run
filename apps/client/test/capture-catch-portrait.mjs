@@ -12,9 +12,10 @@ import { chromium } from 'playwright';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { CLIENT_URL } from './server.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const BASE = process.env.CLIENT_URL || 'http://localhost:5173';
+const BASE = process.env.CLIENT_URL || CLIENT_URL;
 const TAG = process.argv[2] || 'after';
 // 'captain' rather than the old 'catch-portrait' name — the catch-flow/captain-grip-and-grin task
 // renamed this script's output directory to match where it asked for verification screenshots.
