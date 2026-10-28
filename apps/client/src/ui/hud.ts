@@ -51,6 +51,8 @@ let dialTopKn = 0;
  * allowed to start — which is most of the first minute of play.
  */
 let rpm = IDLE_RPM;
+/** Knots to km/h: one nautical mile is exactly 1852 m. */
+const KN_TO_KMH = 1.852;
 const ACT = isTouch() ? '🎣' : 'Space';
 void ACT; // kept for parity with legacy's touch-vs-keyboard action label, unused until fishing lands
 
@@ -79,6 +81,9 @@ export function updateHUD(dt: number, boat: BoatState, ctx: HudCtx): void {
   }
   setText('gRpm', boat.engineOn ? String(Math.round(rpm / 10) * 10) : '—');
   setText('gSpd', kn.toFixed(0));
+  // The speedo's dial is in knots, which is what you navigate in; the digits carry km/h beside
+  // it for anyone who does not think in knots. One international nautical mile is 1.852 km.
+  setText('gKph', (kn * KN_TO_KMH).toFixed(0));
   setText('gHdg', String(Math.round((((-boat.h * 180 / Math.PI) % 360) + 360) % 360)).padStart(3, '0') + '°');
   const d = depthAt(boat.x, boat.z);
   setText('gDep', (d * 3.28).toFixed(1) + ' ft');
