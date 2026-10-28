@@ -46,9 +46,9 @@ export function createSpearFightUI(): SpearFightUI {
       fT.style.width = Math.max(0, Math.min(1, fight.tension)) * 100 + '%';
       fT.className = fight.tension > SPEAR_HOT ? 'hot' : fight.tension < 0.08 ? 'slack' : '';
       // Set the zones explicitly rather than inheriting them. A spear fight has no chafing
-      // leader, so its thresholds are fixed — but the rod fight moves these on the same shared
-      // element (game/fishing/update.ts), and a worn-down limit left over from the last fish
-      // would otherwise paint this bar's danger zone in the wrong place.
+      // leader, so its threshold is fixed, while the rod fight's slides with the leader's wear
+      // (game/fishing/update.ts) on this same shared element. Both ends now write these every
+      // frame, which is what stops one mode's marks being left behind on the other's bar.
       const track = fT.parentElement;
       if (track) { track.style.setProperty('--warn', SPEAR_HOT * 100 + '%'); track.style.setProperty('--snap', '100%'); }
     }
