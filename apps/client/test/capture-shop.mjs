@@ -8,6 +8,7 @@ import { chromium } from 'playwright';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SX, SZ } from './marina.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const URL = process.env.CLIENT_URL || 'http://localhost:5199';
@@ -15,7 +16,8 @@ const OUT = path.join(HERE, 'screenshots', 'shop');
 fs.mkdirSync(OUT, { recursive: true });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const errs = [];
-const SX = -900, SZ = 250.7;
+// Imported, not copied: this pair went stale once already — see test/marina.mjs.
+// (SX/SZ keep their names so the rest of each script is untouched.)
 
 const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
 const page = await browser.newPage({ viewport: { width: 1100, height: 760 } });
