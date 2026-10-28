@@ -139,7 +139,7 @@ export function findSandbars(limit = 8): BarSite[] {
 export function sandbarIndexAt(wallMs: number, count: number): number {
   if (count <= 1) return 0;
   const period = Math.floor(wallMs / ROTATE_MS);
-  return Math.min(count - 1, Math.floor(hashCell(WORLD_SEED, period, 77, SALT.HOUSE_ROT) * count));
+  return Math.min(count - 1, Math.floor(hashCell(WORLD_SEED, period, 77, SALT.SANDBAR_PICK) * count));
 }
 
 /**

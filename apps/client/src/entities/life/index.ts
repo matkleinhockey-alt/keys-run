@@ -33,6 +33,7 @@ import { createRacerFleet, type RacerFleet } from './racers.js';
 import { createTrafficFleet, type TrafficFleet } from './traffic.js';
 import { createCommercialFleet, type CommercialFleet } from './commercial.js';
 import { createSandbar, type Sandbar } from './sandbar.js';
+import { createLarry, type Larry } from './larry.js';
 import { createPelicanFlocks, type PelicanFlocks } from './pelicans.js';
 import { createBannerPlanes, type BannerPlanes } from './banner-plane.js';
 import { createWrecks, type Wrecks } from './wrecks.js';
@@ -163,6 +164,8 @@ export interface LifeSystems {
   commercialDebug(): ReturnType<CommercialFleet['debug']>;
   /** VERIFICATION ONLY: the sandbar raft-up. */
   sandbarDebug(): ReturnType<Sandbar['debug']>;
+  /** VERIFICATION ONLY: Larry's POS — whether he is out today and where he has got to. */
+  larryDebug(): ReturnType<Larry['debug']>;
   dispose(): void;
 }
 
@@ -173,6 +176,8 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
   const commercial: CommercialFleet = createCommercialFleet(scene);
   // The sandbar raft-up (entities/life/sandbar.ts).
   const sandbar: Sandbar = createSandbar(scene);
+  // Larry's POS (entities/life/larry.ts) — a raft, not a boat, and not always out.
+  const larry: Larry = createLarry(scene);
   const pelicans: PelicanFlocks = createPelicanFlocks(scene, boatSpawn);
   // Somebody is always towing a banner up the Keys. It is the only thing out on the water that
   // advertises the town, which otherwise you have to already know about to visit.
@@ -215,6 +220,7 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
       trafficFleet.update(dt, t, boat, cameraXZ, deps.particles);
       commercial.update(dt, t, cameraXZ);
       sandbar.update(dt, t, { x: cameraXZ.x, y: 0, z: cameraXZ.z });
+      larry.update(dt, t, camera, viewport);
       pelicans.update(dt, t, boat, cameraXZ, deps.particles);
       bannerPlanes.update(dt, t, boat, cameraXZ);
       hotspotWorld.update(dt, t, boat, cameraXZ, deps.particles);
@@ -287,9 +293,11 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
     },
     commercialDebug: () => commercial.debug(),
     sandbarDebug: () => sandbar.debug(),
+    larryDebug: () => larry.debug(),
     dispose(): void {
       commercial.dispose();
       sandbar.dispose();
+      larry.dispose();
       luigi.dispose();
       caelen.dispose();
       boatGulls.dispose();

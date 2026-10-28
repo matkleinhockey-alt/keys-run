@@ -38,4 +38,7 @@ export const SALT = {
   HOTSPOT_CREEK_PICK: 161, HOTSPOT_CREEK_FRAC: 162, HOTSPOT_HUMP_PICK: 163,
   HOTSPOT_X: 164, HOTSPOT_Z: 165,
   WEED_X: 171, WEED_Z: 172, WEED_ANG: 173, WEED_LEN: 174, WEED_WID: 175, WEED_HUMP_OFFX: 176, WEED_HUMP_OFFZ: 177,
+  // Wall-clock world state: which sandbar the raft-up is on today, and whether Larry is out.
+  // Hashed off the clock period rather than rolled per session, so every client agrees.
+  SANDBAR_PICK: 181, LARRY_OUT: 182, LARRY_ROUTE: 183,
 } as const;
