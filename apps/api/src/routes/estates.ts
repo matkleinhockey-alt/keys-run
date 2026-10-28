@@ -9,9 +9,10 @@
  * this table only says who holds what. A build is always run through `sanitizeBuild` before it is
  * stored, so whatever is in the table is something the client knows how to draw.
  *
- * Founding lots (`FOUNDING_HOLDERS`) are never for sale. They are held by display name, so the
- * user registered under that name (case-insensitive, unique in `users`) may build on them; until
- * one does, the lot is reported with its default build.
+ * Founding lots (`FOUNDING_HOLDERS`) are never for sale. They belong to the founder's email
+ * (../founders.ts): the account signed in with it may build on them, under whatever display name
+ * it chose, and is reported as their owner as soon as it exists; until it builds, the lot is
+ * reported with its default build.
  *
  * Authority: the price is taken from the shared table, never from the client, but it is paid from
  * the client's own wallet (apps/client/src/game/economy/system.ts), which the server cannot see
@@ -22,12 +23,13 @@
  */
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import {
   FOUNDING_HOLDERS, MAX_LOTS_PER_PLAYER, defaultBuild, parcelById, partyLot, priceOf, sanitizeBuild,
   type Estate, type Party, type Registry,
 } from '@keysrun/shared/content/estates';
 import { estates, globalRecords, users } from '../db/schema.js';
+import { FOUNDER_EMAILS, founderOf } from '../founders.js';
 
 const Params = z.object({ id: z.string().min(1).max(80) });
 const BuildBody = z.object({ build: z.record(z.string(), z.unknown()) });
@@ -46,9 +48,17 @@ export default async function estatesRoutes(fastify: FastifyInstance): Promise<v
       if (p) out.push({ parcelId: r.parcelId, ownerName: r.ownerName, founding: r.founding, build: sanitizeBuild(r.build, p), boughtAt: r.boughtAt.toISOString() });
     }
     const held = new Set(out.map((e) => e.parcelId));
-    for (const [id, name] of Object.entries(FOUNDING_HOLDERS)) {
+    // A founder who has signed up is named by their own display name, so their client sees the
+    // lot as theirs; one who has not yet is named by the founder label.
+    const founderRows = await fastify.db
+      .select({ email: users.email, displayName: users.displayName })
+      .from(users)
+      .where(inArray(users.email, Object.values(FOUNDER_EMAILS)));
+    const founderName = (label: string): string =>
+      founderRows.find((u) => founderOf(u.email) === label)?.displayName ?? label;
+    for (const [id, label] of Object.entries(FOUNDING_HOLDERS)) {
       const p = parcelById(id);
-      if (p && !held.has(id)) out.push({ parcelId: id, ownerName: name, founding: true, build: defaultBuild(p), boughtAt: null });
+      if (p && !held.has(id)) out.push({ parcelId: id, ownerName: founderName(label), founding: true, build: defaultBuild(p), boughtAt: null });
     }
 
     let party: Party | null = null;
@@ -110,8 +120,8 @@ export default async function estatesRoutes(fastify: FastifyInstance): Promise<v
 
       const founder = FOUNDING_HOLDERS[p.id];
       if (founder) {
-        const [me] = await fastify.db.select({ name: users.displayName }).from(users).where(eq(users.id, userId));
-        if (!me || me.name.toLowerCase() !== founder.toLowerCase()) return reply.code(403).send({ error: 'not_yours' });
+        const [me] = await fastify.db.select({ email: users.email }).from(users).where(eq(users.id, userId));
+        if (!me || founderOf(me.email) !== founder) return reply.code(403).send({ error: 'not_yours' });
         await fastify.db.insert(estates)
           .values({ parcelId: p.id, ownerId: userId, price: 0, founding: true, build })
           .onConflictDoUpdate({ target: estates.parcelId, set: { build, updatedAt: new Date() } });

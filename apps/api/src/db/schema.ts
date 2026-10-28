@@ -244,3 +244,16 @@ export const estates = pgTable('estates', {
 }, (t) => [
   index('estates_owner_id_idx').on(t.ownerId),
 ]);
+
+/**
+ * Each account's game save: the client's own state blobs (wallet and boats, gear and wardrobe,
+ * casino, services, looted and charted wrecks — apps/client/src/net/cloud-save.ts lists them),
+ * stored as the client wrote them so a signed-in player has the same game on any browser. Like the
+ * wallet itself this is the client's word, not a server-validated ledger (routes/save.ts).
+ */
+export const playerSaves = pgTable('player_saves', {
+  userId: uuid('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  /** { [localStorage key]: the JSON string stored under it }. */
+  data: jsonb('data').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});

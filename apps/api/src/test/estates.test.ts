@@ -53,15 +53,20 @@ describe('estates registry', () => {
     expect((await registry()).estates.find((x) => x.parcelId === lot.id)?.build.res).toBe('stilt');
   });
 
-  it('never sells a founding lot, and lets the founder (by name) build on it', async () => {
-    const larry = await angler('larry');
-    const bob = await angler('Bob');
-    expect((await buy(bob, 'fisher-island')).statusCode).toBe(409);
-    expect((await build(bob, 'fisher-island', { res: 'shack' })).statusCode).toBe(403);
+  it('never sells a founding lot, and lets the founder (by email, whatever their name) build on it', async () => {
+    const larryUser = await registerUser(app, { email: 'Laurent.Maltais@gmail.com', displayName: 'Laurent' });
+    const larry = (await loginUser(app, larryUser.email, larryUser.password)).token;
+    const impostor = await angler('Larry');
+    expect((await buy(impostor, 'fisher-island')).statusCode).toBe(409);
+    expect((await build(impostor, 'fisher-island', { res: 'shack' })).statusCode).toBe(403);
+    // signed up but not built yet: already reported under his own name, so his client sees it as his
+    expect((await registry()).estates.find((e) => e.parcelId === 'fisher-island')).toMatchObject({ ownerName: 'Laurent', founding: true });
+    expect((await registry()).estates.find((e) => e.parcelId === 'pigeon-key')).toMatchObject({ ownerName: 'Klein' });
     const res = await build(larry, 'fisher-island', { res: 'shack' });
     expect(res.statusCode).toBe(200);
-    expect((res.json() as { estate: Estate }).estate).toMatchObject({ ownerName: 'larry', founding: true, build: { res: 'shack' } });
+    expect((res.json() as { estate: Estate }).estate).toMatchObject({ ownerName: 'Laurent', founding: true, build: { res: 'shack' } });
     expect((await registry()).estates.filter((e) => e.parcelId === 'fisher-island')).toHaveLength(1);
+    expect((await build(larry, 'pigeon-key', { res: 'shack' })).statusCode).toBe(403);
   });
 
   it('caps how many lots one angler holds, and 404s an unknown lot', async () => {

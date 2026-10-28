@@ -71,11 +71,11 @@ async function api<T>(path: string, init?: RequestInit): Promise<{ ok: true; dat
 
 function authed(method: string, body?: unknown): RequestInit {
   const session = getCurrentSession();
-  return {
-    method,
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.token ?? ''}` },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  };
+  // No Content-Type without a body: Fastify answers an empty application/json body with a 400,
+  // which is what every signed-in purchase (a bare POST) used to get.
+  const headers: Record<string, string> = { Authorization: `Bearer ${session?.token ?? ''}` };
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  return { method, headers, body: body === undefined ? undefined : JSON.stringify(body) };
 }
 
 const BUY_FAIL: Record<string, string> = {
