@@ -145,6 +145,9 @@ uniform float uTime; uniform float uSW; uniform float uCH; uniform sampler2D uDe
 varying float vWA; varying vec3 vWN; varying vec3 vWP; varying float vCrest; varying float vSlope; varying vec3 vCol; varying float vWake;
 void wv(vec2 P,float kx,float kz,float w,float A,float c,float ph,inout float h,inout vec2 d){ float p=kx*P.x+kz*P.y+w*uTime+ph; h+=A*(sin(p)-c*cos(2.*p)); d+=vec2(kx,kz)*A*(cos(p)+2.*c*sin(2.*p)); }
 float ampForG(float d){ return .1+.9*clamp((d-1.)/40.,0.,1.)+1.*clamp((d-45.)/250.,0.,1.); }
+// Wind chop's own depth envelope — @keysrun/shared/waves' chopAmpFor. Deliberately not ampForG:
+// swell needs deep water to exist, chop is made locally on whatever is there.
+float chopAmpForG(float d){ return .1+.9*clamp(d/5.,0.,1.); }
 vec3 depthCol(float d){ float l=log(max(d,.3));
   if(l<log(1.2)) return mix(vec3(.70,.94,.86),vec3(.45,.89,.83),clamp((l-log(.3))/(log(1.2)-log(.3)),0.,1.));
   if(l<log(3.)) return mix(vec3(.45,.89,.83),vec3(.22,.79,.81),(l-log(1.2))/(log(3.)-log(1.2)));
@@ -172,6 +175,17 @@ float wakeH(vec2 P,inout vec2 grad,inout float foam){ float h=0.;
     wv(wpW.xz,.074,.046,.93,.13*chv,.28,2.4,hh,dd); wv(wpW.xz,-.052,.092,1.02,.09*chv,.25,.6,hh,dd); wv(wpW.xz,.0205,.0178,.516,.45*uSW,.1,3.1,hh,dd); wv(wpW.xz,-.0128,.0251,.526,.35*uSW,.1,4.4,hh,dd);
     float cfd=1.-smoothstep(260.,700.,length(wpW.xz-cameraPosition.xz)); wv(wpW.xz,.118,.071,1.162,.06*chv*cfd,.3,1.1,hh,dd); wv(wpW.xz,-.09,.13,1.244,.05*chv*cfd,.3,5.2,hh,dd);
     float wh=wAmp*hh; dd*=wAmp;
+    /* Short wind chop (@keysrun/shared/waves' CHOP), on its own amplitude envelope, so it is
+       summed after the swell is scaled rather than with it.
+       Each is faded out at the range where this mesh stops being able to draw it: vertices are
+       ~1.9 m apart at the camera and the spacing grows cubically, so the 11 m wave is down to
+       two vertices by 190 m and the 17 m one by 330 m. Past that it would alias into crawling
+       noise. Same trick, and the same reason, as cfd above. */
+    float cAmp=chopAmpForG(dep)*(1.+.6*min(${INLET_MAX.toFixed(1)}*dtx.g,1.));
+    float cho=0.; vec2 chd=vec2(0.); float cdist=length(wpW.xz-cameraPosition.xz);
+    wv(wpW.xz,.1574,.3344,1.904,.13*chv*(1.-smoothstep(150.,330.,cdist)),.33,2.2,cho,chd);
+    wv(wpW.xz,-.3672,.4375,2.367,.085*chv*(1.-smoothstep(80.,190.,cdist)),.36,5.,cho,chd);
+    wh+=cAmp*cho; dd+=cAmp*chd;
     vec2 wg=vec2(0.); float wf=0.; wh+=wakeH(wpW.xz,wg,wf); dd+=wg; vWake=wf;
     vec3 objectNormal=normalize(vec3(-dd.x,1.0,-dd.y));
     vWN=objectNormal; vWP=vec3(wpW.x,wh,wpW.z); vCrest=hh/(1.74*uSW+.33*chv+.001); vSlope=length(dd);

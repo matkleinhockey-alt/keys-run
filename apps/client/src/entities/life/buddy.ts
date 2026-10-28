@@ -16,13 +16,13 @@ import * as THREE from 'three';
 import { makeBoat, type BoatModel, type BoatBuildDeps } from '../boat/model.js';
 import { BOATS, SPEED_SCALE, type Boat } from '@keysrun/shared/content/boats';
 import { WB, depthAt, landH, zoneAt } from '@keysrun/shared/world/depth';
-import { waveHBase } from '@keysrun/shared/waves';
 import { pickSpecies } from '@keysrun/shared/sim/fight';
 import { SPECIES } from '@keysrun/shared/content/species';
 import type { Rng } from '@keysrun/shared/rng';
 import { clamp, lerp, rand } from '../../core/math.js';
 import type { ParticleSystem } from '../../world/particles.js';
 import type { RemoteEngineSource } from '../../audio/interfaces.js';
+import { seaHAt } from '@keysrun/shared/sim/depth-grid';
 
 const rng: Rng = () => Math.random();
 const _tmpA = new THREE.Vector3();
@@ -133,8 +133,8 @@ export function createFishingBuddy(scene: THREE.Scene, deps: BoatBuildDeps): Fis
       x += -Math.sin(h) * speed * dt; z += -Math.cos(h) * speed * dt;
       // ride the water
       const fxv = -Math.sin(h), fzv = -Math.cos(h), rx = Math.cos(h), rz = -Math.sin(h), amp = 0.3, hl = S.len * 0.45, hb2 = S.beam * 0.5;
-      const hb = waveHBase(x + fxv * hl, z + fzv * hl, t, amp), hs = waveHBase(x - fxv * hl, z - fzv * hl, t, amp);
-      const hp = waveHBase(x - rx * hb2, z - rz * hb2, t, amp), hst = waveHBase(x + rx * hb2, z + rz * hb2, t, amp), fr = Math.min(1, speed / topMs);
+      const hb = seaHAt(x + fxv * hl, z + fzv * hl, t), hs = seaHAt(x - fxv * hl, z - fzv * hl, t);
+      const hp = seaHAt(x - rx * hb2, z - rz * hb2, t), hst = seaHAt(x + rx * hb2, z + rz * hb2, t), fr = Math.min(1, speed / topMs);
       y = lerp(y, (hb + hs + hp + hst) / 4 + fr * 0.3, Math.min(1, dt * 4));
       pitch = lerp(pitch, Math.atan2(hb - hs, S.len) + fr * 0.07, Math.min(1, dt * 4));
       roll = lerp(roll, Math.atan2(hp - hst, S.beam) * 0.7, Math.min(1, dt * 3));

@@ -12,8 +12,7 @@
  * ignores the swell is the single most obvious "this is a game object" tell at close range.
  */
 import * as THREE from 'three';
-import { waveHBase } from '@keysrun/shared/waves';
-import { ampAt } from '@keysrun/shared/sim/depth-grid';
+import { seaHAt } from '@keysrun/shared/sim/depth-grid';
 import { MARATHON_COURSE, buoyPos, type CourseBuoy } from '@keysrun/shared/sim/race';
 
 export interface RaceBuoys {
@@ -98,7 +97,7 @@ export function createRaceBuoys(course: readonly CourseBuoy[] = MARATHON_COURSE)
     if (!group.visible) return;
     for (let i = 0; i < n; i++) {
       const p = positions[i];
-      const surf = waveHBase(p.x, p.z, t, ampAt(p.x, p.z));
+      const surf = seaHAt(p.x, p.z, t);
       // Lean with the swell slightly — a moored mark heels, it doesn't stand bolt upright.
       const lean = Math.sin(t * 0.9 + i * 1.7) * 0.06;
 

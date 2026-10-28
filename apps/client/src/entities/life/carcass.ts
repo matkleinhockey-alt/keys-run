@@ -17,8 +17,7 @@
  * on the swell that quietly slips under at the end, nothing more.
  */
 import * as THREE from 'three';
-import { waveHBase } from '@keysrun/shared/waves';
-import { ampAt } from '@keysrun/shared/sim/depth-grid';
+import { seaHAt } from '@keysrun/shared/sim/depth-grid';
 import {
   CARCASS_LIFE_S, admitCarcass, carcassPotency, createCarcass, stepCarcasses, type Carcass,
 } from '@keysrun/shared/sim/chum';
@@ -100,7 +99,7 @@ export function createCarcasses(scene: THREE.Scene): Carcasses {
         const c = byId.get(l.c.id);
         if (!c) { remove(l); continue; }
         l.c = c;
-        const surf = waveHBase(c.x, c.z, t, ampAt(c.x, c.z));
+        const surf = seaHAt(c.x, c.z, t);
         // It rides the swell nearly flush, rolled most of the way onto its side with one wing
         // half out of the water — the silhouette that reads "dead" at any distance.
         const sink = Math.max(0, (c.age - (c.life - SINK_S)) / SINK_S);

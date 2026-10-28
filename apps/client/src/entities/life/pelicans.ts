@@ -8,8 +8,7 @@
 import * as THREE from 'three';
 import { makeSeabird, poseBird, moveBird, type Bird } from './seabirds.js';
 import { landH } from '@keysrun/shared/world/depth';
-import { waveHBase } from '@keysrun/shared/waves';
-import { ampAt } from '@keysrun/shared/sim/depth-grid';
+import { seaHAt } from '@keysrun/shared/sim/depth-grid';
 import { lerp, rand } from '../../core/math.js';
 import type { ParticleSystem } from '../../world/particles.js';
 
@@ -68,7 +67,7 @@ export function createPelicanFlocks(scene: THREE.Scene, boat: { x: number; z: nu
           if (!vis) return;
           const back = i * 5.5, side = (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 2.2 * (F.vee ? 1 : 0.25);
           let x = F.x - fx * back + Math.cos(F.h) * side, z = F.z - fz * back - Math.sin(F.h) * side;
-          let y = F.alt + waveHBase(x, z, t, ampAt(x, z)) + Math.sin(t * 0.6 + i) * 0.3;
+          let y = F.alt + seaHAt(x, z, t) + Math.sin(t * 0.6 + i) * 0.3;
           let flap = flapping && t % 3 > i * 0.18 ? 1 : 0, tuck = 0;
           if (B.dive) {
             const D = B.dive;
@@ -85,7 +84,7 @@ export function createPelicanFlocks(scene: THREE.Scene, boat: { x: number; z: nu
             else if (p < 4.2) {
               if (!D.spl) { D.spl = 1; particles.splash(D.wx, D.wz, 16, 1.2); }
               x = D.wx; z = D.wz;
-              y = 0.15 + waveHBase(x, z, t, ampAt(x, z)); flap = 0; tuck = 0.3;
+              y = 0.15 + seaHAt(x, z, t); flap = 0; tuck = 0.3;
             } else if (p < 6) { const q = (p - 4.2) / 1.8; y = lerp(0.2, F.alt, q); flap = 1; }
             else B.dive = null;
           } else if (Math.random() < dt * 0.012) B.dive = { t: 0 };

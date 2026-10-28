@@ -14,8 +14,7 @@ import { createHumanRegistry } from './human.js';
 import { beamBetween, buildHullGeo, type HullGeoOptions } from '../boat/hull.js';
 import { HULLS, type HullSpec, type HullColors } from '@keysrun/shared/content/boats';
 import { chainZ } from '@keysrun/shared/world/chain';
-import { waveHBase } from '@keysrun/shared/waves';
-import { ampAt } from '@keysrun/shared/sim/depth-grid';
+import { ampAt, seaHAt } from '@keysrun/shared/sim/depth-grid';
 import { clamp, lerp, rand } from '../../core/math.js';
 import type { ParticleSystem } from '../../world/particles.js';
 import type { RemoteEngineSource } from '../../audio/interfaces.js';
@@ -264,9 +263,9 @@ export function createTrafficFleet(scene: THREE.Scene): TrafficFleet {
         const wv = r.kind === 'jetski' ? Math.atan(Math.cos(t * 0.9 + r.ph) * 14 * 0.9 / Math.max(4, r.speed)) : 0;
         r.h = angLerp(r.h, Math.atan2(-P.tx, -P.tz) - wv, dt * (r.kind === 'jetski' ? 4 : 1.8));
         const fx = -Math.sin(r.h), fz = -Math.cos(r.h), amp = ampAt(x, z), hl = r.L * 0.45;
-        const hb = waveHBase(x + fx * hl, z + fz * hl, t, amp), hs = waveHBase(x - fx * hl, z - fz * hl, t, amp);
+        const hb = seaHAt(x + fx * hl, z + fz * hl, t), hs = seaHAt(x - fx * hl, z - fz * hl, t);
         const rxv = Math.cos(r.h), rzv = -Math.sin(r.h);
-        const hp = waveHBase(x - rxv * r.B * 0.5, z - rzv * r.B * 0.5, t, amp), hst = waveHBase(x + rxv * r.B * 0.5, z + rzv * r.B * 0.5, t, amp);
+        const hp = seaHAt(x - rxv * r.B * 0.5, z - rzv * r.B * 0.5, t), hst = seaHAt(x + rxv * r.B * 0.5, z + rzv * r.B * 0.5, t);
         const fr = r.kind === 'sail' ? 0 : Math.min(1, r.speed / 20);
         let hopY = 0, hopP = 0;
         if (r.kind === 'jetski') {

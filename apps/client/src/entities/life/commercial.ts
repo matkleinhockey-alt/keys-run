@@ -27,8 +27,7 @@ import * as THREE from 'three';
 import { chainRoute, pointRoute, angLerp, type Path } from './path.js';
 import { buildHullGeo } from '../boat/hull.js';
 import { HULLS, type HullSpec, type HullColors } from '@keysrun/shared/content/boats';
-import { waveHBase } from '@keysrun/shared/waves';
-import { ampAt } from '@keysrun/shared/sim/depth-grid';
+import { seaHAt } from '@keysrun/shared/sim/depth-grid';
 import { chainZ } from '@keysrun/shared/world/chain';
 import { rand } from '../../core/math.js';
 
@@ -227,11 +226,11 @@ export function createCommercialFleet(scene: THREE.Scene): CommercialFleet {
 
       // Pitch and roll off the wave under bow, stern and both rails — same as traffic.ts. A
       // working boat is slow and heavily loaded, so it wallows rather than planing.
-      const fx = -Math.sin(r.h), fz = -Math.cos(r.h), amp = ampAt(x, z), hl = r.L * 0.45;
-      const hb = waveHBase(x + fx * hl, z + fz * hl, t, amp), hs = waveHBase(x - fx * hl, z - fz * hl, t, amp);
+      const fx = -Math.sin(r.h), fz = -Math.cos(r.h), hl = r.L * 0.45;
+      const hb = seaHAt(x + fx * hl, z + fz * hl, t), hs = seaHAt(x - fx * hl, z - fz * hl, t);
       const rxv = Math.cos(r.h), rzv = -Math.sin(r.h);
-      const hp = waveHBase(x - rxv * r.B * 0.5, z - rzv * r.B * 0.5, t, amp);
-      const hst = waveHBase(x + rxv * r.B * 0.5, z + rzv * r.B * 0.5, t, amp);
+      const hp = seaHAt(x - rxv * r.B * 0.5, z - rzv * r.B * 0.5, t);
+      const hst = seaHAt(x + rxv * r.B * 0.5, z + rzv * r.B * 0.5, t);
       r.g.position.set(x, (hb + hs) / 2, z);
       r.g.rotation.set(Math.atan2(hb - hs, r.L), r.h, Math.atan2(hp - hst, r.B) * 0.9, 'YXZ');
       r.g.visible = Math.hypot(x - camera.x, z - camera.z) < 1700;

@@ -46,8 +46,6 @@ import { createPartyBoats, type PartyBoats } from './party-boats.js';
 import { createBoatGulls, type BoatGulls } from './boat-gulls.js';
 import { birdWorldPos, shootDownBird, type Bird } from './seabirds.js';
 import { createCarcasses, BIRD_REPLACE_S, type Carcasses } from './carcass.js';
-import { ampFor, waveHBase } from '@keysrun/shared/waves';
-import { depthAt } from '@keysrun/shared/world/depth';
 import type { Carcass } from '@keysrun/shared/sim/chum';
 import { createDog, type Dog } from './dog.js';
 import { createPirates, type Pirates, type PirateLootSource } from './pirates.js';
@@ -56,6 +54,7 @@ import type { BoatModel, BoatBuildDeps } from '../boat/model.js';
 import type { LightMatEntry } from '../../core/time-of-day.js';
 import type { ParticleSystem } from '../../world/particles.js';
 import type { RemoteEngineSource, PartySite, PirateSite } from '../../audio/interfaces.js';
+import { seaHAt } from '@keysrun/shared/sim/depth-grid';
 
 export interface LifeDeps extends BoatBuildDeps {
   lightMats: LightMatEntry[];
@@ -272,7 +271,7 @@ export function createLifeSystems(scene: THREE.Scene, boatSpawn: { x: number; z:
       // differs by a few centimetres of swell. seabirds.ts converts it into the bird's own
       // parent-local frame (see `shootDownBird`).
       const p = birdWorldPos(B);
-      const surf = waveHBase(p.x, p.z, lastT, ampFor(depthAt(p.x, p.z)));
+      const surf = seaHAt(p.x, p.z, lastT);
       shootDownBird(B, surf, BIRD_REPLACE_S, (x, _y, z) => {
         carcasses.spawn(B.kind, x, z);
         deps.particles.splash(x, z, 8, 0.7);

@@ -1565,7 +1565,7 @@ export function initWorld(wrap: HTMLElement): World {
      * a camera relative to a *moving* boat (e.g. entities/fish's dolphin bow-riding, which needs
      * real throttle input to demonstrate — teleport() above always zeroes speed) instead of
      * guessing where it ended up. No normal code path reads this. */
-    boatState: () => ({ x: curState.x, z: curState.z, h: curState.h, speed: curState.speed }),
+    boatState: () => ({ x: curState.x, z: curState.z, h: curState.h, speed: curState.speed, y: curState.y, pitch: curState.pitch, roll: curState.roll }),
     dogState: () => life.dogState(),
     /** Verification-only: the floating bird carcasses and their live chum potency
      * (@keysrun/shared/sim/chum). Paired with `__fishDebug.activeSchools()`'s own `feed` field,

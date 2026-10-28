@@ -16,6 +16,7 @@ import type { ParticleSystem } from '../../world/particles.js';
 import type { WaterHandles } from '../../world/water.js';
 import { rand } from '../../core/math.js';
 import { toast } from '../../ui/toast.js';
+import { chopAt } from '@keysrun/shared/sim/depth-grid';
 
 export interface VisualsHull { len: number; beam: number; topMs: number }
 
@@ -39,7 +40,7 @@ const SLAM_MESSAGES = ['Stuffed it! Trim up and ease off a little.', 'Big air â€
  * used for cosmetic water-height queries (spray bobbing, dock-boat bobbing). See
  * packages/shared/src/sim/boat.ts's doc comment for why the wake ring lives in `BoatState`. */
 export function sampleWaterHeight(state: BoatState, x: number, z: number, t: number, amp: number, sw: number, ch: number): number {
-  return waveHBase(x, z, t, amp, sw, ch) + wakeHeightFor(state, x, z, t);
+  return waveHBase(x, z, t, amp, sw, ch, chopAt(x, z)) + wakeHeightFor(state, x, z, t);
 }
 
 function wakeHeightFor(state: BoatState, x: number, z: number, t: number): number {

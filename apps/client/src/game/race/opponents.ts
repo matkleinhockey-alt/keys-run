@@ -24,8 +24,7 @@
  */
 import * as THREE from 'three';
 import { BOATS } from '@keysrun/shared/content/boats';
-import { waveHBase, waveSlope } from '@keysrun/shared/waves';
-import { ampAt } from '@keysrun/shared/sim/depth-grid';
+import { seaHAt, seaSlopeAt } from '@keysrun/shared/sim/depth-grid';
 import { coursePoints } from '@keysrun/shared/sim/race';
 import { pointRoute, type Path } from '../../entities/life/path.js';
 import { makeBoat, type BoatBuildDeps, type BoatModel } from '../../entities/boat/model.js';
@@ -120,9 +119,8 @@ export function createRaceField(): RaceField {
     const z = p.z + nz * o.curLine;
     o.x = x; o.z = z;
 
-    const amp = ampAt(x, z);
-    const surf = waveHBase(x, z, t, amp);
-    const [sx, sz] = waveSlope(x, z, t, amp);
+    const surf = seaHAt(x, z, t);
+    const [sx, sz] = seaSlopeAt(x, z, t);
 
     const g = o.model.group;
     g.position.set(x, surf, z);

@@ -27,7 +27,6 @@
  */
 import { depthAt, offshoreF, WB } from '@keysrun/shared/world/depth';
 import { shoreInfo } from '@keysrun/shared/world/chain';
-import { ampFor, waveHBase } from '@keysrun/shared/waves';
 import type { CreatureVis } from '@keysrun/shared/content/creatures';
 import { chumPull, CARCASS_MILL_R } from '@keysrun/shared/sim/chum';
 import { clamp, lerp, rand } from '../../core/math.js';
@@ -37,6 +36,7 @@ import {
   isBowRider, bowRideTarget, fleeHeadingFrom, BOW_RIDE_RADIUS, BOW_RIDE_MIN_SPEED, BOW_RIDE_MAX_SPEED,
 } from './behavior.js';
 import type { SchoolCtx, SchoolState, FishMember } from './types.js';
+import { seaHAt } from '@keysrun/shared/sim/depth-grid';
 
 /** Sea-floor world-Y for a depth — the identity (negation), matching `world/seafloor.ts`'s
  * `floorY`. 1 world unit = 1 metre, so a 34 m depth puts the floor at y = -34.
@@ -63,7 +63,7 @@ const floorY = (d: number): number => -d;
  * of guessing a world Y blind. */
 export function waterColumnAt(x: number, z: number, t: number): { floor: number; surf: number } {
   const d = depthAt(x, z);
-  return { floor: floorY(d), surf: waveHBase(x, z, t, ampFor(d)) };
+  return { floor: floorY(d), surf: seaHAt(x, z, t) };
 }
 
 export type SchoolEvent =
@@ -312,7 +312,7 @@ const tang = 0.55 * (1 - pull); // fades out the further from home, so a stray s
   g.cx = clamp(g.cx, WB.x0 + 5, WB.x1 - 5);
   g.cz = clamp(g.cz, WB.z0 + 5, WB.z1 - 5);
 
-  const d = depthAt(g.cx, g.cz), amp = ampFor(d), floor = floorY(d);
+  const d = depthAt(g.cx, g.cz), floor = floorY(d);
   const rx = Math.cos(g.heading), rz = -Math.sin(g.heading);
 
   // dive cycles: sound for a while, then come back up; spooked fish head down
@@ -326,19 +326,19 @@ const tang = 0.55 * (1 - pull); // fades out the further from home, so a stray s
   const wf = 4 + sp * 3;
   const wa = (V.kind === 'ray' || V.kind === 'turtle' || V.kind === 'manatee') ? 0.03 : (V.kind === 'fish' ? 0.04 : 0.03);
 
-  for (const m of g.members) stepMember(m, g, V, d, amp, floor, rx, rz, fx, fz, wf, wa, t, dt, events);
+  for (const m of g.members) stepMember(m, g, V, d, floor, rx, rz, fx, fz, wf, wa, t, dt, events);
 
   return events;
 }
 
 function stepMember(
   m: FishMember, g: SchoolState, V: CreatureVis,
-  d: number, amp: number, floor: number, rx: number, rz: number, fx: number, fz: number,
+  d: number, floor: number, rx: number, rz: number, fx: number, fz: number,
   wf: number, wa: number, t: number, dt: number, events: SchoolEvent[],
 ): void {
   const ox = m.ox + Math.sin(t * 0.6 + m.seed) * 0.3, oz = m.oz + Math.cos(t * 0.5 + m.seed) * 0.3;
   const mx = g.cx + rx * ox + fx * oz, mz = g.cz + rz * ox + fz * oz;
-  const surf = waveHBase(mx, mz, t, amp);
+  const surf = seaHAt(mx, mz, t);
 
   let y: number;
   const hold = g.anchor?.hold;

@@ -8,10 +8,10 @@
  * into the reef) and this port's visual distinguisher from rod fishing's bobber-on-a-rod-tip line.
  */
 import * as THREE from 'three';
-import { waveHBase } from '@keysrun/shared/waves';
 import type { ShotState } from '@keysrun/shared/sim/spear';
 import type { Vec3 } from '@keysrun/shared/sim/spear';
 import { clamp, rand } from '../../core/math.js';
+import { seaHAt } from '@keysrun/shared/sim/depth-grid';
 
 export interface ShaftVisual {
   group: THREE.Group;
@@ -119,7 +119,7 @@ export function createFloatLineVisual(scene: THREE.Scene): FloatLineVisual {
   function setVisible(v: boolean): void { group.visible = v; }
 
   function update(fishPos: Vec3, t: number, sw: number, ch: number, tension: number): void {
-    const surfaceY = waveHBase(fishPos.x, fishPos.z, t, 0.3, sw, ch);
+    const surfaceY = seaHAt(fishPos.x, fishPos.z, t, sw, ch);
     // A taut line pulls the float a little toward the fish rather than sitting dead overhead —
     // cheap but it's the one cue that reads as "this line is under load" even from a glance.
     const pull = clamp(tension, 0, 1.2) * 0.35;

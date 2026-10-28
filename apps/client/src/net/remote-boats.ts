@@ -22,8 +22,7 @@
  */
 import * as THREE from 'three';
 import { BOATS } from '@keysrun/shared/content/boats';
-import { waveHBase, DEFAULT_SW, DEFAULT_CH } from '@keysrun/shared/waves';
-import { ampAt } from '@keysrun/shared/sim/depth-grid';
+import { seaHAt } from '@keysrun/shared/sim/depth-grid';
 import { makeBoat, type BoatModel, type BoatBuildDeps } from '../entities/boat/model.js';
 import type { RemoteBoatSnapshot } from './client.js';
 import './net.css';
@@ -106,8 +105,7 @@ export function createRemoteBoatManager(scene: THREE.Scene, camera: THREE.Perspe
       inst.lastUpdateMs = nowMs;
 
       const { x, z, h, speed } = snap.pose;
-      const amp = ampAt(x, z);
-      const y = waveHBase(x, z, simTimeS, amp, DEFAULT_SW, DEFAULT_CH);
+      const y = seaHAt(x, z, simTimeS);
       const g = inst.model.group;
       g.position.set(x, y, z);
       g.rotation.set(0, h, 0, 'YXZ');
