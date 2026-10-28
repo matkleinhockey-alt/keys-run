@@ -12,7 +12,7 @@ import type { CamState, FpState } from '../../entities/camera.js';
 import { sampleWaterHeight } from '../../entities/boat/visuals.js';
 import { landH, zoneAt, nearHump } from '@keysrun/shared/world/depth';
 import { ampAt } from '@keysrun/shared/sim/depth-grid';
-import { chooseFish, fightParamsFor, scaledLenM, startFight, stepFight, type FightState, tensionFrac, HOT_FRACTION } from '@keysrun/shared/sim/fight';
+import { chooseFish, fightParamsFor, scaledLenM, startFight, stepFight, type FightState, tensionFrac, warnFrac, HOOK_TEAR, SLACK_TENSION } from '@keysrun/shared/sim/fight';
 import { xoshiro128ss } from '@keysrun/shared/rng';
 import { SPECIES } from '@keysrun/shared/content/species';
 import type { Tackle } from '@keysrun/shared/content/tackle';
@@ -379,15 +379,39 @@ export function createFishingLogic(deps: FishingDeps) {
       if (fT) {
         // The bar reads LOAD AGAINST WHAT THE LINE WILL TAKE, not raw tension — see
         // sim/fight.ts's `tensionFrac` for why the old absolute scale could not run red on most
-        // of the fish in the game. Full bar means it is going now, and the marks never move.
+        // of the fish in the game. Full bar means the line is going now.
         const frac = tensionFrac(next.tension, next.limit);
         fT.style.width = clamp(frac, 0, 1) * 100 + '%';
-        // `over` is its own state: pegged AND past the limit is not the same as pegged at the
-        // top of the red, and it is the one moment the player has to act on immediately.
-        fT.className = frac >= 1 ? 'over' : frac > HOT_FRACTION ? 'hot'
-          // Slack stays an ABSOLUTE judgement: a hook falls out on a loose line regardless of
-          // what that line happens to be rated for.
-          : next.tension < 0.08 ? 'slack' : '';
+        /*
+         * Coloured against the two things that ACTUALLY lose you the fish, not against a
+         * fraction of the bar. Hot is `HOOK_TEAR` — the tension above which the hook starts
+         * prising out — and slack is `SLACK_TENSION`, below which a jump throws it. Both are
+         * the same constants stepFight wears the hook with, so the warning and the damage
+         * cannot disagree; the old fixed 0.68-of-limit mark was a different quantity and sat
+         * green through the whole band where a grouper or a blackfin tears off.
+         *
+         * `over` is still its own state: past the limit is the one moment that needs acting on
+         * this second.
+         */
+        fT.className = next.tension >= next.limit ? 'over'
+          : next.tension > HOOK_TEAR ? 'hot'
+          : next.tension < SLACK_TENSION ? 'slack' : '';
+        /*
+         * Paint the track's bands where those failures are for THIS leader. They move: the bar
+         * is tension over `limit` and the hook tears at a fixed tension, so as the leader chafes
+         * the warning mark slides right and the gap between "tearing the hook" and "parting the
+         * line" visibly closes.
+         *
+         * Setting it every frame also ends a cross-contamination bug — the spear fight writes
+         * these same custom properties on this same shared element (entities/speargun/
+         * fight-ui.ts) and never cleared them, so after one speared fish every rod fight drew
+         * its red band at the spear's 82% while the fill still changed colour somewhere else.
+         */
+        const tr = fT.parentElement;
+        if (tr) {
+          tr.style.setProperty('--warn', warnFrac(next.limit) * 100 + '%');
+          tr.style.setProperty('--snap', '100%');
+        }
       }
       /*
        * Whether cranking is doing anything.

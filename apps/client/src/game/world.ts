@@ -1545,7 +1545,7 @@ export function initWorld(wrap: HTMLElement): World {
     fishCamHold: (seconds: number) => { fishCam.cancel(); fishCam.trigger(FishF.fx, FishF.fz, seconds); },
     /** Verification-only: what is on the end of the line right now. */
     fightInfo: () => (FishF.fight
-      ? { key: FishF.key, weight: +FishF.weight.toFixed(1), jumper: !!FishF.fightParams?.jump, canJump: !!(FishF.fightParams?.jump || FishF.fightParams?.kingfish), jumpQ: FishF.fight.jumpQ, airborne: FishF.fight.airborne }
+      ? { key: FishF.key, weight: +FishF.weight.toFixed(1), jumper: !!FishF.fightParams?.jump, canJump: !!(FishF.fightParams?.jump || FishF.fightParams?.kingfish), jumpQ: FishF.fight.jumpQ, airborne: FishF.fight.airborne, tension: +FishF.fight.tension.toFixed(3), limit: +FishF.fight.limit.toFixed(3), hookHold: +FishF.fight.hookHold.toFixed(3), stam: +FishF.fight.stam.toFixed(3), running: FishF.fight.running }
       : null),
     /** Verification-only: where the three gold bluefin are. Finding them is the whole point, so
      * nothing in normal play reads this. */

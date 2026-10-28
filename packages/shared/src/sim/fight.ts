@@ -326,25 +326,43 @@ export function tensionFrac(tension: number, limit: number): number {
   return tension / Math.max(0.05, limit);
 }
 
-/** Where the warning and parting marks sit on that bar, as percentages. Fixed now: the scale
- * moves with the leader instead of the markings. */
-export const TENSION_WARN_PCT = 68;
-export const TENSION_SNAP_PCT = 100;
+/**
+ * The tension above which the hook starts tearing its way out, quadratically — `stepFight`'s
+ * hook-wear term is built on this exact number. It is the real back-off point, and it is what
+ * the gauge's warning mark means.
+ *
+ * The mark used to be a fixed fraction of the LINE limit — 0.8, then 0.68 — which is a different
+ * quantity and the wrong one. Line parting is not how most fish are lost; the hook pulling is.
+ * Measured over full fights at every drag setting, cranking flat out: a 22 lb red grouper peaks
+ * at 0.46-0.59 tension and spends 12-24% of the fight above this threshold, and a 30 lb blackfin
+ * 0.50-0.72 and 19-37% of it. Against a 0.68-of-limit mark, neither ever turned the bar red. The
+ * gauge sat green through the whole band in which the player was prising the hook loose, which
+ * is precisely the thing it exists to warn about.
+ *
+ * The drag knob stays legible, which was the reason the old number was chosen: time spent past
+ * this mark still rises with drag on every fish (blackfin 19% at drag 1 to 37% at drag 5). And a
+ * fish that genuinely cannot endanger itself still never lights it — a 4 lb lane snapper peaks
+ * at 0.29 at every drag setting, and should read safe, because it is.
+ */
+export const HOOK_TEAR = 0.4;
 
 /**
- * Fraction of the current limit at which the bar turns hot — the "back off" point.
- *
- * Was 0.8, which measurement showed to be unreachable on the fish people actually catch: fought
- * flat out at the tightest drag the reel has, a blackfin peaks at 0.72 of its limit and a
- * grouper at 0.70. The HUD said "back off when the bar runs red" and the bar could not run red.
- *
- * 0.68 is where it belongs on the physics as well as the gameplay. Line is normally worked at
- * around a third of its rated strength; two-thirds is genuinely hard on it, and that is exactly
- * the point at which a warning is worth giving. It also makes the drag knob visible in the
- * gauge, which is the whole reason the knob exists: at drag 5 a good fish will push the bar into
- * the red, and at drag 1 the same fish never gets near it.
+ * Below this, a jump or a head shake throws the hook — `stepFight`'s slack-wear term uses it.
+ * The gauge's slack warning reads the same number, so what it shows and what kills you agree.
  */
-export const HOT_FRACTION = 0.68;
+export const SLACK_TENSION = 0.12;
+
+/**
+ * Where the warning mark belongs on the bar, 0..1 of the track, for a leader in this condition.
+ *
+ * It MOVES, unlike the old fixed 68%. The bar shows tension over `limit`, and the hook tears at
+ * a fixed tension, so as the leader chafes and `limit` falls the mark slides right and the band
+ * between "tearing the hook" and "parting the line" narrows — which is exactly what is happening
+ * to the angler.
+ */
+export function warnFrac(limit: number): number {
+  return Math.min(1, tensionFrac(HOOK_TEAR, limit));
+}
 
 /**
  * What owned gear and a spent consumable change in a fight. A structural subset of shop.ts's
@@ -623,9 +641,9 @@ export function stepFight(state: FightState, input: FightInput, params: FightPar
   // Hook wear: always creeping, faster the longer the fight has gone (a hole in a mouth works
   // bigger), quadratic in load above ~0.4 (tearing out), and brutal on slack during a jump or
   // head shake (the hook simply falls out).
-  const over = Math.max(0, next.tension - 0.4);
+  const over = Math.max(0, next.tension - HOOK_TEAR);
   let wear = 0.0045 * (1 + next.t / 40) * (0.4 + (next.running ? 0.4 : 0)) + 0.25 * Math.pow(over, 1.5);
-  if (next.tension < 0.12 && (air || next.shake > 0.05)) wear += 0.4 * (0.12 - next.tension) / 0.12 * (air ? 1.5 : 0.5);
+  if (next.tension < SLACK_TENSION && (air || next.shake > 0.05)) wear += 0.4 * (SLACK_TENSION - next.tension) / SLACK_TENSION * (air ? 1.5 : 0.5);
   next.hookHold -= dt * wear * params.hookRisk;
   if (next.hookHold <= 0) { next.hookHold = 0; next.outcome = 'pulled'; return next; }
 
