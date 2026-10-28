@@ -56,30 +56,32 @@ const MAST_H = 3.2;
  * About the buoy's own beam. Much smaller and it picks up the shortest ripples in the wave sum
  * and jitters; much larger and it averages the swell it is supposed to be riding into a flat.
  */
-const SLOPE_SPAN = 2.2;
+export const SLOPE_SPAN = 2.2;
 
 /**
  * Radians of lean per unit of surface gradient.
  *
- * Far above 1, and that is deliberate — this is the one number here that is not physical.
+ * This was 9 — a huge exaggeration, and an honest one at the time. The wave field had no energy
+ * below 40 m of wavelength, so the gradient a 2.2 m buoy could see was 0.008 inshore and 0.016
+ * offshore: half a degree and one degree of heel. Lying exactly parallel to the water, which is
+ * already the upper bound since a ballasted buoy stands MORE upright than the slope, produced
+ * nothing that read as floating, so the lean was scaled up until it did.
  *
- * Measured against this world's actual wave field, the surface gradient is: 0.008 in an inshore
- * channel, 0.016 offshore, and up to 0.039 as a wake rolls through. Those are slopes of 0.5, 0.9
- * and 2.2 degrees. A buoy that lay exactly parallel to the water — already the upper bound, since
- * a ballasted one stands MORE upright than the slope — would heel two degrees at its worst and
- * be indistinguishable from a post. The faithful version was the first thing I tried and it
- * measured 0.02 to 0.38 degrees across a wake passing; nothing read as floating at all.
+ * Short wind chop (@keysrun/shared/waves' CHOP) removed the reason. The same measurement now
+ * reads 0.033 inshore and 0.047 offshore in a calm, 0.077 and 0.111 in a chop — four to eight
+ * times what it was. At a gain of 9 the buoy sat pinned against `MAX_LEAN` in seven of nine
+ * sea-state-and-location combinations, including ordinary inshore chop, and a buoy permanently
+ * heeled to its stop reads as broken rather than afloat.
  *
- * So the lean is exaggerated to where it reads: about 4 degrees on inshore chop, 8 offshore, and
- * 20 as a wake goes under — which is roughly what a nun actually looks like when a sportfisher
- * runs past one, even if this world's water is far too gentle to produce it honestly.
- * `MAX_LEAN` keeps the exaggeration from running away in a steep wake.
+ * 1.5 puts it back where the old number was aiming: about 3 degrees in a calm inshore, 7 in a
+ * chop, 14 in deep water, 22 at Haulover, and still room under the clamp for a wake to knock it
+ * further. It is also nearly honest now — barely above lying parallel to real water.
  */
-const LEAN_GAIN = 9;
+export const LEAN_GAIN = 1.5;
 
 /** Hard stop on the lean, as the tangent of the tilt. A buoy knocked past about 28 degrees reads
  * as capsizing rather than as riding. */
-const MAX_LEAN = 0.53;
+export const MAX_LEAN = 0.53;
 
 /** Heave spring (rad/s)^2 and damping ratio. Underdamped, so it overshoots a little coming off a
  * crest — which is the part that reads as buoyancy rather than as following a curve. */
