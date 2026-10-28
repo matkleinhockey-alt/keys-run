@@ -116,6 +116,44 @@ export interface Marina {
   ez: number;
 }
 
+/**
+ * The dredged entrance every marina basin needs to be a marina.
+ *
+ * The basins are dredged to 3.2 m but nothing connected them to navigable water, and two of the
+ * four were walled in. Walking out along its own axis, the town marina ran 3.2 m to 70 m, then
+ * 0.5 and 0.4, then seventy metres of LAND standing 1.7 m proud, and only then the 3.8 m of the
+ * harbour approach. Keys Fisheries had a 50 m shoal of 0.4 m across its mouth. A flood fill from
+ * the dock confirmed it: at 1.15 m of draft — the MTI, the deepest hull in the game — the town
+ * marina was LANDLOCKED, and the shallower boats only got in by a 930 m detour west. There is no
+ * approach to find; the player was right.
+ *
+ * So: a cut from the end of the basin out to where the water is, 32 m wide, dredged to the same
+ * 3.2 m, feathered at the edges rather than a square trench. It carves land as well as depth,
+ * because at the town marina the barrier IS land — the same thing `creekDist` does for the
+ * mangrove creeks, and for the same reason.
+ *
+ * It is applied to all four. The two that were already clear have no land in the corridor and
+ * more than 3.2 m in it, so for them every term here is a no-op.
+ */
+const MARINA_CUT = { r0: 66, r1: 155, halfW: 16, d: 3.2, feather: 9 } as const;
+
+/**
+ * How far INSIDE a marina entrance cut a point is, in metres — 0 at the edge, growing toward the
+ * centreline, and negative outside. Shaped like `creekDist` so it can be used the same way.
+ */
+export function marinaCutDepth(x: number, z: number): number {
+  let best = -1e9;
+  for (const M of MARINAS) {
+    const r = (z - M.sz) * M.dir;
+    if (r < MARINA_CUT.r0 || r > MARINA_CUT.r1) continue;
+    // Taper the last stretch shut so the cut meets open water instead of ending in a step.
+    const endFade = Math.min(1, (MARINA_CUT.r1 - r) / 18);
+    const inside = (MARINA_CUT.halfW - Math.abs(x - M.sx)) * endFade;
+    if (inside > best) best = inside;
+  }
+  return best;
+}
+
 // marinas: two in Boot Key Harbor, two on the Gulf side
 export const MARINAS: Marina[] = (
   [
@@ -244,6 +282,11 @@ export function landH(x: number, z: number): number {
   if (onCourse(s.isl as Island, l[0], l[1])) h = Math.min(h, 1.85);
   const cd = creekDist(x, z);
   if (cd < 10) h = Math.min(h, lerp(-1.6, h, ssX(-2, 10, cd)));
+  // The dredged marina entrance (MARINA_CUT). Below the creek cut so a basin mouth that happens
+  // to sit on a creek keeps the deeper of the two, and above `inFill` so the marina's own pad is
+  // never carved out from under its docks.
+  const mc = marinaCutDepth(x, z);
+  if (mc > -MARINA_CUT.feather) h = Math.min(h, lerp(h, -1.6, clamp((mc + MARINA_CUT.feather) / MARINA_CUT.feather, 0, 1)));
   if (inFill(x, z)) h = Math.max(h, 1.6);
   return h;
 }
@@ -284,6 +327,12 @@ export function depthAt(x: number, z: number): number {
   for (const M of MARINAS) {
     const r = (z - M.sz) * M.dir;
     if (Math.abs(x - M.sx) < 34 && r > -2 && r < 78) d = Math.max(d, 3.2);
+  }
+  {
+    // The entrance channel out of that basin — see MARINA_CUT. Shoals off at the edges so the
+    // bottom rises to meet the bank rather than ending in a wall.
+    const mc = marinaCutDepth(x, z);
+    if (mc > 0) d = Math.max(d, 0.35 + (MARINA_CUT.d - 0.35) * Math.min(1, mc / MARINA_CUT.feather));
   }
   return Math.max(0.3, d);
 }
