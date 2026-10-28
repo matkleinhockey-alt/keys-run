@@ -106,6 +106,10 @@ function baseEnv(sw: number, ch: number, dockRects: readonly DockRect[], pilings
   return {
     hull: HULL, sw, ch, worldBounds: WB, pilings, dockRects,
     canDrive: true, fightActive: false, fightTarget: null, lineOut: false, luigiOn: false,
+    // The oracle is extracted from legacy, which has no short wind chop (waves/index.ts's CHOP).
+    // With chop on, this test would measure nothing but the chop; with it off it keeps doing its
+    // real job, which is proving the rest of the integrator still matches legacy exactly.
+    chop: 0,
   };
 }
 

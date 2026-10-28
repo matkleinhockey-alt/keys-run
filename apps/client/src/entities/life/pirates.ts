@@ -30,8 +30,7 @@
  */
 import * as THREE from 'three';
 import { COOLER_CAP } from '@keysrun/shared/content/boats';
-import { waveHBase } from '@keysrun/shared/waves';
-import { ampAt } from '@keysrun/shared/sim/depth-grid';
+import { ampAt, seaHAt } from '@keysrun/shared/sim/depth-grid';
 import {
   CAPTAIN, MATE, nextPirateVisit, pirateScript, pirateVisit, pirateVisitDue,
   type PirateBeat, type PirateLoot, type PirateVisit,
@@ -244,8 +243,8 @@ export function createPirates(scene: THREE.Scene, deps: PirateDeps = {}): Pirate
     // Sit on the real wave sum, exactly like traffic.ts: bow/stern for pitch, port/starboard for roll.
     const amp = ampAt(x, z), hl = s.L * 0.45, hbm = s.B * 0.5;
     const rxv = Math.cos(heading), rzv = -Math.sin(heading);
-    const hb = waveHBase(x + fx * hl, z + fz * hl, t, amp), hs = waveHBase(x - fx * hl, z - fz * hl, t, amp);
-    const hp = waveHBase(x - rxv * hbm, z - rzv * hbm, t, amp), hst = waveHBase(x + rxv * hbm, z + rzv * hbm, t, amp);
+    const hb = seaHAt(x + fx * hl, z + fz * hl, t), hs = seaHAt(x - fx * hl, z - fz * hl, t);
+    const hp = seaHAt(x - rxv * hbm, z - rzv * hbm, t), hst = seaHAt(x + rxv * hbm, z + rzv * hbm, t);
     const speedFrac = speed / SAIL_SPEED;
 
     // Wind in the hull's own frame: local +x is (cos h, -sin h), local +z (aft) is (sin h, cos h).

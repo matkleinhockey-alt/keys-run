@@ -18,7 +18,7 @@
 
 import { chainZ } from '../world/chain.js';
 import { depthAt, OLDBR, SURF_BREAK, WORLD } from '../world/depth.js';
-import { ampFor } from '../waves/index.js';
+import { ampFor, chopAmpFor, waveHBase, waveSlope, DEFAULT_SW, DEFAULT_CH } from '../waves/index.js';
 import { clamp } from '../internal/math.js';
 
 /**
@@ -82,3 +82,31 @@ export const inletAt = (x: number, z: number): number => gridAt(INLETG, x, z);
 
 /** Wave amplitude at a point, inlet-boosted (legacy `ampAt`). Used by the boat buoyancy integrator. */
 export const ampAt = (x: number, z: number): number => ampFor(depthFast(x, z)) * (1 + 0.9 * inletAt(x, z));
+
+/**
+ * Wind-chop amplitude at a point (`chopAmpFor`), with a modest boost through the tidal cuts.
+ *
+ * The cut boost is clamped at 1 before scaling, which matters because `inletAt` runs to
+ * INLET_MAX (4) over the surf break. That boost belongs to the SWELL — a bar is swell feeling the
+ * bottom and standing up — and multiplying short wind chop by four there would put a metre of
+ * stacked chop on the break on a calm day. Through a cut it is real, though: wind against tide in
+ * a narrow channel is exactly what stacks chop up, and is what the Haulover sea state is named
+ * after.
+ */
+export const chopAt = (x: number, z: number): number =>
+  chopAmpFor(depthFast(x, z)) * (1 + 0.6 * Math.min(inletAt(x, z), 1));
+
+/**
+ * The sea surface at a point: swell and wind chop, each on its own depth envelope.
+ *
+ * This is what anything floating should use. `waveHBase(x, z, t, ampAt(x, z))` — the old idiom —
+ * now gives you the swell only, because chop carries a separate envelope that has to be looked
+ * up separately (`chopAt`), and a buoy riding a surface the water shader is not drawing is worse
+ * than no chop at all. Two grid lookups instead of one; they are bilinear reads off a Float32Array.
+ */
+export const seaHAt = (x: number, z: number, t: number, sw = DEFAULT_SW, ch = DEFAULT_CH): number =>
+  waveHBase(x, z, t, ampAt(x, z), sw, ch, chopAt(x, z));
+
+/** Gradient of `seaHAt`. */
+export const seaSlopeAt = (x: number, z: number, t: number, sw = DEFAULT_SW, ch = DEFAULT_CH): [number, number] =>
+  waveSlope(x, z, t, ampAt(x, z), sw, ch, chopAt(x, z));

@@ -18,8 +18,7 @@ import { chainRoute, angLerp, type Path } from './path.js';
 import { createHumanRegistry } from './human.js';
 import { buildHullGeo, hullStation } from '../boat/hull.js';
 import type { HullSpec } from '@keysrun/shared/content/boats';
-import { waveHBase } from '@keysrun/shared/waves';
-import { ampAt } from '@keysrun/shared/sim/depth-grid';
+import { ampAt, seaHAt } from '@keysrun/shared/sim/depth-grid';
 import { clamp, lerp, rand } from '../../core/math.js';
 import type { ParticleSystem } from '../../world/particles.js';
 import type { RemoteEngineSource } from '../../audio/interfaces.js';
@@ -144,7 +143,7 @@ export function createRacerFleet(scene: THREE.Scene): RacerFleet {
         const x = P.x + px * r.off, z = P.z + pz * r.off;
         r.h = angLerp(r.h, Math.atan2(-P.tx, -P.tz), dt * 3);
         const fx = -Math.sin(r.h), fz = -Math.cos(r.h), amp = ampAt(x, z) * 0.8;
-        const hb = waveHBase(x + fx * 6, z + fz * 6, t, amp), hs = waveHBase(x - fx * 6, z - fz * 6, t, amp);
+        const hb = seaHAt(x + fx * 6, z + fz * 6, t), hs = seaHAt(x - fx * 6, z - fz * 6, t);
         r.g.position.set(x, (hb + hs) / 2 + 0.32, z);
         r.g.rotation.set(Math.atan2(hb - hs, 12.8) + 0.07, r.h, Math.sin(t * 1.3 + r.s * 0.01) * 0.03, 'YXZ');
         r.wt += dt;

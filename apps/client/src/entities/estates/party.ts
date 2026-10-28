@@ -15,8 +15,7 @@ import * as THREE from 'three';
 import { SPECIES } from '@keysrun/shared/content/species';
 import { BOATS } from '@keysrun/shared/content/boats';
 import { estateGround, pointInPoly, type Party } from '@keysrun/shared/content/estates';
-import { waveHBase, waveSlope } from '@keysrun/shared/waves';
-import { ampAt } from '@keysrun/shared/sim/depth-grid';
+import { seaHAt, seaSlopeAt } from '@keysrun/shared/sim/depth-grid';
 import { makeHuman, type Human } from '../life/human.js';
 import { makeBoat, type BoatModel } from '../boat/model.js';
 import { updateParty } from '../life/deck-party.js';
@@ -225,9 +224,8 @@ export function buildParty(site: EstateSite, party: Party, fx: BoatFx | undefine
       dh.head.rotation.x = 0.25 + Math.abs(Math.sin(t * BPM / 60 * Math.PI)) * 0.12;
 
       for (const b of rafted) {
-        const amp = ampAt(b.x, b.z);
-        const surf = waveHBase(b.x, b.z, t, amp);
-        const [wx, wz] = waveSlope(b.x, b.z, t, amp);
+        const surf = seaHAt(b.x, b.z, t);
+        const [wx, wz] = seaSlopeAt(b.x, b.z, t);
         const g = b.model.group;
         g.position.set(b.x, surf, b.z);
         g.rotation.set(0, 0, 0);

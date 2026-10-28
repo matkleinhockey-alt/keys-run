@@ -27,7 +27,7 @@ import type { LightMatEntry } from '../../core/time-of-day.js';
 import { WB, HUMPS, CREEKS, depthAt, zoneAt, type Zone } from '@keysrun/shared/world/depth';
 import { steadyCurrentAt, chainTangent } from '@keysrun/shared/world/current';
 import { chainZ, shoreInfo } from '@keysrun/shared/world/chain';
-import { ampFor, waveHBase } from '@keysrun/shared/waves';
+import { ampFor } from '@keysrun/shared/waves';
 import { hashCell } from '@keysrun/shared/rng';
 import { frenzyActive } from '@keysrun/shared/world/frenzy';
 import { WORLD_SEED, SALT } from '../../state/constants.js';
@@ -35,6 +35,7 @@ import { lerp, rand } from '../../core/math.js';
 import { toast } from '../../ui/toast.js';
 import { compassWord } from '../../ui/hud.js';
 import type { ParticleSystem } from '../../world/particles.js';
+import { seaHAt } from '@keysrun/shared/sim/depth-grid';
 
 const HS_COUNTS: Record<Zone, number> = { Creek: 3, Flats: 7, Backcountry: 6, Bridge: 4, 'Hawk Channel': 5, Reef: 6, Offshore: 9 };
 const ZONE_CODE: Record<Zone, number> = { Creek: 0, Flats: 1, Backcountry: 2, Bridge: 3, 'Hawk Channel': 4, Reef: 5, Offshore: 6 };
@@ -697,7 +698,7 @@ export function createHotspotWorld(scene: THREE.Scene, lightMats: LightMatEntry[
               moveBird(b.B, cx, cy, cz, dt);
             }
           });
-          h.weeds.forEach((w) => { w.position.y = waveHBase(h.x + w.position.x, h.z + w.position.z, t, h.amp) + 0.05; });
+          h.weeds.forEach((w) => { w.position.y = seaHAt(h.x + w.position.x, h.z + w.position.z, t) + 0.05; });
         }
         if (!near) continue;
         // the surface boils: fish busting bait, white water and bubbles, little silver baitfish spraying out
@@ -745,11 +746,11 @@ export function createHotspotWorld(scene: THREE.Scene, lightMats: LightMatEntry[
         const tilt = d < WEED_TILT_M;
         w.off.forEach((o, i) => {
           const x = w.x + o[0], z = w.z + o[1];
-          const h0 = waveHBase(x, z, t, w.amp);
+          const h0 = seaHAt(x, z, t);
           dummy.position.set(x, h0 + 0.04, z);
           if (tilt) {
-            const gx = (waveHBase(x + 2, z, t, w.amp) - h0) / 2;
-            const gz = (waveHBase(x, z + 2, t, w.amp) - h0) / 2;
+            const gx = (seaHAt(x + 2, z, t) - h0) / 2;
+            const gz = (seaHAt(x, z + 2, t) - h0) / 2;
             dummy.rotation.set(Math.atan(gz) * 1.4, o[3], -Math.atan(gx) * 1.4, 'YXZ');
           } else {
             dummy.rotation.set(0, o[3], 0);

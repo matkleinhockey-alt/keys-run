@@ -27,7 +27,7 @@
 
 import { depthAt, landH } from '../world/depth.js';
 import { waveHBase, waveSlope } from '../waves/index.js';
-import { ampAt, depthFast } from './depth-grid.js';
+import { ampAt, chopAt, depthFast } from './depth-grid.js';
 import { clamp, lerp } from '../internal/math.js';
 import { SPEED_SCALE } from '../content/boats.js';
 
@@ -96,6 +96,15 @@ export interface BoatEnv {
   dockRects: readonly DockRect[];
   /** legacy `game.running && F.state!=='caught'`. Always true in Phase 0 (no fishing state machine yet). */
   canDrive: boolean;
+  /**
+   * How much short wind chop the hull feels, 0..1. Defaults to 1 (the sea as drawn).
+   *
+   * Exists for one caller: the legacy fidelity oracle in boat-trajectory.test.ts. That oracle is
+   * extracted from legacy/index.html, which has no chop at all, so comparing against it with
+   * chop on would only ever measure the chop. Setting this to 0 keeps that test doing its real
+   * job — proving the rest of the integrator still matches legacy exactly.
+   */
+  chop?: number;
   /** legacy `F.state==='fight'`. Always false until Phase 0b's fishing lands — see autoChaseControl. */
   fightActive: boolean;
   fightTarget: FightTarget | null;
@@ -194,8 +203,8 @@ function wakeHeight(ring: Float64Array, x: number, z: number, t: number): number
 }
 
 /** legacy `waveH` (index.html:442-444): the pure wave sum plus this boat's own recent wake. */
-function waveHeightWithWake(ring: Float64Array, x: number, z: number, t: number, amp: number, sw: number, ch: number): number {
-  return waveHBase(x, z, t, amp, sw, ch) + wakeHeight(ring, x, z, t);
+function waveHeightWithWake(ring: Float64Array, x: number, z: number, t: number, amp: number, sw: number, ch: number, chopAmp: number): number {
+  return waveHBase(x, z, t, amp, sw, ch, chopAmp) + wakeHeight(ring, x, z, t);
 }
 
 /** legacy `emitWake` (index.html:451-453), writing into a plain ring instead of `THREE.Vector4[]`. */
@@ -363,8 +372,11 @@ export function stepBoat(state: BoatState, input: BoatInput, env: BoatEnv, dt: n
   // (legacy also computed L=hull.len*.5, B=hull.beam*.5 here, but only to pass to the
   // presentation-side slam() spray; stepBoat reports {type:'slam',k} instead, see below)
   const amp = ampAt(next.x, next.z), rx = Math.cos(next.h), rz = -Math.sin(next.h);
+  // Short chop is what a hull this size actually pitches and slams on — see waves/index.ts's
+  // CHOP. One lookup per step, shared by the slope term and every hull sample below.
+  const cAmp = chopAt(next.x, next.z) * (env.chop ?? 1);
   const plane = 0.11 * Math.sin(Math.min(f * 2.6, 1) * Math.PI) * (1.25 - 0.5 * next.trimV) + 0.035 * f + (next.trimV - 0.3) * 0.11 * Math.min(1, f * 2) + next.trimVent * 0.05 * Math.sin(t * 9);
-  const sl = waveSlope(next.x, next.z, t, amp, env.sw, env.ch), along = sl[0] * fx + sl[1] * fz, beamSl = sl[0] * rx + sl[1] * rz;
+  const sl = waveSlope(next.x, next.z, t, amp, env.sw, env.ch, cAmp), along = sl[0] * fx + sl[1] * fz, beamSl = sl[0] * rx + sl[1] * rz;
   if (!next.air) {
     next.speed -= along * 9.8 * 0.5 * dt;
     next.dvx = next.dvx - sl[0] * 9.8 * 0.22 * dt;
@@ -394,7 +406,7 @@ export function stepBoat(state: BoatState, input: BoatInput, env: BoatEnv, dt: n
         const px = ax * hull.beam, pz = az * hull.len;
         const wx = next.x + fx * (-pz) + rx * px, wz = next.z + fz * (-pz) + rz * px;
         const yb = next.y + (-pz) * spn + px * srn - ride;
-        const sbm = clamp(waveHeightWithWake(next.wakeRing, wx, wz, tt2, amp, env.sw, env.ch) - yb, 0, Dk * 2.4);
+        const sbm = clamp(waveHeightWithWake(next.wakeRing, wx, wz, tt2, amp, env.sw, env.ch, cAmp) - yb, 0, Dk * 2.4);
         if (sbm > 0) wet++;
         const Fi = k * sbm;
         Fy += Fi; Tp += Fi * (-pz); Tr += Fi * px;

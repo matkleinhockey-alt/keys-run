@@ -46,6 +46,40 @@ export const SEA_STATES: SeaState[] = [
   { n: 'Big swell', sw: 2.6, ch: 1.1, d: 'big Atlantic rollers. Ride the backs and watch the troughs.' },
 ];
 
+/**
+ * Short wind chop, on top of the eight swell components.
+ *
+ * The legacy field has nothing below 40 m of wavelength. Its four "chop" components are 40-72 m
+ * and 5-7 second periods, which is medium swell, not chop — so the sea had no energy at the
+ * scale a boat actually moves on. Measured: at Haulover, the sea state whose own description is
+ * "steep, stacked inlet chop", the steepest the surface ever got in the Hawk Channel was 1.8
+ * degrees, and a 9.3 m hull pitched 1.4. That is a millpond with a long swell under it.
+ *
+ * These two are a 15-knot sea breeze: 17 m and 11 m long, 3.3 and 2.6 second periods, sharp
+ * crested. Both satisfy deep-water dispersion (w^2 = gk) like every other component here, so
+ * they travel at the speed waves of their length actually travel at.
+ *
+ * Why not shorter. Real chop runs down to a metre or two, but the water mesh carries about 1.9 m
+ * between vertices at the camera (2.8 m on touch), so a 7 m wave gets under four vertices and
+ * reads as faceted rubbish. Below ~11 m the surface detail belongs to the normal map, which is
+ * what a normal map is for. The two here are geometry because the boat has to RIDE them.
+ */
+export const CHOP: WaveComponent[] = [
+  [0.1574, 0.3344, 1.904, 0.13, 0.33, 2.2, 0],
+  [-0.3672, 0.4375, 2.367, 0.085, 0.36, 5.0, 0],
+];
+
+/**
+ * Chop's own depth envelope, which is NOT `ampFor`.
+ *
+ * Swell needs deep water to exist at all, so `ampFor` is near zero inshore and keeps growing to
+ * 600 m. Wind chop is made locally by the wind on whatever water is there — including a foot of
+ * it on a flat — and stops growing as soon as the bottom is too deep to matter. It is still
+ * damped shallow, because a short wave in shin-deep water is depth-limited and the bottom eats
+ * it, so this ramps in over the first five metres and then holds.
+ */
+export const chopAmpFor = (d: number): number => 0.1 + 0.9 * clamp(d / 5, 0, 1);
+
 /** Legacy's initial `SW`/`CH` (index.html:435), used as `waveHBase`/`waveSlope`'s defaults. */
 export const DEFAULT_SW = 0.9;
 export const DEFAULT_CH = 1;
@@ -57,21 +91,40 @@ export const ampFor = (d: number): number => 0.1 + 0.9 * clamp((d - 1) / 40, 0, 
  * The pure 8-component deep-water wave sum (legacy `waveH`, index.html:442-443) with the wake
  * term removed. See the module doc comment above for why.
  */
-export function waveHBase(x: number, z: number, t: number, amp: number, sw = DEFAULT_SW, ch = DEFAULT_CH): number {
+export function waveHBase(x: number, z: number, t: number, amp: number, sw = DEFAULT_SW, ch = DEFAULT_CH, chopAmp = 0): number {
   let h = 0;
   for (let i = 0; i < 8; i++) {
     const W = WAVES[i], p = W[0] * x + W[1] * z + W[2] * t + W[5], A = W[3] * (W[6] ? sw : Math.min(ch, 2.2));
     h += A * (Math.sin(p) - W[4] * Math.cos(2 * p));
   }
-  return amp * h;
+  // `chopAmp` defaults to 0 so the six-argument call is byte-for-byte the legacy sum, which is
+  // what waves.test.ts's 500-sample golden pins. The game passes `chopAt(x, z)`.
+  return amp * h + (chopAmp === 0 ? 0 : chopAmp * chopSum(x, z, t, ch));
+}
+
+/** The chop sum on its own, unscaled. Split out so the golden path above can skip it entirely. */
+function chopSum(x: number, z: number, t: number, ch: number): number {
+  let h = 0;
+  for (let i = 0; i < CHOP.length; i++) {
+    const W = CHOP[i], p = W[0] * x + W[1] * z + W[2] * t + W[5], A = W[3] * Math.min(ch, 2.2);
+    h += A * (Math.sin(p) - W[4] * Math.cos(2 * p));
+  }
+  return h;
 }
 
 /** Surface gradient of the same wave sum (legacy `waveSlope`, index.html:445-447). */
-export function waveSlope(x: number, z: number, t: number, amp: number, sw = DEFAULT_SW, ch = DEFAULT_CH): [number, number] {
+export function waveSlope(x: number, z: number, t: number, amp: number, sw = DEFAULT_SW, ch = DEFAULT_CH, chopAmp = 0): [number, number] {
   let hx = 0, hz = 0;
   for (let i = 0; i < 8; i++) {
     const W = WAVES[i], p = W[0] * x + W[1] * z + W[2] * t + W[5], A = W[3] * (W[6] ? sw : Math.min(ch, 2.2)), d = Math.cos(p) + 2 * W[4] * Math.sin(2 * p);
     hx += A * W[0] * d; hz += A * W[1] * d;
   }
-  return [amp * hx, amp * hz];
+  let sx = amp * hx, sz = amp * hz;
+  if (chopAmp !== 0) {
+    for (let i = 0; i < CHOP.length; i++) {
+      const W = CHOP[i], p = W[0] * x + W[1] * z + W[2] * t + W[5], A = W[3] * Math.min(ch, 2.2), d = Math.cos(p) + 2 * W[4] * Math.sin(2 * p);
+      sx += chopAmp * A * W[0] * d; sz += chopAmp * A * W[1] * d;
+    }
+  }
+  return [sx, sz];
 }

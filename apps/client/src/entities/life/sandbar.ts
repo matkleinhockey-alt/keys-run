@@ -35,8 +35,7 @@ import * as THREE from 'three';
 import { chainZ, shoreInfo } from '@keysrun/shared/world/chain';
 import { depthAt, landH } from '@keysrun/shared/world/depth';
 import { BOATS } from '@keysrun/shared/content/boats';
-import { waveHBase } from '@keysrun/shared/waves';
-import { ampAt } from '@keysrun/shared/sim/depth-grid';
+import { seaHAt } from '@keysrun/shared/sim/depth-grid';
 import { makeBoat, type BoatModel } from '../boat/model.js';
 import { placeholderDeps } from './party-boats.js';
 import { createHumanRegistry } from './human.js';
@@ -292,7 +291,6 @@ export function createSandbar(scene: THREE.Scene): Sandbar {
     group.visible = near;
     if (!near) return;
     humans.updateHumans(t, new THREE.Vector3(camera.x, camera.y, camera.z), 0);
-    const amp = ampAt(site.x, site.z);
     for (const b of boats) {
       /*
        * Attitude off the WATER, not off a clock.
@@ -309,11 +307,11 @@ export function createSandbar(scene: THREE.Scene): Sandbar {
       const yaw = b.yaw + Math.sin(t * 0.21 + b.ph) * 0.05;
       const wx = site.x + b.lx, wz = site.z + b.lz;
       const fx = -Math.sin(yaw), fz = -Math.cos(yaw), hl = b.len * 0.45;
-      const hbow = waveHBase(wx + fx * hl, wz + fz * hl, t, amp);
-      const hstern = waveHBase(wx - fx * hl, wz - fz * hl, t, amp);
+      const hbow = seaHAt(wx + fx * hl, wz + fz * hl, t);
+      const hstern = seaHAt(wx - fx * hl, wz - fz * hl, t);
       const rx = Math.cos(yaw), rz = -Math.sin(yaw), hw = b.beam * 0.5;
-      const hport = waveHBase(wx - rx * hw, wz - rz * hw, t, amp);
-      const hstbd = waveHBase(wx + rx * hw, wz + rz * hw, t, amp);
+      const hport = seaHAt(wx - rx * hw, wz - rz * hw, t);
+      const hstbd = seaHAt(wx + rx * hw, wz + rz * hw, t);
       b.model.group.position.set(b.lx, (hbow + hstern) / 2, b.lz);
       b.model.group.rotation.set(
         Math.atan2(hbow - hstern, b.len),
@@ -324,7 +322,7 @@ export function createSandbar(scene: THREE.Scene): Sandbar {
     }
     for (let i = 0; i < floats.length; i++) {
       const f = floats[i];
-      f.position.y = waveHBase(site.x + f.position.x, site.z + f.position.z, t, amp) + 0.06;
+      f.position.y = seaHAt(site.x + f.position.x, site.z + f.position.z, t) + 0.06;
       f.rotation.y += dt * 0.12 * (i % 2 ? 1 : -1);
     }
   }

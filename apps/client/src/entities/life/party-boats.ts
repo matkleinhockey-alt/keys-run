@@ -27,8 +27,7 @@ import * as THREE from 'three';
 import { chainZ, shoreInfo } from '@keysrun/shared/world/chain';
 import { depthAt, landH } from '@keysrun/shared/world/depth';
 import { BOATS } from '@keysrun/shared/content/boats';
-import { waveHBase, waveSlope } from '@keysrun/shared/waves';
-import { ampAt } from '@keysrun/shared/sim/depth-grid';
+import { seaHAt, seaSlopeAt } from '@keysrun/shared/sim/depth-grid';
 import { makeBoat, type BoatBuildDeps, type BoatModel } from '../boat/model.js';
 import { updateParty } from './deck-party.js';
 import { rand } from '../../core/math.js';
@@ -252,9 +251,8 @@ export function createPartyBoats(scene: THREE.Scene): PartyBoats {
         const x = m.ax + Math.sin(yaw) * surge;
         const z = m.az + Math.cos(yaw) * surge;
 
-        const amp = ampAt(x, z);
-        const surf = waveHBase(x, z, t, amp);
-        const [sx, sz] = waveSlope(x, z, t, amp);
+        const surf = seaHAt(x, z, t);
+        const [sx, sz] = seaSlopeAt(x, z, t);
         const g = m.model.group;
         g.position.set(x, surf, z);
         g.rotation.set(0, 0, 0);

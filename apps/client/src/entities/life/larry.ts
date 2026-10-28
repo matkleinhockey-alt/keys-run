@@ -26,8 +26,7 @@ import * as THREE from 'three';
 import { createPath, angLerp, type Path } from './path.js';
 import { depthAt, landH } from '@keysrun/shared/world/depth';
 import { chainZ, shoreInfo } from '@keysrun/shared/world/chain';
-import { waveHBase } from '@keysrun/shared/waves';
-import { ampAt } from '@keysrun/shared/sim/depth-grid';
+import { seaHAt } from '@keysrun/shared/sim/depth-grid';
 import { createHumanRegistry } from './human.js';
 import { hashCell } from '@keysrun/shared/rng';
 import { WORLD_SEED, SALT } from '../../state/constants.js';
@@ -333,13 +332,12 @@ export function createLarry(scene: THREE.Scene): Larry {
      * down because a loaded hull resists; a deck on three drums has nothing to resist with, so it
      * takes the full slope on both axes and a little extra.
      */
-    const amp = ampAt(px, pz);
     const fx = -Math.sin(h), fz = -Math.cos(h), hl = DECK_L * 0.5, hw = DECK_W * 0.5;
-    const hb = waveHBase(px + fx * hl, pz + fz * hl, t, amp);
-    const hs = waveHBase(px - fx * hl, pz - fz * hl, t, amp);
+    const hb = seaHAt(px + fx * hl, pz + fz * hl, t);
+    const hs = seaHAt(px - fx * hl, pz - fz * hl, t);
     const rx = Math.cos(h), rz = -Math.sin(h);
-    const hp = waveHBase(px - rx * hw, pz - rz * hw, t, amp);
-    const hst = waveHBase(px + rx * hw, pz + rz * hw, t, amp);
+    const hp = seaHAt(px - rx * hw, pz - rz * hw, t);
+    const hst = seaHAt(px + rx * hw, pz + rz * hw, t);
     group.position.set(px, (hb + hs) / 2 - 0.16, pz);
     group.rotation.set(Math.atan2(hb - hs, DECK_L) * 1.25, h, Math.atan2(hp - hst, DECK_W) * 1.25, 'YXZ');
 

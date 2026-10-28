@@ -52,8 +52,7 @@
  *    "you suck at this" taunt and two-minute sulk are his own and not duplicated here.
  */
 import * as THREE from 'three';
-import { waveHBase } from '@keysrun/shared/waves';
-import { ampAt } from '@keysrun/shared/sim/depth-grid';
+import { seaHAt } from '@keysrun/shared/sim/depth-grid';
 import { landH } from '@keysrun/shared/world/depth';
 import { mulberry32 } from '@keysrun/shared/rng';
 import { SPECIES } from '@keysrun/shared/content/species';
@@ -213,7 +212,7 @@ export function createHandgunSystem(deps: HandgunDeps): HandgunSystem {
   /** Rounds in the box: everything owned that is not loaded. */
   const reserve = (): number => Math.max(0, carried() - gun.mag);
 
-  const surfaceY = (x: number, z: number): number => waveHBase(x, z, simNow, ampAt(x, z));
+  const surfaceY = (x: number, z: number): number => seaHAt(x, z, simNow);
   const env: BulletEnv = { surfaceY, groundY: (x, z) => landH(x, z) };
 
   // ------------------------------------------------------------------ targets

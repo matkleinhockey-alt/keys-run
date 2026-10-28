@@ -35,8 +35,7 @@
 import * as THREE from 'three';
 import { SPECIES } from '@keysrun/shared/content/species';
 import { scaledLenM } from '@keysrun/shared/sim/fight';
-import { waveHBase } from '@keysrun/shared/waves';
-import { ampAt } from '@keysrun/shared/sim/depth-grid';
+import { seaHAt } from '@keysrun/shared/sim/depth-grid';
 import { makeFishMesh } from '../../game/fishing/fish-mesh.js';
 import { clamp, lerp } from '../../core/math.js';
 
@@ -200,7 +199,7 @@ export function createFloaters(scene: THREE.Scene): Floaters {
       for (const f of [...live]) {
         f.t += dt;
         const ph = phaseOf(f);
-        const surf = waveHBase(f.x, f.z, t, ampAt(f.x, f.z));
+        const surf = seaHAt(f.x, f.z, t);
         if (ph === 'float') {
           f.x += Math.sin(f.yaw) * -0.03 * dt + f.drift * dt * 0.2;
           f.z += Math.cos(f.yaw) * -0.03 * dt;
