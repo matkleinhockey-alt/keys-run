@@ -1527,6 +1527,13 @@ export function initWorld(wrap: HTMLElement): World {
     lighthouse: () => lighthouse.debug(),
     waterfrontSites: () => waterfront.sites,
     waterfrontLifts: () => waterfront.debug(),
+    /** VERIFICATION ONLY: solid dock/pier footprints, so a test can check none of them stand in
+     * the marina entrance channel. */
+    dockRects: () => dockRects.map((r) => ({ x0: +r.x0.toFixed(1), x1: +r.x1.toFixed(1), z0: +r.z0.toFixed(1), z1: +r.z1.toFixed(1) })),
+    pilings: () => pilings.map((p) => ({ x: +p.x.toFixed(1), z: +p.z.toFixed(1), r: p.r ?? (p.old ? 1.3 : 0.8) })),
+    /** VERIFICATION ONLY: every moored/docked hull, which floats and so has no dock rect — a
+     * sailboat swinging on a mooring in the fairway is exactly what a channel must be clear of. */
+    marinaBoats: () => marinas.dockBoats.map((b) => ({ x: +b.position.x.toFixed(1), z: +b.position.z.toFixed(1) })),
     commercialFleet: () => life.commercialDebug(),
     sandbar: () => life.sandbarDebug(),
     larry: () => life.larryDebug(),

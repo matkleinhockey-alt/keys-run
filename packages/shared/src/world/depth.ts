@@ -135,7 +135,7 @@ export interface Marina {
  * It is applied to all four. The two that were already clear have no land in the corridor and
  * more than 3.2 m in it, so for them every term here is a no-op.
  */
-const MARINA_CUT = { r0: 66, r1: 155, halfW: 16, d: 3.2, feather: 9 } as const;
+export const MARINA_CUT = { r0: 66, r1: 190, halfW: 45, d: 3.2, feather: 12 } as const;
 
 /**
  * How far INSIDE a marina entrance cut a point is, in metres — 0 at the edge, growing toward the

@@ -11,7 +11,8 @@
  * individual number was fine and there was no way through.
  */
 import { describe, expect, it } from 'vitest';
-import { MARINAS, depthAt, landH } from '../src/world/depth.js';
+import { MARINAS, MARINA_CUT, depthAt, landH } from '../src/world/depth.js';
+import { channelMarks, marinaEntranceMarks } from '../src/world/channel-marks.js';
 import { BOATS } from '../src/content/boats.js';
 import { inTownFootprint } from '../src/world/town.js';
 
@@ -84,6 +85,66 @@ describe('every marina', () => {
         if (landH(x, z) > 0.02) continue;
         expect(inTownFootprint(x, z), `${M.name}: dredged open water inside the town at ${dx},${r}`).toBe(false);
       }
+    }
+  });
+});
+
+describe('the entrance is marked', () => {
+  it('puts a red and a green pair down each marina entrance', () => {
+    const marks = marinaEntranceMarks();
+    expect(marks.length).toBe(MARINAS.length * 4);        // two pairs each
+    for (const M of MARINAS) {
+      const mine = marks.filter((k) => Math.abs(k.x - M.sx) < MARINA_CUT.halfW + 1);
+      expect(mine.filter((k) => k.hand === 'red').length, M.name).toBe(2);
+      expect(mine.filter((k) => k.hand === 'green').length, M.name).toBe(2);
+    }
+  });
+
+  it('keeps red to starboard coming in — red right returning', () => {
+    /*
+     * IALA Region B. Entering means r decreasing, i.e. heading -dir along z; starboard for that
+     * heading is +dir in x (the same right-hand vector the hull integrator uses). So every red
+     * must be on the +dir side of its marina's centreline and every green opposite.
+     */
+    for (const M of MARINAS) {
+      for (const k of marinaEntranceMarks().filter((q) => Math.abs(q.x - M.sx) < MARINA_CUT.halfW + 1)) {
+        const side = (k.x - M.sx) * M.dir;
+        if (k.hand === 'red') expect(side, `${M.name}: red ${k.n} is on the wrong hand`).toBeGreaterThan(0);
+        else expect(side, `${M.name}: green ${k.n} is on the wrong hand`).toBeLessThan(0);
+      }
+    }
+  });
+
+  it('stands the marks in the water, outside the fairway', () => {
+    for (const k of marinaEntranceMarks()) {
+      expect(landH(k.x, k.z), `mark ${k.n} is on dry land`).toBeLessThanOrEqual(0.02);
+      expect(depthAt(k.x, k.z), `mark ${k.n} is aground`).toBeGreaterThan(1);
+    }
+  });
+
+  it('leaves the fairway between them clear for the deepest boat', () => {
+    for (const M of MARINAS) {
+      for (let r = MARINA_CUT.r0; r <= MARINA_CUT.r1 - 20; r += 5) {
+        for (const dx of [-25, 0, 25]) {
+          const x = M.sx + dx, z = M.sz + M.dir * r;
+          expect(depthAt(x, z), `${M.name}: ${dx}m off centre, ${r}m out`).toBeGreaterThan(DEEPEST + 0.3);
+        }
+      }
+    }
+  });
+});
+
+describe('the north-south cuts', () => {
+  it('are marked red-on-the-right too, which they were not', () => {
+    // `marksForRect` had red on the smaller-x side of every north-south cut — backwards, and the
+    // opposite of what its own doc comment promised. Seaward is +z, so you enter heading -z, and
+    // starboard for that heading is +x.
+    const cut = { x0: -2000, x1: -1560, dz0: 150, dz1: 800, d: 4.2 };
+    const mid = (cut.x0 + cut.x1) / 2;
+    // Scoped to the cut's own x range: channelMarks appends the marina entrance marks too.
+    for (const k of channelMarks([cut], []).filter((q) => q.x > cut.x0 - 5 && q.x < cut.x1 + 5)) {
+      if (k.hand === 'red') expect(k.x, `red ${k.n}`).toBeGreaterThan(mid);
+      else expect(k.x, `green ${k.n}`).toBeLessThan(mid);
     }
   });
 });

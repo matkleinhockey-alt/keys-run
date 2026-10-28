@@ -7,7 +7,7 @@
  * channel rather than loose in the fairway.
  */
 import { describe, expect, it } from 'vitest';
-import { CHANNELS, MIAMI_CH, depthAt } from '../src/world/depth.js';
+import { CHANNELS, MARINAS, MARINA_CUT, MIAMI_CH, depthAt } from '../src/world/depth.js';
 import { chainZ } from '../src/world/chain.js';
 import { channelMarks, MARK_MIN_DEPTH_M } from '../src/world/channel-marks.js';
 
@@ -53,6 +53,14 @@ describe('channel marks', () => {
         x0: Math.min(c.x0, c.x1), x1: Math.max(c.x0, c.x1),
         z0: Math.min(c.z0, c.z1), z1: Math.max(c.z0, c.z1), d: c.d,
       })),
+      // The dredged marina entrances are a third source of marks — see depth.ts's MARINA_CUT.
+      ...MARINAS.map((M) => {
+        const za = M.sz + M.dir * MARINA_CUT.r0, zb = M.sz + M.dir * MARINA_CUT.r1;
+        return {
+          x0: M.sx - MARINA_CUT.halfW, x1: M.sx + MARINA_CUT.halfW,
+          z0: Math.min(za, zb), z1: Math.max(za, zb), d: MARINA_CUT.d,
+        };
+      }),
     ];
     for (const m of marks) {
       const inside = rects.some((r) => m.x >= r.x0 - 1 && m.x <= r.x1 + 1 && m.z >= r.z0 - 1 && m.z <= r.z1 + 1 && r.d === m.depth);
