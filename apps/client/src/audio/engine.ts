@@ -17,6 +17,7 @@
  * moment real data flows in — nothing here is a stub.
  */
 import { clamp, lerp, rand } from '../core/math.js';
+import { rpmTarget, stepRpm } from '@keysrun/shared/sim/tach';
 import type { Boat } from '@keysrun/shared/content/boats';
 import type { RemoteEngineSource, GullSite, PartySite, PirateSite } from './interfaces.js';
 
@@ -776,10 +777,13 @@ export function createAudioEngine() {
     const pr = player.prof;
     const f = Math.min(1, Math.abs(input.speed) / Math.max(0.01, input.topMs));
     const thr = Math.abs(input.throttle);
-    let target = pr.idle + (pr.max - pr.idle) * clamp(thr * 0.82 + f * 0.25 + (input.trimV - 0.4) * 0.08 * thr + input.trimVent * 0.22, 0, 1.1);
-    if (input.throttle < 0) target = pr.idle + (pr.max - pr.idle) * 0.25 * (thr / 0.35);
-    if (input.gearRev > 0.01) target = Math.max(target, pr.idle + (pr.max - pr.idle) * 0.72 * input.gearRev);
-    if (input.ventilating) target = Math.min(pr.max * 1.12, target * 1.18);
+    // The RPM model moved to @keysrun/shared/sim/tach so the dash can read the same revs the
+    // synth is playing (ui/gauges.ts). Same formula, same inputs, stepped separately — the dash
+    // has to keep working with the sound muted or before the AudioContext is allowed to start.
+    const target = rpmTarget({
+      throttle: input.throttle, speedFrac: f, trimV: input.trimV,
+      trimVent: input.ventilating ? Math.max(input.trimVent, 0.02) : 0, gearRev: input.gearRev,
+    }, pr.idle, pr.max);
 
     const now = c.currentTime;
     player.oscs.forEach((e) => {
@@ -793,7 +797,7 @@ export function createAudioEngine() {
       }
     });
 
-    player.rpm += (target - player.rpm) * Math.min(1, dt * (target > player.rpm ? 2.6 : 1.6));
+    player.rpm = stepRpm(player.rpm, target, dt);
     if (prevThr > 0.6 && thr < 0.15 && player.rpm > pr.max * 0.55 && on) {
       for (let k = 0; k < 7; k++) {
         setTimeout(() => audBurst({ type: 'bandpass', freq: rand(900, 2200), q: 1.3, dur: 0.05, gain: rand(0.15, 0.32) }), rand(40, 900));

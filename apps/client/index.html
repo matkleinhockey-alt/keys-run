@@ -13,15 +13,21 @@
 <div id="wrap">
   <div id="hud" class="hidden">
     <div id="gauges" class="panel">
-      <div id="gBoat">—</div>
-      <div class="gearrow"><span>Gear</span><b id="gGear" class="gD">D</b></div>
-      <div class="speed"><span id="gSpd">0</span><small>kn</small></div>
-      <div class="row"><span>Heading</span><b id="gHdg">180°</b></div>
-      <div class="row"><span>Depth</span><b id="gDep">—</b></div>
+      <div class="nameplate"><span id="gBoat">—</span><b id="gGear" class="gD">D</b></div>
+      <!-- The three round instruments (tach, speedo, trim) are built into #gCluster by
+           src/ui/gauges.ts: the faces are SVG made once, and only the needles move. -->
+      <div id="gCluster"></div>
+      <!-- One grid, so the second row's labels line up under the first row's rather than
+           reading as a run-on with them. -->
+      <div class="digits">
+        <div class="dig"><span>RPM</span><b id="gRpm">—</b></div>
+        <div class="dig"><span>Knots</span><b id="gSpd">0</b></div>
+        <div class="dig" id="gTrimDig"><span id="gTrimLbl">Trim</span><b id="gTrimV">0%</b></div>
+        <div class="dig"><span>Heading</span><b id="gHdg">180°</b></div>
+        <div class="dig"><span>Depth</span><b id="gDep">—</b></div>
+      </div>
       <div id="gZone">—</div>
       <div id="gNear"></div>
-      <div class="thr"><i id="gThr"></i></div>
-      <div class="trimrow"><span id="gTrimLbl">Trim</span><div class="trimbar"><i id="gTrim"></i></div><b id="gTrimV">0%</b></div>
       <!-- Cruise control (6). Hidden until it is on: a latched throttle is the kind of state that
            has to be visible the whole time it is latched, but an always-present "off" lamp is
            just another thing on a HUD that already has plenty. -->

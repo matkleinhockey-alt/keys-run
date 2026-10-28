@@ -27,27 +27,35 @@ button{font-family:var(--body);cursor:pointer}
 button:focus-visible{outline:3px solid var(--sun);outline-offset:2px}
 
 /* gauges */
-#gauges{position:absolute;left:14px;top:14px;padding:12px 16px 12px;min-width:176px}
-#gBoat{font-size:13px;color:var(--muted);font-weight:600}
-.speed{font-family:var(--display);font-weight:900;font-size:58px;line-height:.9;letter-spacing:-.5px;margin:4px 0 6px}
-.speed small{font-size:18px;font-weight:700;margin-left:6px;color:var(--flats)}
-.row{display:flex;justify-content:space-between;gap:14px;font-size:13px;color:var(--muted);padding:2px 0}
-.row b{color:var(--ink);font-weight:600}
-#gZone{margin-top:8px;font-family:var(--display);font-weight:800;font-size:20px;color:var(--flats);line-height:1}
+/* The helm sits BELOW the score bar, not beside it. #scorebox is centred and as wide as its
+   buttons — 1000px of it at any window size, reaching to x=17 at 1024px — so the whole top strip
+   down to y=130 belongs to it, and anything else up there is drawn under it. The old readout fit
+   because it was 126px of left-aligned text; a gauge cluster is not. Width is fixed rather than
+   min-width because the panel sizes itself to its widest child (the aground warning), which
+   would otherwise stretch the cluster across 480px of empty panel. */
+#gauges{position:absolute;left:14px;top:136px;width:254px;padding:10px 12px}
+.nameplate{display:flex;justify-content:space-between;align-items:center;gap:10px}
+#gBoat{font-size:13px;color:var(--muted);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* The instrument cluster: two big gauges and the short-sweep trim one, on a helm panel. */
+#gCluster{display:flex;align-items:center;justify-content:space-between;gap:4px;margin:7px 0 5px}
+.gauge{display:block;overflow:visible}
+.gauge .needle{transform-origin:50px 50px;transition:transform .12s cubic-bezier(.3,.7,.3,1)}
+.g-big{width:80px;height:80px;flex:0 0 auto}
+.g-small{width:56px;height:56px;flex:0 0 auto}
+/* Digital readouts under the dials, the way a real helm has an LCD below the gauges. */
+.digits{display:grid;grid-template-columns:repeat(3,1fr);gap:6px 8px;margin-top:2px}
+.dig{display:flex;flex-direction:column;line-height:1.05;min-width:0}
+.dig span{font-size:10px;color:var(--muted);font-weight:600;letter-spacing:.04em;white-space:nowrap}
+.dig b{font-family:var(--display);font-weight:800;font-size:19px;color:var(--ink);letter-spacing:-.2px}
+#gTrimDig.on span,#gTrimDig.on b{color:var(--sun)}
+#gZone{margin-top:7px;font-family:var(--display);font-weight:800;font-size:19px;color:var(--flats);line-height:1}
 #gNear{font-size:12px;color:var(--muted);margin-top:2px}
-.thr{height:5px;border-radius:3px;background:rgba(255,255,255,.12);margin-top:10px;overflow:hidden}
-.thr i{display:block;height:100%;width:0;background:var(--sun);transition:width .1s linear}
-#gauges .trimrow{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12px;color:var(--muted)}
-#gauges .trimrow.on{color:var(--sun);font-weight:700}
 /* Cruise control's lamp. Hidden entirely until latched — see index.html. */
 #gauges .cruiselamp{display:none;align-items:center;gap:7px;margin-top:7px;font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--sun)}
 #gauges .cruiselamp.on{display:flex}
 #gauges .cruiselamp i{width:8px;height:8px;border-radius:50%;background:var(--sun);box-shadow:0 0 7px var(--sun);animation:cruisePulse 2.2s ease-in-out infinite}
 @keyframes cruisePulse{0%,100%{opacity:1}50%{opacity:.45}}
-.trimbar{position:relative;flex:1;height:8px;border-radius:4px;background:linear-gradient(90deg,rgba(127,227,212,.25),rgba(255,255,255,.12) 45%,rgba(242,193,78,.3) 80%,rgba(228,87,46,.45))}
-.trimbar i{position:absolute;top:-3px;width:4px;height:14px;border-radius:2px;background:var(--ink);left:20%}
-#gTrimV{min-width:34px;text-align:right;color:var(--ink)}
-#gWarn{margin-top:8px;font-size:12px;font-weight:700;color:var(--marker)}
+#gWarn{margin-top:7px;font-size:12px;font-weight:700;color:var(--marker)}
 
 /* chart */
 #mapbox{position:absolute;right:14px;top:14px;padding:8px;cursor:pointer}
@@ -227,9 +235,16 @@ button:focus-visible{outline:3px solid var(--sun);outline-offset:2px}
   /* The gauges panel measured 376x253 at 390 px wide — 38% of the screen, running clean under
      the minimap, which is why the boat name came out clipped in half. Cap it short of the map's
      own column and stop the name wrapping to two lines. */
-  #gauges{padding:8px 11px;min-width:0;max-width:calc(100vw - 176px)}
-  #gBoat{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .speed{font-size:34px}
+  /* Narrow: #scorebox moves to the bottom of the screen, so the helm gets the top-left corner
+     back. */
+  #gauges{top:14px;padding:7px 9px;width:auto;min-width:0;max-width:calc(100vw - 176px)}
+  #gCluster{gap:3px;margin:4px 0 2px}
+  .g-big{width:56px;height:56px}
+  .g-small{width:40px;height:40px}
+  .dig b{font-size:15px}
+  .dig span{font-size:9px}
+  .digits{gap:4px 6px}
+  #gZone{font-size:16px}
   #map{width:116px;height:116px}
   /* The control bar is a single non-wrapping flex row of ~14 children. At 390 px it measured
      742 px wide anchored at left:14px, which put everything from the race flag rightwards —
@@ -258,7 +273,7 @@ button:focus-visible{outline:3px solid var(--sun);outline-offset:2px}
   #fight{bottom:300px}
   #toast{top:auto;bottom:300px}
 }
-@media (prefers-reduced-motion: reduce){ #strike{animation:none} .tbar i.over{animation:none} .thr i{transition:none} }
+@media (prefers-reduced-motion: reduce){ #strike{animation:none} .tbar i.over{animation:none} .gauge .needle{transition:none} }
 
 /* catch photo: the fish fills the screen; a slim strip at the bottom carries the essentials */
 #card.photo{background:none!important;justify-content:center!important;align-items:flex-end!important}
@@ -279,8 +294,6 @@ button:focus-visible{outline:3px solid var(--sun);outline-offset:2px}
 /* hide the rest of the HUD while you admire the fish */
 body.photoing #gauges,body.photoing #mapbox,body.photoing #scorebox,body.photoing #hint,body.photoing #touch,body.photoing #toast{opacity:0;pointer-events:none;transition:opacity .25s}
 
-.gearrow{display:flex;justify-content:space-between;align-items:center;margin:2px 0 4px}
-.gearrow span{opacity:.7;font-size:12px}
 #gGear{font:900 18px/1 system-ui,sans-serif;padding:2px 9px;border-radius:7px;background:rgba(43,179,168,.25);color:#7fe3d4}
 #gGear.gN{background:rgba(242,193,78,.25);color:#f2c14e}
 #gGear.gR{background:rgba(228,87,46,.3);color:#ff8a65}

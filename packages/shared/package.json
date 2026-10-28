@@ -134,6 +134,10 @@
       "types": "./dist/sim/steady.d.ts",
       "default": "./dist/sim/steady.js"
     },
+    "./sim/tach": {
+      "types": "./dist/sim/tach.d.ts",
+      "default": "./dist/sim/tach.js"
+    },
     "./sim/gear": {
       "types": "./dist/sim/gear.d.ts",
       "default": "./dist/sim/gear.js"
