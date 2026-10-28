@@ -143,7 +143,7 @@ if (which === 'shots') {
     await shot(page, name);
   }
   // venue panels: walk to each door, read the prompt, press the real F key
-  for (const [name, id, yaw] of [['30-panel-guns', 'counter-guns', 0], ['31-panel-club', 'door-club', 0], ['32-panel-tackle', 'counter-tackle', 0], ['33-panel-bar-counter', 'counter-bar', 0]]) {
+  for (const [name, id, yaw] of [['30-panel-guns', 'counter-guns', 0], ['31-panel-club', 'club', 0], ['32-panel-tackle', 'counter-tackle', 0], ['33-panel-bar-counter', 'counter-bar', 0]]) {
     const at = await page.evaluate((id) => window.__landDebug.interactWorld(id), id);
     await page.evaluate(({ x, z, yaw }) => { window.__landDebug.place(x, z, yaw); window.__landDebug.look(yaw, -0.05); }, { x: at[0], z: at[1], yaw });
     await sleep(3000);

@@ -51,8 +51,15 @@ await page.keyboard.press('KeyF');
 await sleep(2500);
 console.log('mode', await ev(() => window.__landDebug.mode()));
 
-async function openVenue(door) {
-  const at = await ev((id) => window.__landDebug.interactWorld(id), door);
+/*
+ * Take a VENUE name, not an interact id — `interactWorld` resolves either, and the venue name is
+ * the one that cannot go stale. This script used to ask for `door-guns` and `door-dive`; both
+ * shops went walk-in, their `door-` ids vanished with the change, and it crashed on `at[0]` with
+ * nothing to say about why.
+ */
+async function openVenue(venue) {
+  const at = await ev((v) => window.__landDebug.interactWorld(v), venue);
+  if (!at) throw new Error(`no interaction point for venue "${venue}"`);
   await ev(({ x, z }) => { window.__landDebug.place(x, z, 0); window.__landDebug.look(0, -0.05); }, { x: at[0], z: at[1] });
   await sleep(3000);
   await page.keyboard.press('KeyF');
@@ -60,7 +67,7 @@ async function openVenue(door) {
 }
 
 // 1. broke: refusal
-await openVenue('door-guns');
+await openVenue('guns');
 await shot('01-guns-broke');
 await page.click('button.buy[data-item]');
 await sleep(500);
@@ -70,7 +77,7 @@ await page.keyboard.press('Escape'); await sleep(800);
 
 // 2. rich: buy a gear item (real click), then the same again
 console.log('grant', await ev(() => window.__shopDebug.grant(3000)));
-await openVenue('door-guns');
+await openVenue('guns');
 const firstId = await ev(() => document.querySelector('button.buy[data-item]').dataset.item);
 await page.click(`button.buy[data-item="${firstId}"]`);
 await sleep(500);
@@ -81,7 +88,7 @@ await shot('03-guns-bought');
 await page.keyboard.press('Escape'); await sleep(800);
 
 // 3. dive shop + diner for the gear screen
-await openVenue('door-dive');
+await openVenue('dive');
 for (const id of await ev(() => [...document.querySelectorAll('button.buy:not([disabled])')].map((b) => b.dataset.item))) {
   await page.click(`button.buy[data-item="${id}"]`, { noWaitAfter: true, timeout: 120000 }); await sleep(1500);
 }

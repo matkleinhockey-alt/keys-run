@@ -238,7 +238,13 @@ export function createTown(deps: TownDeps): Town {
     },
 
     interactWorld(id): [number, number] | null {
-      const w = world.find((q) => q.i.id === id);
+      // Exact id first, then the VENUE name. A venue's interaction point is `door-<lot>` while
+      // the building is solid and `counter-<venue>` once it is walk-in (shared/world/town.ts's
+      // INTERACTS), so a script that hardcoded one of those broke the day the lot flipped — and
+      // broke silently, returning null and crashing on the caller's `at[0]`. The gun shop, the
+      // dive shop, the gift shop and the club had all moved under scripts still asking for
+      // `door-`. Asking by venue cannot go stale.
+      const w = world.find((q) => q.i.id === id) ?? world.find((q) => q.i.venue === id);
       return w ? [w.x, w.z] : null;
     },
 

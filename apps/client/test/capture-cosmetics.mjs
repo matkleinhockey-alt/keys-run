@@ -145,7 +145,7 @@ const run = async () => {
   if (which === 'panel' || which === 'all') {
     if (!(await wd(() => window.__landDebug.mode() === 'land'))) await tieUp(page);
     await wd(() => window.__landDebug.wardrobe.giveAll());
-    const at = await wd(() => window.__landDebug.interactWorld('door-gifts'));
+    const at = await wd(() => window.__landDebug.interactWorld('gifts'));
     console.log('gifts counter at', JSON.stringify(at));
     await wd(([x, z]) => window.__landDebug.place(x, z, 0), at);
     await sleep(1500);
