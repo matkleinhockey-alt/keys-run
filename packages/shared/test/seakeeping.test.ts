@@ -29,18 +29,21 @@ function run(headingDeg: number, sw: number, ch: number, secs = 55) {
     hull: HULL, sw, ch, worldBounds: WB, pilings: [], dockRects: [],
     canDrive: true, fightActive: false, lineOut: false, luigiOn: false,
   };
-  let pMin = 9, pMax = -9, air = 0, n = 0, sumSpeed = 0;
+  const h0 = st.h;
+  let pMin = 9, pMax = -9, air = 0, n = 0, sumSpeed = 0, driftDeg = 0;
   for (let i = 0; i < secs / DT; i++) {
     st = stepBoat(st, INPUT, { ...env, t: i * DT }, DT);
     if (i * DT < 25) continue;                   // let it settle at whatever the sea allows
     if (st.air) air++;
     pMin = Math.min(pMin, st.pitch); pMax = Math.max(pMax, st.pitch);
+    driftDeg = Math.max(driftDeg, Math.abs((st.h - h0) * 180 / Math.PI));
     sumSpeed += st.speed; n++;
   }
   return {
     kn: sumSpeed / n / SPEED_SCALE / 0.5144,
     pitchDeg: (pMax - pMin) * 180 / Math.PI,
     airPct: 100 * air / n,
+    driftDeg,
   };
 }
 
@@ -82,6 +85,24 @@ describe('a seaway costs you speed', () => {
     }
   });
 
+  it('pushes the bow around in a quartering sea, and barely at all head-on', () => {
+    /*
+     * Unsteered heading drift. Legacy gated this to below a quarter of top speed and nothing
+     * above, so at any real speed the boat tracked as if on rails: 0.0 to 0.5 degrees over
+     * thirty seconds in a big quartering swell, with a beam slope sitting right there doing
+     * nothing. Correcting for a quartering sea is most of what steering in a seaway is.
+     */
+    const beam = run(90, BIG.sw, BIG.ch).driftDeg;
+    const head = run(180, BIG.sw, BIG.ch).driftDeg;
+    expect(beam, 'a beam sea should move the bow').toBeGreaterThan(3);
+    expect(beam, 'but not take the boat away from you').toBeLessThan(12);
+    expect(head, 'a head sea pushes the bow far less than a beam one').toBeLessThan(beam);
+  });
+
+  it('leaves a calm sea tracking straight', () => {
+    expect(run(90, CALM.sw, CALM.ch).driftDeg).toBeLessThan(run(90, BIG.sw, BIG.ch).driftDeg);
+  });
+
   it('can be switched off, for the legacy oracle', () => {
     // boat-trajectory.test.ts compares against a legacy extract that predates all of this.
     let a = createBoatState(), b = createBoatState();
@@ -92,8 +113,8 @@ describe('a seaway costs you speed', () => {
     };
     for (let i = 0; i < 40 / DT; i++) {
       a = stepBoat(a, INPUT, { ...base, t: i * DT }, DT);
-      b = stepBoat(b, INPUT, { ...base, t: i * DT, seakeeping: 0 }, DT);
+      b = stepBoat(b, INPUT, { ...base, t: i * DT, seaEffects: 0 }, DT);
     }
-    expect(b.speed, 'seakeeping: 0 should not be slowed').toBeGreaterThan(a.speed);
+    expect(b.speed, 'seaEffects: 0 should not be slowed').toBeGreaterThan(a.speed);
   });
 });
