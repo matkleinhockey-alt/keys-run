@@ -21,6 +21,7 @@ import { chromium } from 'playwright';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SX, SZ } from './marina.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const URL = process.env.CLIENT_URL || 'http://localhost:5191';
@@ -32,10 +33,7 @@ const which = process.argv[2] || 'shots';
 // +z, land at -z). Local (u, v) -> world: x = sx + u, z = sz - v -- i.e. exactly TOWN_FRAME's
 // ox/oz, which is what every assertion below is really comparing against.
 //
-// This was 250.7 and had gone stale: every position here landed ~148 m out to sea, so tying up
-// silently refused and the interiors run reported every venue as built=false. Seven other
-// capture scripts in this directory still carry the old number.
-const SX = -900, SZ = 102.6728;
+// Imported, not copied — see test/marina.mjs for what the copies cost.
 const W = (u, v) => [SX + u, SZ - v];
 
 const errs = [];

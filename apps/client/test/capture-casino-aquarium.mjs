@@ -20,6 +20,7 @@ import { chromium } from 'playwright';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SX, SZ } from './marina.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const URL = process.env.CLIENT_URL || 'http://localhost:5471';
@@ -27,7 +28,8 @@ const OUT = path.join(HERE, 'screenshots', 'casino-aquarium');
 fs.mkdirSync(OUT, { recursive: true });
 const which = process.argv[2] || 'shots';
 
-const SX = -900, SZ = 250.7;
+// Imported, not copied: this pair went stale once already — see test/marina.mjs.
+// (SX/SZ keep their names so the rest of each script is untouched.)
 const W = (u, v) => [SX + u, SZ - v];
 const IN = 0, WEST = Math.PI / 2, EAST = -Math.PI / 2, OUT_ = Math.PI;
 const errs = [];
