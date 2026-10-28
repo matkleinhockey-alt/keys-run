@@ -13,6 +13,7 @@ import { chainZ, islandWorld, VACA } from '@keysrun/shared/world/chain';
 import { landH, depthAt, WORLD, WB, OLDBR, HUMPS, MARINAS, GOLF } from '@keysrun/shared/world/depth';
 import type { BoatState } from '@keysrun/shared/sim/boat';
 import { chartedWrecks } from '../entities/life/wreck-chart.js';
+import { sandbarSite } from '../entities/life/sandbar.js';
 
 const MS = 512;
 const MW = WORLD.size;
@@ -170,6 +171,47 @@ export function createMinimap(): Minimap {
     mctx.restore();
   }
 
+  /**
+   * Today's sandbar party: a beer can.
+   *
+   * Hand-drawn rather than an emoji glyph, which is how the anchors and flags are done but would
+   * be wrong here — there is no beer-can emoji, 🍺 is a stein and renders as a different picture
+   * on every platform, and a chart symbol has to be the same shape for everyone. Eleven pixels
+   * of aluminium: ellipse lid, straight sides, a band round the middle, and the soft ring that
+   * says the thing is a place rather than a point.
+   *
+   * It is a real chart convention being bent — a mark this frivolous belongs nowhere near a
+   * nautical chart — and that is the joke.
+   */
+  function beerCanSymbol(): void {
+    const W = 3.8, H = 6;
+    mctx.save();
+    // The bar underneath it, so you can see you are aiming for a patch of shallow and not a pin.
+    mctx.strokeStyle = 'rgba(190,120,40,.55)'; mctx.lineWidth = 1.2; mctx.setLineDash([2, 2.2]);
+    mctx.beginPath(); mctx.arc(0, 0, 10.5, 0, 6.283); mctx.stroke(); mctx.setLineDash([]);
+
+    // Body. Gradient across, not down: a can is a cylinder and the shading runs round it.
+    const g = mctx.createLinearGradient(-W, 0, W, 0);
+    g.addColorStop(0, '#9aa2ab'); g.addColorStop(0.34, '#f4f7fa'); g.addColorStop(1, '#848b95');
+    mctx.fillStyle = g;
+    mctx.beginPath(); mctx.rect(-W, -H, W * 2, H * 2); mctx.fill();
+    // Band round the middle, where the label is.
+    mctx.fillStyle = '#c0392b';
+    mctx.fillRect(-W, -2.1, W * 2, 3.8);
+    // Lid and base: the two ellipses that stop it reading as a tin box.
+    mctx.fillStyle = '#b9c0c7';
+    mctx.beginPath(); mctx.ellipse(0, -H, W, 1.5, 0, 0, 6.283); mctx.fill();
+    mctx.fillStyle = '#6e757e';
+    mctx.beginPath(); mctx.ellipse(0, H, W, 1.3, 0, 0, 6.283); mctx.fill();
+    // Outline, so it survives on dark blue water as well as on buff shallows.
+    mctx.strokeStyle = 'rgba(25,32,45,.9)'; mctx.lineWidth = 0.9;
+    mctx.beginPath();
+    mctx.moveTo(-W, -H); mctx.lineTo(-W, H); mctx.moveTo(W, -H); mctx.lineTo(W, H);
+    mctx.ellipse(0, -H, W, 1.5, 0, 0, 6.283);
+    mctx.stroke();
+    mctx.restore();
+  }
+
   function drawMap(t: number, boat: BoatState, remotes?: readonly MinimapContact[]): void {
     mctx.drawImage(mapBase, 0, 0);
     const toM = (x: number, z: number): [number, number] => [(x - WORLD.x0) / MW * MS, (z - WORLD.z0) / MW * MS];
@@ -182,6 +224,11 @@ export function createMinimap(): Minimap {
       mctx.save(); mctx.translate(x, y); wreckSymbol(w.seaDepth < 20, Math.round(w.seaDepth * 3.28)); mctx.restore();
     }
     GOLF.forEach((G) => { const w = islandWorld(G.I, G.lx, G.lz), [x, y] = toM(w[0], w[1]); mctx.fillText('⛳', x, y + 4); });
+    // Where everybody is today (entities/life/sandbar.ts). Charted unconditionally, unlike the
+    // wrecks: a raft of thirty boats is not something you have to discover, it is something you
+    // hear about — and the whole reason the party moves is so the chart is worth looking at.
+    const bar = sandbarSite();
+    if (bar) { const [x, y] = toM(bar.x, bar.z); mctx.save(); mctx.translate(x, y); beerCanSymbol(); mctx.restore(); }
 
     // Other players first, so a remote contact can never obscure your own boat when two players
     // are on top of each other at a hotspot — which is exactly when the chart matters most.
