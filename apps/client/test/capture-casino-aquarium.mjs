@@ -21,9 +21,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SX, SZ } from './marina.mjs';
+import { CLIENT_URL } from './server.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const URL = process.env.CLIENT_URL || 'http://localhost:5471';
+const URL = CLIENT_URL;
 const OUT = path.join(HERE, 'screenshots', 'casino-aquarium');
 fs.mkdirSync(OUT, { recursive: true });
 const which = process.argv[2] || 'shots';

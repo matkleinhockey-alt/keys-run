@@ -13,9 +13,10 @@ import { chromium } from 'playwright';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { CLIENT_URL } from './server.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const URL = process.env.CLIENT_URL || 'http://localhost:5811';
+const URL = CLIENT_URL;
 const OUT = path.join(HERE, 'screenshots', 'dive-gear');
 fs.mkdirSync(OUT, { recursive: true });
 const X = 60, Z = 0.000012 * X * X + 1485; // upper wall, ~9 m column (see dive-integration.mjs)

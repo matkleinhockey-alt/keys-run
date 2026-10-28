@@ -1,7 +1,8 @@
 import { chromium } from 'playwright';
 import crypto from 'node:crypto';
+import { CLIENT_URL } from './server.mjs';
 
-const URL = process.env.CLIENT_URL || 'http://localhost:5174';
+const URL = CLIENT_URL;
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', String(e)));

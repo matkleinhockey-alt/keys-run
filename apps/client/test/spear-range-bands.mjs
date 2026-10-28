@@ -19,7 +19,8 @@
  * rather than the gun.
  */
 import { chromium } from 'playwright';
-const URL = process.env.CLIENT_URL || 'http://localhost:5441';
+import { CLIENT_URL } from './server.mjs';
+const URL = CLIENT_URL;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const b = await chromium.launch();
 const p = await b.newPage({ viewport: { width: 1000, height: 600 } });
