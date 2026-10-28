@@ -30,7 +30,9 @@ import { landH, depthAt, onCourse, creekDist } from '@keysrun/shared/world/depth
 import { inTownFootprint } from '@keysrun/shared/world/town';
 import type { DockRect } from '@keysrun/shared/sim/boat';
 import { islandLocal } from '@keysrun/shared/world/chain';
-import { makeDockBoat } from './marinas.js';
+import { makeBoat } from '../entities/boat/model.js';
+import { placeholderDeps } from '../entities/life/party-boats.js';
+import { BOATS, type Boat } from '@keysrun/shared/content/boats';
 import { grainTex, normalTex } from '../core/textures.js';
 import { lerp } from '../core/math.js';
 import { WORLD_SEED, SALT } from '../state/constants.js';
@@ -47,6 +49,19 @@ const SETBACK_M = 26;
 const MIN_DOCK_DEPTH = 1.15;
 /** ...and it will not run further than this looking for it. */
 const MAX_DOCK_M = 46;
+/**
+ * Hulls are built when you get this close, once, and kept.
+ *
+ * There are 31 estates. Building a real boat for every one at load — plus the one tied off
+ * alongside — is fifty full models standing in the scene forever for the two or three you will
+ * ever be near. The lift structure itself is a handful of boxes and goes up with the house; it
+ * is only the hulls that wait.
+ */
+const BOAT_BUILD_M = 520;
+/** ...and hidden again past this, so a built estate behind you costs nothing to draw. */
+const BOAT_SHOW_M = 900;
+/** Clearance between the water and the hoisted keel. */
+const HOIST_M = 0.55;
 
 export interface WaterfrontResult {
   group: THREE.Group;
@@ -60,7 +75,26 @@ export interface WaterfrontResult {
    * only part a verification shot actually needs to aim at.
    */
   sites: Array<{ x: number; z: number; r: number; lx: number; lz: number }>;
+  /** Builds the nearby estates' hulls and hides the far ones. See `BOAT_BUILD_M`. */
+  update(boat: { x: number; z: number }): void;
+  /** VERIFICATION ONLY: what is on each lift, and whether it has been built yet. */
+  debug(): Array<{ x: number; z: number; boat: string; len: number; beam: number; depth: number; built: boolean; visible: boolean }>;
   dispose(): void;
+}
+
+/**
+ * Which boat lives on this lift.
+ *
+ * Decided by the water under it, not at random: a boat got onto that lift by being driven onto
+ * it, so a dock with 1.3 m off the end has a 23 on it and the one in 3 m of water can have the
+ * 43. Within what fits, the choice is hashed off the site so it is the same for everyone and
+ * does not re-roll when anything else in the world changes.
+ */
+export function liftBoatFor(depth: number, roll: number): Boat {
+  // Enough under the keel to have floated her on, plus the squat of driving in.
+  const fits = BOATS.filter((b) => depth > b.draft + 0.5);
+  if (!fits.length) return BOATS.reduce((a, b) => (b.draft < a.draft ? b : a));
+  return fits[Math.min(fits.length - 1, Math.floor(roll * fits.length))];
 }
 
 export function createWaterfront(): WaterfrontResult {
@@ -89,6 +123,24 @@ export function createWaterfront(): WaterfrontResult {
   const poolM = M(0x2fa8c4, { rough: 0.12, metal: 0.1 });
   const deckM = M(0xe6e0d2, { rough: 0.9 });
   const lawnM = M(0x4e8c42, { rough: 1 });
+  const cableM = M(0x8d949c, { rough: 0.4, metal: 0.6 });
+  const bunkM = M(0x2b3138, { rough: 1 });
+
+  /** One estate's lift, and the hulls that have not been built yet. */
+  interface Lot {
+    cx: number; cz: number; yaw: number;
+    spec: Boat;
+    /** Waterline height of the hoisted hull. */
+    hoistY: number;
+    tied: { spec: Boat; x: number; z: number } | null;
+    /** The two hulls, once `buildHulls` has run. */
+    g: THREE.Group | null;
+  }
+  const lots: Lot[] = [];
+
+  /** One set of placeholder MFD/GPS/sounder textures for every hull out here. */
+  let deps_: ReturnType<typeof placeholderDeps> | null = null;
+  const deps = (): ReturnType<typeof placeholderDeps> => (deps_ ??= placeholderDeps());
 
   /** Outward normal: the gradient of the signed shore distance, which points out of the land. */
   function outward(I: Island, x: number, z: number): [number, number] {
@@ -241,59 +293,94 @@ export function createWaterfront(): WaterfrontResult {
       }
     }
 
-    // ---- the boat lift at the end, with something in it
+    /*
+     * ---- the boat lift at the end, built around the boat that lives on it
+     *
+     * The lift used to be one fixed 6.8 x 3.8 m frame with a 7.4 m box hull in it, turned a
+     * quarter circle — which laid every boat in the world ACROSS its own lift, bow out over one
+     * side and stern over the other. The hull is modelled bow-to--z, the same as the player's,
+     * so a boat parallel to the dock is `yaw` (bow in) or `yaw + PI` (bow out to open water,
+     * which is how you would leave).
+     */
     const lx = hx + nx * (d0 + planks + 1.5), lz = hz + nz * (d0 + planks + 1.5);
-    const liftSide = Math.cos(yaw) * 4.2, liftSideZ = -Math.sin(yaw) * 4.2;
+    const liftDepth = depthAt(lx, lz);
+    const spec = liftBoatFor(liftDepth, hashCell(WORLD_SEED, ii, k + 41, SALT.HOUSE_ROT));
+    const L = spec.len, B = spec.beam;
+    // Posts stand outboard of the rails; the two bents sit under the hull about where a trailer's
+    // bunks would. Everything below is derived from those two, so the frame grows with the boat.
+    const postHalf = B / 2 + 0.6, bentHalf = L * 0.27;
+    const liftOff = dockW / 2 + postHalf + 0.6;
+    const liftSide = Math.cos(yaw) * liftOff, liftSideZ = -Math.sin(yaw) * liftOff;
     const cx = lx + liftSide, cz = lz + liftSideZ;
-    for (const o of [-3.4, 3.4]) {
+    const hoistY = spec.draft + HOIST_M;         // waterline of the hull, hoisted clear
+    const cradleY = hoistY - spec.draft - 0.1;   // the beams just under her keel
+    const topY = hoistY + 3.9;                   // above the T-top, where the cables hang from
+    const postH = topY + 0.5 + 2.2;
+
+    for (const o of [-bentHalf, bentHalf]) {
       const bx = cx + nx * o, bz = cz + nz * o;
-      for (const s of [-1.9, 1.9]) {
-        const post = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.15, 0.15, 7.5, 6)), railM);
-        post.position.set(bx + Math.cos(yaw) * s, 1.9, bz - Math.sin(yaw) * s); post.castShadow = true; group.add(post);
+      for (const sgn of [-1, 1]) {
+        const px = bx + Math.cos(yaw) * sgn * postHalf, pz = bz - Math.sin(yaw) * sgn * postHalf;
+        const post = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.15, 0.15, postH, 6)), railM);
+        post.position.set(px, topY + 0.5 - postH / 2, pz); post.castShadow = true; group.add(post);
+        // The cable from the top beam down to the cradle, which is what a lift actually is.
+        const cable = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.025, 0.025, topY - cradleY, 4)), cableM);
+        cable.position.set(
+          bx + Math.cos(yaw) * sgn * (postHalf - 0.12), (topY + cradleY) / 2,
+          bz - Math.sin(yaw) * sgn * (postHalf - 0.12),
+        );
+        group.add(cable);
       }
-      // The cradle beam the hull sits on, and the cable drum above it.
-      box(4.4, 0.22, 0.22, bx, 1.55, bz, railM, yaw);
-      box(4.8, 0.3, 0.3, bx, 5.3, bz, railM, yaw);
+      box(B + 1.5, 0.22, 0.22, bx, cradleY, bz, railM, yaw);   // cradle beam
+      box(B + 1.9, 0.3, 0.3, bx, topY, bz, railM, yaw);        // top beam
     }
-    // Hoisted clear of the water — the whole point of a lift, and why she is still painted.
-    const lifted = makeDockBoat(0xffffff, [0x23466e, 0x2bb3a8, 0xe4572e][Math.floor(tint * 3)]);
-    lifted.position.set(cx, 1.75, cz);
-    lifted.rotation.y = yaw + Math.PI / 2;
-    group.add(lifted);
-    dockRects.push({ x0: cx - 3.4, x1: cx + 3.4, z0: cz - 3.4, z1: cz + 3.4 });
+    // Carpeted bunks along the cradle, under where the chines land.
+    for (const sgn of [-1, 1]) {
+      box(0.26, 0.16, bentHalf * 2 + 0.5,
+        cx + Math.cos(yaw) * sgn * B * 0.3, cradleY + 0.19, cz - Math.sin(yaw) * sgn * B * 0.3, bunkM, yaw);
+    }
+    // The motor and its switch, on the inboard post at the shore end.
+    box(0.46, 0.5, 0.4, cx - nx * bentHalf + Math.cos(yaw) * -postHalf, topY - 0.55, cz - nz * bentHalf - Math.sin(yaw) * -postHalf, M(0x3b4046, { rough: 0.6 }), yaw);
+    dockRects.push({ x0: cx - L * 0.46, x1: cx + L * 0.46, z0: cz - L * 0.46, z1: cz + L * 0.46 });
 
     // ---- and often something tied off on the other side, in the water
-    if (hashCell(WORLD_SEED, ii, k + 29, SALT.HOUSE_ROT) < 0.62) {
+    const tiedRoll = hashCell(WORLD_SEED, ii, k + 29, SALT.HOUSE_ROT);
+    let tied: Lot['tied'] = null;
+    if (tiedRoll < 0.62) {
       const sxB = lx - liftSide, szB = lz - liftSideZ;
-      const tied = makeSpeedboat([0xe4572e, 0x15171a, 0xf2c14e, 0x2b4a9a][Math.floor(tint * 4)]);
-      tied.position.set(sxB, 0, szB);
-      tied.rotation.y = yaw + Math.PI / 2;
-      group.add(tied);
-      floating.push(tied);
-      dockRects.push({ x0: sxB - 3, x1: sxB + 3, z0: szB - 3, z1: szB + 3 });
+      // Whatever the water alongside the dock will take — usually the smaller of the two.
+      const tSpec = liftBoatFor(Math.min(liftDepth, depthAt(sxB, szB)), hashCell(WORLD_SEED, ii, k + 53, SALT.HOUSE_ROT));
+      tied = { spec: tSpec, x: sxB, z: szB };
+      dockRects.push({ x0: sxB - tSpec.len * 0.46, x1: sxB + tSpec.len * 0.46, z0: szB - tSpec.len * 0.46, z1: szB + tSpec.len * 0.46 });
     }
-    void I;
+
+    lots.push({ cx, cz, yaw, spec, hoistY, tied, g: null });
+    void I; void tint;
     return [cx, cz];
   }
 
-  /** A small go-fast: low freeboard, a wrapped windscreen and a big engine on the back. */
-  function makeSpeedboat(hull: number): THREE.Group {
+  /**
+   * Put the hulls in. Called the first time the player comes within `BOAT_BUILD_M` of an estate
+   * and never again — `makeBoat` is the player's own model, and building 50 of them up front for
+   * the two you will visit is what the laziness is for.
+   */
+  function buildHulls(lot: Lot): void {
     const g = new THREE.Group();
-    const body = new THREE.Mesh(keep(new THREE.BoxGeometry(2.1, 0.95, 6.6)), M(hull, { rough: 0.25, metal: 0.15 }));
-    body.position.y = 0.3; body.castShadow = true; g.add(body);
-    const bow = new THREE.Mesh(keep(new THREE.ConeGeometry(1.05, 2.3, 4).rotateY(Math.PI / 4)), M(hull, { rough: 0.25, metal: 0.15 }));
-    bow.rotation.x = -Math.PI / 2; bow.scale.set(1, 1, 0.45); bow.position.set(0, 0.3, -4); g.add(bow);
-    g.add(deckStrip(2.0, 3.2, 0.78, -0.3));
-    const screen = new THREE.Mesh(keep(new THREE.BoxGeometry(1.5, 0.5, 0.1)), M(0x9fc0cc, { rough: 0.05, metal: 0.1 }));
-    screen.position.set(0, 1.05, -0.9); screen.rotation.x = -0.4; g.add(screen);
-    const eng = new THREE.Mesh(keep(new THREE.BoxGeometry(0.7, 1.2, 0.8)), M(0x15171a, { rough: 0.5 }));
-    eng.position.set(0, 0.5, 3.6); g.add(eng);
-    return g;
-  }
-  function deckStrip(w: number, d: number, y: number, z: number): THREE.Mesh {
-    const m = new THREE.Mesh(keep(new THREE.BoxGeometry(w, 0.1, d)), M(0xe8e4d8, { rough: 0.7 }));
-    m.position.set(0, y, z);
-    return m;
+    // Bow out to open water. `makeBoat` models bow-to--z, and local +z here is the outward
+    // normal, so `yaw` would park her nose against the seawall.
+    const lifted = makeBoat(lot.spec, deps());
+    lifted.group.position.set(lot.cx, lot.hoistY, lot.cz);
+    lifted.group.rotation.y = lot.yaw + Math.PI;
+    g.add(lifted.group);
+    if (lot.tied) {
+      const t = makeBoat(lot.tied.spec, deps());
+      t.group.position.set(lot.tied.x, 0, lot.tied.z);
+      t.group.rotation.y = lot.yaw + Math.PI;
+      g.add(t.group);
+      floating.push(t.group);
+    }
+    lot.g = g;
+    group.add(g);
   }
 
   return {
@@ -301,9 +388,30 @@ export function createWaterfront(): WaterfrontResult {
     dockRects,
     floating,
     sites,
+    update(boat) {
+      for (const lot of lots) {
+        const d = Math.hypot(lot.cx - boat.x, lot.cz - boat.z);
+        if (!lot.g && d < BOAT_BUILD_M) buildHulls(lot);
+        if (lot.g) lot.g.visible = d < BOAT_SHOW_M;
+      }
+    },
+    debug: () => lots.map((l) => ({
+      x: +l.cx.toFixed(0), z: +l.cz.toFixed(0), boat: l.spec.id,
+      len: l.spec.len, beam: l.spec.beam, depth: +depthAt(l.cx, l.cz).toFixed(2),
+      built: !!l.g, visible: !!l.g?.visible,
+    })),
     dispose() {
       for (const g of geos) g.dispose();
       for (const m of mats) m.dispose();
+      // The lazily built hulls own geometry and materials this module never saw.
+      for (const lot of lots) {
+        lot.g?.traverse((o) => {
+          const m = o as THREE.Mesh;
+          if (!m.isMesh) return;
+          m.geometry.dispose();
+          for (const mat of Array.isArray(m.material) ? m.material : [m.material]) mat.dispose();
+        });
+      }
     },
   };
 }

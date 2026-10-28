@@ -1281,6 +1281,11 @@ export function initWorld(wrap: HTMLElement): World {
     particles.update(clamped, simTime, (x, z, t, a) => sampleWaterHeight(curState, x, z, t, a, sw, ch));
     catchFlow.updateReleased(clamped, simTime, (x, z, t) => sampleWaterHeight(curState, x, z, t, ampAt(x, z), sw, ch));
 
+    // Build the nearby estates' hulls, drop the far ones (world/waterfront.ts: 31 estates, and
+    // the boats on them are full models). Driven by the BOAT, not the camera: the chase camera
+    // lags a long way behind after a jump, so gating on it builds the estate only once the
+    // camera has caught up — which is to say, once you are already looking at the empty lift.
+    waterfront.update({ x: curState.x, z: curState.z });
     // The estates' tied-off boats ride the swell; the one up on the lift deliberately does not.
     for (const b of waterfront.floating) {
       b.position.y = sampleWaterHeight(curState, b.position.x, b.position.z, simTime, ampAt(b.position.x, b.position.z), sw, ch) - 0.12;
@@ -1522,6 +1527,7 @@ export function initWorld(wrap: HTMLElement): World {
     audioMuffle: () => audio.underwaterDebug(),
     lighthouse: () => lighthouse.debug(),
     waterfrontSites: () => waterfront.sites,
+    waterfrontLifts: () => waterfront.debug(),
     commercialFleet: () => life.commercialDebug(),
     sandbar: () => life.sandbarDebug(),
     larry: () => life.larryDebug(),
