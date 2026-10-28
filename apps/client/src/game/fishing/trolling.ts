@@ -32,6 +32,17 @@ import { clamp, rand } from '../../core/math.js';
 
 /** Seconds the poles take to swing out or stow. Long enough to watch, short enough not to wait. */
 const RIG_SWING_S = 2.4;
+/**
+ * Simulated seconds the autopilot waits after a fish comes off — or comes aboard — before it
+ * puts the boat back on the troll.
+ *
+ * Without it the throttle hold resumed on the very frame `F.state` left 'fight', so a break-off
+ * ended with the boat instantly accelerating away from the spot while the lures were still
+ * sinking behind it. That is not what happens on a boat: you lose a fish, you clear the lines,
+ * you look at what came back, and then somebody pushes the lever. Long enough to be a beat and
+ * to let the spread stream out again, short enough that nobody reaches for the throttle.
+ */
+const RESUME_PAUSE_S = 7;
 
 export interface TrollingDeps {
   /** The rod's own hookup, reached exactly as the strike window reaches it. */
@@ -80,7 +91,7 @@ export interface Trolling {
   /** How far the gear is deployed, 0 stowed to 1 fully out — the same eased number the poles
    * swing on, so the spread in the water comes out with them (game/fishing/troll-spread.ts). */
   rigOut(): number;
-  debug(): { on: boolean; rig: number; quality: number; untilStrike: number; soak: number; raising: number };
+  debug(): { on: boolean; rig: number; quality: number; untilStrike: number; soak: number; raising: number; resumePause: number };
   /**
    * VERIFICATION ONLY: put a fish on now. The soak is 50-140 SIMULATED seconds by design, and
    * this sandbox's simulated clock runs about seven times slower than the wall, so waiting one
@@ -105,6 +116,10 @@ export interface Trolling {
 export function createTrolling(deps: TrollingDeps): Trolling {
   let state: TrollState = createTrollState();
   let on = false;
+  /** Counts down after a fight ends; the throttle hold and the soak clock both wait on it. */
+  let resumePause = 0;
+  /** Last frame's rod state, so the END of a fight can be seen rather than inferred. */
+  let wasBusy = false;
   /** 0 stowed, 1 out — eased, so the poles swing rather than snap. */
   let rig = 0;
   /** How well the spread was fishing on the last tick, for the HUD and the harness. */
@@ -267,6 +282,8 @@ export function createTrolling(deps: TrollingDeps): Trolling {
       // treatment, so the autopilot went on driving the boat at seven knots through the whole
       // fight, towing the fish along behind it. Nobody keeps trolling with a fish on.
       if (F.state === 'fight' || F.state === 'caught') return false;
+      // ...and for a few seconds after it, while the lines are cleared. See RESUME_PAUSE_S.
+      if (resumePause > 0) return false;
       // A touch of hysteresis around the target, or the engine hunts audibly at 30 Hz.
       return Math.abs(boat.speed) < TROLL_SPEED_TARGET - (Math.abs(boat.speed) > TROLL_SPEED_MIN ? 0.12 : 0);
     },
@@ -278,6 +295,18 @@ export function createTrolling(deps: TrollingDeps): Trolling {
       }
       if (!on) {
         abortRaise();
+        resumePause = 0;
+        wasBusy = false;
+        return;
+      }
+
+      // Watch for the fight ENDING, however it ended — landed, released or broken off.
+      const busy = F.state === 'fight' || F.state === 'caught';
+      if (wasBusy && !busy) resumePause = RESUME_PAUSE_S;
+      wasBusy = busy;
+      if (resumePause > 0) {
+        resumePause = Math.max(0, resumePause - dt);
+        // Nothing is fishing yet either: the lures are being sorted out, not dragged.
         return;
       }
       // A fish already on the way up takes precedence over the soak clock: the lures are busy,
@@ -320,6 +349,7 @@ export function createTrolling(deps: TrollingDeps): Trolling {
       untilStrike: +state.untilStrike.toFixed(1),
       raising: +Math.max(0, raiseLeft).toFixed(2),
       soak: +state.soak.toFixed(1),
+      resumePause: +resumePause.toFixed(2),
     }),
   };
 }
