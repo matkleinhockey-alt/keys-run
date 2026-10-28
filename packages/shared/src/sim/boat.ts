@@ -103,6 +103,13 @@ export interface BoatEnv {
    * job — proving the rest of the integrator still matches legacy exactly.
    */
   chop?: number;
+  /**
+   * How much the sea slows the boat down, 0..1. Defaults to 1 (added resistance in waves, as
+   * felt). Same purpose as `chop` above and the same one caller: the legacy oracle in
+   * boat-trajectory.test.ts predates both, so it sets them to 0 and goes on checking that
+   * everything ELSE still matches legacy exactly.
+   */
+  seakeeping?: number;
   /** legacy `F.state==='fight'`. Gates the fight brake above — with a fish on, the boat stops. */
   fightActive: boolean;
   /** legacy `lineOut()`. Always false until fishing lands. */
@@ -142,6 +149,11 @@ export interface BoatState {
   trimMode: boolean;
   trimV: number;
   trimVent: number;
+  /**
+   * Smoothed |vy| — how hard the sea is working the hull. Drives added resistance in waves; see
+   * `SEA_WORK_REF`. Not legacy; the sea used to cost nothing.
+   */
+  seaWork: number;
   /** legacy `boat.wakeT`: accumulator gating how often a new wake ring is emitted. */
   wakeTimer: number;
   /** Flat [x,z,t,packed]×WAKE_N ring (legacy module-level `wakeP: THREE.Vector4[]`, plain here). */
@@ -165,6 +177,7 @@ export function createBoatState(x: number, z: number, h: number): BoatState {
     gear: 'D', gearRev: 0,
     engineOn: true,
     trimMode: false, trimV: 0.2, trimVent: 0,
+    seaWork: 0,
     wakeTimer: 0,
     wakeRing, wakeRingIndex: 0,
     events: [],
@@ -215,6 +228,29 @@ function emitWakeInto(ring: Float64Array, index: number, x: number, z: number, v
 
 /** How fast the way comes off with a fish on and nobody driving, per second. */
 const FIGHT_BRAKE = 1.6;
+
+/**
+ * Added resistance in waves.
+ *
+ * A seaway used to cost nothing. Measured wide open across every heading in a big swell, the
+ * boat made 54.3 to 56.6 knots whether it was running away from the sea or punching into it —
+ * and it could only manage 49 degrees of peak-to-peak pitch and spend a fifth of its time in the
+ * air BECAUSE nothing ever slowed it down. A head sea you can ignore is not a sea.
+ *
+ * The driver is `vy`, how hard the hull is being thrown up and down. That is the energy going
+ * into making the boat heave instead of into making it go, and it is what actually distinguishes
+ * the headings: measured mean |vy| runs 0.18 m/s in a following sea to 3.83 punching into a big
+ * one, a factor of twenty-one, where the wave slope under the hull barely changes at all.
+ *
+ * It closes a loop, which is the point. Slowing down means meeting fewer waves, which means less
+ * heave, which means less resistance — so the boat settles at a speed the sea allows rather than
+ * being clamped to one, and backing off the throttle in a head sea stops being free.
+ */
+const SEA_WORK_REF = 4.0;
+/** Most of the top end a sea may take. */
+const SEA_LOSS_MAX = 0.55;
+/** Seconds of smoothing on `seaWork`; raw |vy| swings at wave frequency and would surge the engine. */
+const SEA_WORK_TAU = 1.5;
 
 
 /** legacy `dockCollide` (index.html:1727-1737), minus the `boat.speed`/`toast` side effects. */
@@ -271,7 +307,14 @@ export function stepBoat(state: BoatState, input: BoatInput, env: BoatEnv, dt: n
   const off = next.trimV - opt;
   next.trimVent = fr > 0.4 && next.trimV > 0.82 ? Math.min(1, (next.trimV - 0.82) / 0.18 * (fr - 0.4) / 0.4 * 1.6) : 0;
   const trimK = (1 + 0.06 - 0.35 * off * off) * (1 - 0.25 * next.trimVent);
-  const target = next.thr * topMs * trimK * (next.thr > 0 ? 1 : 1);
+  /*
+   * How hard the sea is working the hull, smoothed. Read from LAST frame's heave velocity — the
+   * buoyancy integrator has not run yet this step — which is fine, because it is a 1.5 s average
+   * either way.
+   */
+  next.seaWork += (Math.abs(state.vy) - next.seaWork) * Math.min(1, dt / SEA_WORK_TAU);
+  const seaLoss = Math.min(1, next.seaWork / SEA_WORK_REF) * SEA_LOSS_MAX * (env.seakeeping ?? 1);
+  const target = next.thr * topMs * trimK * (1 - seaLoss);
   const holeShot = fr < 0.4 && next.thr > 0.5 ? 1 + 0.45 * (0.3 - next.trimV) : 1;
   next.speed += (target - next.speed) * dt * (next.thr === 0 ? hull.accel * 0.5 : hull.accel * holeShot);
   /*

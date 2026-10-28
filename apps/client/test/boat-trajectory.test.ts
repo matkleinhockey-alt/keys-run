@@ -110,6 +110,8 @@ function baseEnv(sw: number, ch: number, dockRects: readonly DockRect[], pilings
     // With chop on, this test would measure nothing but the chop; with it off it keeps doing its
     // real job, which is proving the rest of the integrator still matches legacy exactly.
     chop: 0,
+    // ...and added resistance in waves, for the same reason.
+    seakeeping: 0,
   };
 }
 
