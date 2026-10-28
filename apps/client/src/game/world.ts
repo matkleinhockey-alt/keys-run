@@ -1393,7 +1393,7 @@ export function initWorld(wrap: HTMLElement): World {
       }
       electronics.update(clamped, simTime, fpState.driveOn);
       if (game.running) {
-        updateHUD(clamped, curState, { boatLabel: hudBoatLabel(boatSpec), draft: boatSpec.draft, running: game.running });
+        updateHUD(clamped, curState, { boatLabel: hudBoatLabel(boatSpec), draft: boatSpec.draft, running: game.running, topKn: boatSpec.top });
         minimap.draw(simTime, curState, netRemoteBoats);
         catchFlow.updateTouchDock(curState);
       }
