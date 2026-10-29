@@ -188,7 +188,12 @@ float wakeH(vec2 P,inout vec2 grad,inout float foam){ float h=0.;
     wh+=cAmp*cho; dd+=cAmp*chd;
     vec2 wg=vec2(0.); float wf=0.; wh+=wakeH(wpW.xz,wg,wf); dd+=wg; vWake=wf;
     vec3 objectNormal=normalize(vec3(-dd.x,1.0,-dd.y));
-    vWN=objectNormal; vWP=vec3(wpW.x,wh,wpW.z); vCrest=hh/(1.74*uSW+.33*chv+.001); vSlope=length(dd);
+    // vCrest drives the whitecaps, and it was the SWELL sum alone — the chop sum is added to the height
+    // on the line above but was never fed in here. That had whitecaps breaking on long swell,
+    // which is the one wave that does not break, and never on the short chop, which is the one
+    // that does. Chop carries its own weight in the normaliser so the ratio stays ~0..1.
+    vWN=objectNormal; vWP=vec3(wpW.x,wh,wpW.z);
+    vCrest=(hh+cho*1.6)/(1.74*uSW+.33*chv+.52*chv+.001); vSlope=length(dd);
     // Keys turquoise is the single most recognisable thing about this look, and ACES tone mapping
     // desaturates everything that goes through it — boost chroma here (away from the per-vertex
     // luma, so brightness is unaffected) to compensate, instead of letting the depth-colour ramp
@@ -201,8 +206,25 @@ float wakeH(vec2 P,inout vec2 grad,inout float foam){ float h=0.;
     vec4 tz=texture2D(uNorm,vWP.xz*.021+vec2(uTime*.006,-uTime*.004));
     float breakup=texture2D(uNorm,vWP.xz*.06+vec2(-uTime*.02,uTime*.013)).a;
     diffuseColor.rgb=vCol*(.9+.2*tz.b);
-    float foam=smoothstep(.58,.95,vCrest)*smoothstep(.6,1.4,uCH)*smoothstep(.35,.7,breakup*.8+tz.a*.4);
-    foam=max(foam,smoothstep(.12,.25,vSlope)*smoothstep(.4,.75,breakup)*.8);
+    /*
+     * Whitecaps. Steepness AND wind, not steepness alone.
+     *
+     * The slope term started at .12, which measurement put almost out of reach on the sea the
+     * player is usually on: over a minute of Choppy in the Hawk Channel only 5% of the surface
+     * ever got that steep, so the default sea state had no whitecaps at all. Dropping the onset
+     * far enough to fix that would have started foaming a flat calm, because blue water in a
+     * calm peaks at .094 against the .095 that Choppy needs — a 1% margin is not a threshold.
+     *
+     * So it is gated on uCH as well, which is what makes a whitecap a whitecap: breaking is
+     * wind-driven, which is exactly why a big smooth swell stays unbroken and a short chop does
+     * not. Calm's chop scalar is 0.5 and closes the gate outright, so the slope onset is free to
+     * sit where the chop actually lives. Measured coverage: Calm 0% everywhere, Choppy 13% in
+     * the Hawk Channel and 26% offshore, Haulover 65%, and the bay flats stay clean because
+     * chop there is depth-limited.
+     */
+    float wind=smoothstep(.55,1.15,uCH);
+    float foam=smoothstep(.58,.95,vCrest)*wind*smoothstep(.35,.7,breakup*.8+tz.a*.4);
+    foam=max(foam,smoothstep(.10,.20,vSlope)*wind*smoothstep(.4,.75,breakup)*.8);
     // Wake foam. The wedge geometry underneath is already right — sim/boat.ts emits each ring at
     // c = 0.34*v, so the envelope of the expanding circles is the real ~19.5 degree Kelvin angle —
     // but the old ramp painted straight over it: it saturated at vWake .28 while forty overlapping

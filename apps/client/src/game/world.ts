@@ -1527,6 +1527,10 @@ export function initWorld(wrap: HTMLElement): World {
     lighthouse: () => lighthouse.debug(),
     waterfrontSites: () => waterfront.sites,
     waterfrontLifts: () => waterfront.debug(),
+    /** VERIFICATION ONLY: the live sea state — the ramped scalars the water and the hull use,
+     * and which SEA_STATES entry they are heading for. The #btnSea label does not refresh, so a
+     * screenshot cannot be trusted to say which sea it was taken in. */
+    sea: () => ({ sw: +sw.toFixed(3), ch: +ch.toFixed(3), name: SEA_STATES[seaIdx].n }),
     /** VERIFICATION ONLY: solid dock/pier footprints, so a test can check none of them stand in
      * the marina entrance channel. */
     dockRects: () => dockRects.map((r) => ({ x0: +r.x0.toFixed(1), x1: +r.x1.toFixed(1), z0: +r.z0.toFixed(1), z1: +r.z1.toFixed(1) })),
