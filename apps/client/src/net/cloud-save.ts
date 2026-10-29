@@ -1,17 +1,19 @@
 /**
- * The signed-in player's game, kept on the server (apps/api/src/routes/save.ts) so money, boats,
- * gear and the rest follow the account instead of the browser.
+ * Where the player's game lives. Signed in, it is the account's save on the server
+ * (apps/api/src/routes/save.ts, the `player_saves` table); signed out, it is this browser's
+ * localStorage, as it always was.
  *
- * It works one level below the game: every system already loads and saves its own state as a JSON
- * string in localStorage (game/economy/system.ts, game/economy/inventory.ts, ...), so this only
- * moves those strings. `hydrate` runs after the auth gate and before the world is built, and
- * writes the account's save into localStorage so every system starts from it unchanged; `startSync`
- * then uploads whenever those keys change. Offline play is untouched.
+ * Every system that keeps state (the wallet, inventory, casino, services, treasure, charted wrecks)
+ * loads and saves it through `readSave` / `writeSave` here instead of touching localStorage. After
+ * the auth gate, `hydrate` fetches the account's save and from then on those calls work on that copy
+ * in memory, uploading each change within SYNC_DELAY_MS. While an account is playing, nothing of its
+ * game is written to the browser: the offline game in localStorage is left as it was, and signing
+ * out goes back to it.
  *
- * Which game the browser holds is recorded under MARK_KEY (the account, and the save as last
- * synced), so a sign-in can tell "this account's game with unsynced changes" (upload it) from
- * "offline progress" (back it up, and on a brand-new account's first sign-in, claim it) from
- * "someone else's account" (replace it). Signing out restores the offline game that was backed up.
+ * Recovering progress: the first time an account signs in on a browser, that browser's offline game
+ * (or what the first cloud-save build left there) is weighed against the account's save, and the one
+ * further along wins (`further`). Only the first account to sign in on a browser can take its
+ * offline game, so two accounts never both inherit it.
  */
 import { API_BASE_URL } from './config.js';
 import type { Session } from '../ui/auth/session.js';
@@ -27,34 +29,78 @@ export const CLOUD_KEYS = [
   'keysrun.wrecks.charted.v1',
 ] as const;
 
-const MARK_KEY = 'keysrun.cloud.v1';
-const BACKUP_KEY = 'keysrun.offline-backup.v1';
-const SYNC_S = 15;
+/** Which account took this browser's offline game. */
+const CLAIM_KEY = 'keysrun.offline-claimed.v1';
+/** Left by the first cloud-save build, which kept the account's game in localStorage. */
+const LEGACY_MARK_KEY = 'keysrun.cloud.v1';
+const LEGACY_BACKUP_KEY = 'keysrun.offline-backup.v1';
+const SYNC_DELAY_MS = 2000;
+const RETRY_MS = 10_000;
 const TIMEOUT_MS = 6000;
 
+/** A game: save key -> the JSON string the system stored. */
 type Save = Record<string, string>;
-interface Mark { userId: string; synced: string }
 
-function get(k: string): string | null { try { return localStorage.getItem(k); } catch { return null; } }
-function set(k: string, v: string): void { try { localStorage.setItem(k, v); } catch { /* unremembered */ } }
-function del(k: string): void { try { localStorage.removeItem(k); } catch { /* ignore */ } }
+function get(k: string): string | null { try { return globalThis.localStorage?.getItem(k) ?? null; } catch { return null; } }
+function set(k: string, v: string): void { try { globalThis.localStorage?.setItem(k, v); } catch { /* unremembered */ } }
+function del(k: string): void { try { globalThis.localStorage?.removeItem(k); } catch { /* ignore */ } }
 
-/** The game as it stands in this browser, in CLOUD_KEYS order so equal games serialise equally. */
-function snapshot(): Save {
+/** The account's game while one is signed in; null plays the browser's offline game. */
+let live: Map<string, string> | null = null;
+let account: Session | null = null;
+let dirty = false;
+let timer: ReturnType<typeof setTimeout> | null = null;
+let listening = false;
+
+/** What a system saved under `key`, or null for a new player. */
+export function readSave(key: string): string | null {
+  return live ? live.get(key) ?? null : get(key);
+}
+
+/** Saves a system's state: to the account when signed in, else to this browser. */
+export function writeSave(key: string, json: string): void {
+  if (!live) { set(key, json); return; }
+  if (live.get(key) === json) return;
+  live.set(key, json);
+  changed();
+}
+
+export function removeSave(key: string): void {
+  if (!live) { del(key); return; }
+  if (live.delete(key)) changed();
+}
+
+function offlineGame(): Save {
   const out: Save = {};
   for (const k of CLOUD_KEYS) { const v = get(k); if (v !== null) out[k] = v; }
   return out;
 }
-const canon = (s: Save): string => JSON.stringify(CLOUD_KEYS.filter((k) => k in s).map((k) => [k, s[k]]));
 
-function write(s: Save): void {
-  for (const k of CLOUD_KEYS) { if (typeof s[k] === 'string') set(k, s[k]); else del(k); }
+/** Wire format: each value as JSON, so the database row reads like the game. */
+function toWire(s: Save): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(s)) { try { out[k] = JSON.parse(v); } catch { /* corrupt: dropped */ } }
+  return out;
+}
+function fromWire(d: Record<string, unknown>): Save {
+  const out: Save = {};
+  // the first build stored the JSON strings themselves
+  for (const k of CLOUD_KEYS) if (k in d) out[k] = typeof d[k] === 'string' ? d[k] : JSON.stringify(d[k]);
+  return out;
 }
 
-function readMark(): Mark | null {
-  try { const m = JSON.parse(get(MARK_KEY) ?? 'null') as Mark | null; return m && typeof m.userId === 'string' ? m : null; } catch { return null; }
+/** How far along a game is: lifetime earnings (which never go down), then cash. */
+function progress(s: Save): [number, number] {
+  try {
+    const e = JSON.parse(s['keysrun.economy.v1'] ?? '{}') as { earned?: unknown; cash?: unknown };
+    return [Number(e.earned) || 0, Number(e.cash) || 0];
+  } catch { return [0, 0]; }
 }
-function mark(userId: string, s: Save): void { set(MARK_KEY, JSON.stringify({ userId, synced: canon(s) })); }
+/** True if `a` is strictly further along than `b`. */
+export function further(a: Save, b: Save): boolean {
+  const [ea, ca] = progress(a), [eb, cb] = progress(b);
+  return ea !== eb ? ea > eb : ca > cb;
+}
 
 async function call(path: string, token: string, init: RequestInit = {}): Promise<Response> {
   const ctl = new AbortController();
@@ -67,61 +113,83 @@ async function call(path: string, token: string, init: RequestInit = {}): Promis
   } finally { clearTimeout(t); }
 }
 
-async function upload(session: Session, s: Save, keepalive = false): Promise<boolean> {
+async function upload(keepalive = false): Promise<boolean> {
+  if (!live || !account) return true;
+  dirty = false;
   try {
-    const res = await call('/save', session.token, { method: 'PUT', body: JSON.stringify({ data: s }), keepalive });
-    if (res.ok) mark(session.userId, s);
-    return res.ok;
-  } catch { return false; }
+    const res = await call('/save', account.token, { method: 'PUT', body: JSON.stringify({ data: toWire(Object.fromEntries(live)) }), keepalive });
+    if (!res.ok) throw new Error(String(res.status));
+    return true;
+  } catch {
+    dirty = true;
+    schedule(RETRY_MS);
+    return false;
+  }
 }
 
-export type HydrateResult = 'server' | 'claimed' | 'local' | 'fresh' | 'unreachable';
+function schedule(ms: number): void {
+  if (timer) return;
+  timer = setTimeout(() => { timer = null; if (dirty) void upload(); }, ms);
+}
+function changed(): void { dirty = true; schedule(SYNC_DELAY_MS); }
 
-/** After sign-in, before the world is built: puts the account's game in localStorage. */
+export type HydrateResult = 'server' | 'recovered' | 'new' | 'unreachable';
+
+/** After sign-in, before the world is built: makes the account's save the game every system loads.
+ * 'unreachable' leaves the browser's offline game in play, unsaved to the account. */
 export async function hydrate(session: Session): Promise<HydrateResult> {
   let remote: Save | null;
   try {
     const res = await call('/save', session.token);
     if (!res.ok) return 'unreachable';
-    remote = ((await res.json()) as { data: Save | null }).data;
+    const d = ((await res.json()) as { data: Record<string, unknown> | null }).data;
+    remote = d ? fromWire(d) : null;
   } catch { return 'unreachable'; }
 
-  const m = readMark(), local = snapshot();
-  if (m?.userId === session.userId && canon(local) !== m.synced) {
-    // this account's game, changed since it was last synced (the tab closed first): it wins
-    await upload(session, local);
-    return 'local';
+  // The first cloud-save build kept the signed-in account's game in localStorage and the offline
+  // game in a backup. Put the offline game back where it belongs, keeping the account's copy as a
+  // candidate if it is this account's (it may hold changes that never reached the server).
+  let legacy: Save | null = null;
+  const markRaw = get(LEGACY_MARK_KEY);
+  if (markRaw !== null) {
+    let mark: { userId?: unknown } | null = null;
+    try { mark = JSON.parse(markRaw) as { userId?: unknown }; } catch { /* corrupt */ }
+    if (mark?.userId === session.userId) legacy = offlineGame();
+    let backup: Save = {};
+    try { backup = JSON.parse(get(LEGACY_BACKUP_KEY) ?? '{}') as Save; } catch { /* fresh offline game */ }
+    for (const k of CLOUD_KEYS) { if (typeof backup[k] === 'string') set(k, backup[k]); else del(k); }
+    del(LEGACY_BACKUP_KEY);
+    del(LEGACY_MARK_KEY);
   }
-  if (!m) set(BACKUP_KEY, JSON.stringify(local)); // offline progress: kept for signing out
-  if (remote) { write(remote); mark(session.userId, remote); return 'server'; }
-  if (!m || m.userId === session.userId) { await upload(session, local); return 'claimed'; }
-  write({}); // another account's game is in this browser: this one starts fresh
-  await upload(session, {});
-  return 'fresh';
+
+  let game: Save = remote ?? {};
+  let result: HydrateResult = remote ? 'server' : 'new';
+  if (legacy && !further(game, legacy)) game = legacy; // newer, unless the server is further along
+  const claimedBy = get(CLAIM_KEY);
+  if (claimedBy === null || claimedBy === session.userId) {
+    const offline = offlineGame();
+    if (Object.keys(offline).length > 0) {
+      set(CLAIM_KEY, session.userId);
+      if (!remote || further(offline, game)) { game = offline; result = 'recovered'; }
+    }
+  }
+
+  live = new Map(Object.entries(game));
+  account = session;
+  if (game !== remote) await upload();
+  if (!listening) {
+    listening = true;
+    globalThis.addEventListener?.('pagehide', flushNow);
+    globalThis.document?.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushNow(); });
+  }
+  return result;
 }
 
-let syncing: Session | null = null;
+function flushNow(): void { if (dirty) void upload(true); }
 
-/** Uploads the game whenever it has changed: every SYNC_S seconds and when the page is hidden. */
-export function startSync(session: Session): void {
-  if (syncing) return;
-  syncing = session;
-  const flushIfChanged = (keepalive: boolean): void => {
-    const s = snapshot();
-    if (canon(s) !== readMark()?.synced) void upload(session, s, keepalive);
-  };
-  setInterval(() => flushIfChanged(false), SYNC_S * 1000);
-  addEventListener('pagehide', () => flushIfChanged(true));
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushIfChanged(true); });
-}
-
-/** Before signing out: saves the account's game, then puts back the offline game it displaced. */
-export async function signOutSave(session: Session): Promise<void> {
-  const s = snapshot();
-  if (canon(s) !== readMark()?.synced) await upload(session, s);
-  let backup: Save = {};
-  try { backup = JSON.parse(get(BACKUP_KEY) ?? '{}') as Save; } catch { /* fresh offline game */ }
-  write(backup);
-  del(BACKUP_KEY);
-  del(MARK_KEY);
+/** Before signing out: the last changes up to the account, then back to the offline game. */
+export async function signOutSave(): Promise<void> {
+  if (dirty) await upload();
+  live = null;
+  account = null;
 }

@@ -23,6 +23,7 @@
  */
 import { WRECK_CHART_M, wreckEdgeDist, wrecksFor, type Wreck } from '@keysrun/shared/world/wrecks';
 import { WORLD_SEED } from '../../state/constants.js';
+import { readSave, writeSave } from '../../net/cloud-save.js';
 
 /**
  * Every wreck is on the chart from the first frame.
@@ -53,13 +54,13 @@ function load(): void {
   if (loaded) return;
   loaded = true;
   try {
-    const raw = globalThis.localStorage?.getItem(STORE_KEY);
+    const raw = readSave(STORE_KEY);
     if (raw) for (const id of JSON.parse(raw) as string[]) charted.add(id);
   } catch { /* storage unavailable or corrupt: start empty */ }
 }
 
 function save(): void {
-  try { globalThis.localStorage?.setItem(STORE_KEY, JSON.stringify([...charted])); } catch { /* ignore */ }
+  try { writeSave(STORE_KEY, JSON.stringify([...charted])); } catch { /* ignore */ }
 }
 
 export function isCharted(id: string): boolean {

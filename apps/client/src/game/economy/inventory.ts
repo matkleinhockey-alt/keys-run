@@ -22,6 +22,7 @@
  * wallet. That swap is confined to the two functions marked SERVER SEAM.
  */
 import { startingInventory, type Inventory } from '@keysrun/shared/sim/shop';
+import { readSave, writeSave } from '../../net/cloud-save.js';
 
 const STORAGE_KEY = 'keysrun.inventory.v1';
 
@@ -59,11 +60,11 @@ export function sanitizeInventory(raw: unknown): StoredInventory {
   };
 }
 
-/** SERVER SEAM 1/2 (inventory): where ownership comes from. Today this browser's localStorage;
- * later the server's copy fetched at login. Wrapped because storage throws in private windows. */
+/** SERVER SEAM 1/2 (inventory): where ownership comes from: the account's save when signed in, else
+ * this browser's localStorage (net/cloud-save.ts). Wrapped because storage throws in private windows. */
 export function loadInventory(): StoredInventory {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = readSave(STORAGE_KEY);
     // No save yet = a new player, who gets a pack of shafts so the speargun works out of the
     // box. A reloaded save is taken exactly as stored.
     return raw ? sanitizeInventory(JSON.parse(raw)) : { inventory: startingInventory(), clockS: 0 };
@@ -75,5 +76,5 @@ export function loadInventory(): StoredInventory {
 /** SERVER SEAM 2/2 (inventory): where ownership goes. Today a local write; later a no-op, because
  * the server records the purchase when it validates `buy`. */
 export function saveInventory(s: StoredInventory): void {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch { /* unremembered, not fatal */ }
+  try { writeSave(STORAGE_KEY, JSON.stringify(s)); } catch { /* unremembered, not fatal */ }
 }

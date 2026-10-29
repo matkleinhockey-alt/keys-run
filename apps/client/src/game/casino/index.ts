@@ -38,6 +38,7 @@ import { CABINETS, CABINET_THEMES } from '@keysrun/shared/world/casino';
 import { buildStrips, paintSymbol, type Strips } from './art.js';
 import { CAB_H, CAB_W, drawCabinet } from './render.js';
 import './casino.css';
+import { readSave, writeSave } from '../../net/cloud-save.js';
 
 const STORAGE_KEY = 'keysrun.casino.v1';
 
@@ -46,14 +47,14 @@ function load(): CasinoState {
     try { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0]; } catch { return (Date.now() ^ 0x2545f491) >>> 0; }
   };
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = readSave(STORAGE_KEY);
     return raw ? sanitizeCasino(JSON.parse(raw), fresh()) : createCasino(fresh());
   } catch {
     return createCasino(fresh());
   }
 }
 function save(s: CasinoState): void {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch { /* unremembered, not fatal */ }
+  try { writeSave(STORAGE_KEY, JSON.stringify(s)); } catch { /* unremembered, not fatal */ }
 }
 
 /** What the casino needs from the audio engine (a subset, so tests can pass a stub). */
