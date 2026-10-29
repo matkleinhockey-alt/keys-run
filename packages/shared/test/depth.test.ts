@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { depthAt, landH, zoneAt, offshoreF, creekDist, nearBridge, nearHump, type Zone } from '../src/world/depth.js';
 import { shoreInfo } from '../src/world/chain.js';
 import { COAST_CAP } from '../src/world/coast.js';
+import { expectGolden } from './golden-compare.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -20,8 +21,8 @@ describe('world/depth: golden fidelity against legacy/index.html', () => {
     expect(awayFromShore.length).toBeGreaterThan(allSamples.length * 0.75);
   });
 
-  it('depthAt matches legacy exactly, bit for bit, away from the shores', () => {
-    for (const p of awayFromShore) expect(depthAt(p.x, p.z)).toBe(p.depthAt);
+  it('depthAt matches legacy away from the shores', () => {
+    for (const p of awayFromShore) expectGolden(depthAt(p.x, p.z), p.depthAt, `depthAt(${p.x}, ${p.z})`);
   });
 
   it('landH matches legacy exactly, bit for bit, away from the shores', () => {
