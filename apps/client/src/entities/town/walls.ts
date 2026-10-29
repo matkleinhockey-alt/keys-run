@@ -226,20 +226,60 @@ export function buildWalls(near: THREE.Group, glow: GeoBatch, kit: TownKit): { d
     det.span(wu - 0.66, wu + 0.66, sill + 3.04, sill + 3.1, off(0.1), off(0.0), 0x3a2c36);
   }
 
+  /**
+   * A side wall gets the same treatment by the metre that a rear one does.
+   *
+   * It used to place a fixed set — two windows, a downpipe, a meter — however long the wall was,
+   * while `rearDetails` above bays every BAY_W and says exactly why: "one door in the middle of
+   * half a football pitch of blank block reads as unfinished". Ten of the twelve exposed sides in
+   * town are longer than that 16 m (the casino's is 26, the diner, the bar and the motel 24), and
+   * these are the walls you walk the length of on Palm Avenue and in the alley, so they were the
+   * emptiest surfaces in the town and the ones most looked at.
+   *
+   * Bayed now, each bay rolled from its own seed. The things a building has ONE of stay one: the
+   * downpipe at the back corner and the meter, same as the rear wall keeps its downpipes to the
+   * building's corners rather than sprouting one per bay.
+   */
   function sideDetails(l: Lot, x: number, dir: 1 | -1, i: number): void {
-    const r = lcg(l.u0 * 1.3 + l.v0 * 0.7 + i), D = l.v1 - l.v0;
-    // windows are only on the upper part of a side wall: two, set back in the middle and toward the front, with sills and a drip stain
-    const wh = Math.min(l.h - 1.2, 3.4);
-    for (const f of [0.28, 0.7]) {
-      const wz = Zf(l.v0 + D * (f + (r() - 0.5) * 0.06));
-      det.span(x + dir * 0.0, x + dir * 0.06, PAD_Y + wh - 0.9, PAD_Y + wh, wz - 0.6, wz + 0.6, 0x1d2a33);
-      det.span(x, x + dir * 0.12, PAD_Y + wh - 0.96, PAD_Y + wh - 0.9, wz - 0.7, wz + 0.7, 0xe0dccf);
-    }
+    const D = l.v1 - l.v0;
+    const bays = Math.max(1, Math.round(D / BAY_W));
+    for (let b = 0; b < bays; b++) sideBay(l, x, dir, l.v0 + (D * b) / bays, l.v0 + (D * (b + 1)) / bays, b, i);
+
+    // One downpipe, at the back corner where the gutter actually drains.
     det.cyl(x + dir * 0.05, PAD_Y, Zf(l.v1) + 0.2, 0.045, 0.045, Math.min(l.h, 5) - 0.3, 0xb9bec2, 6);
-    // a meter box and a conduit run, because every wall has a conduit run
+    // A meter box and its conduit run, because every wall has a conduit run. One per building.
     const mz = Zf(l.v0 + D * 0.5);
     det.span(x, x + dir * 0.18, PAD_Y + 1.1, PAD_Y + 1.7, mz - 0.3, mz + 0.3, 0x8d8f91);
     det.box(x + dir * 0.03, PAD_Y + 1.4 + (l.h - 1.4) / 2 - 0.6, mz, 0.04, l.h - 1.8, 0.04, 0x4a4d52);
+  }
+
+  function sideBay(l: Lot, x: number, dir: 1 | -1, bv0: number, bv1: number, bay: number, i: number): void {
+    const r = lcg(l.u0 * 1.3 + l.v0 * 0.7 + i + bay * 11.3), D = bv1 - bv0;
+    // Windows are only on the upper part of a side wall: two per bay, with sills.
+    const wh = Math.min(l.h - 1.2, 3.4);
+    for (const f of [0.28, 0.7]) {
+      const wz = Zf(bv0 + D * (f + (r() - 0.5) * 0.06));
+      det.span(x + dir * 0.0, x + dir * 0.06, PAD_Y + wh - 0.9, PAD_Y + wh, wz - 0.6, wz + 0.6, 0x1d2a33);
+      det.span(x, x + dir * 0.12, PAD_Y + wh - 0.96, PAD_Y + wh - 0.9, wz - 0.7, wz + 0.7, 0xe0dccf);
+    }
+    // ...and one thing at head height, so the bottom half of the wall is not bare block. Which
+    // thing is rolled per bay, so a long wall is not the same bay repeated down its length.
+    const az = Zf(bv0 + D * (0.35 + 0.3 * r()));
+    const pick = r();
+    if (pick < 0.4) {
+      // a wall vent with its louvre
+      det.span(x, x + dir * 0.16, PAD_Y + 2.1, PAD_Y + 2.8, az - 0.42, az + 0.42, 0x6f7479);
+      for (let k = 0; k < 3; k++) det.span(x + dir * 0.17, x + dir * 0.19, PAD_Y + 2.25 + k * 0.18, PAD_Y + 2.31 + k * 0.18, az - 0.38, az + 0.38, 0x3b3f44);
+    } else if (pick < 0.72) {
+      // a condenser on brackets, with its line going into the wall
+      det.box(x + dir * 0.38, PAD_Y + 2.35, az, 0.68, 0.62, 0.72, 0x9aa0a4);
+      for (const sz of [-0.28, 0.28]) det.box(x + dir * 0.2, PAD_Y + 2.0, az + sz, 0.36, 0.05, 0.05, 0x55595e);
+      det.cyl(x + dir * 0.1, PAD_Y + 2.6, az + 0.3, 0.035, 0.035, 0.5, 0x2e3237, 6, { rz: Math.PI / 2 });
+    } else {
+      // a standpipe and a stain where it has been running down the block for years
+      det.cyl(x + dir * 0.08, PAD_Y, az, 0.04, 0.04, Math.min(l.h, 5) - 0.6, 0xa8adb2, 6);
+      det.span(x, x + dir * 0.01, PAD_Y, PAD_Y + 1.6, az - 0.14, az + 0.14, 0x6b6f66);
+    }
   }
 
   let n = 0;
