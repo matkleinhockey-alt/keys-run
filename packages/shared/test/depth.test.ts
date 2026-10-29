@@ -16,16 +16,16 @@ const allSamples = [...golden.grid, ...golden.points];
  * That is still most of the sea — the depth bands, humps, channels, creeks, bridge and the mainland. */
 const awayFromShore = allSamples.filter((p) => p.shoreD > COAST_CAP + 20 && shoreInfo(p.x, p.z).d >= COAST_CAP);
 
-describe('world/depth: golden fidelity against legacy/index.html', () => {
+describe('world/depth: the world does not change by accident', () => {
   it('still covers most of the golden samples away from the shores', () => {
     expect(awayFromShore.length).toBeGreaterThan(allSamples.length * 0.75);
   });
 
-  it('depthAt matches legacy away from the shores', () => {
+  it('depthAt matches the baseline away from the shores', () => {
     for (const p of awayFromShore) expectGolden(depthAt(p.x, p.z), p.depthAt, `depthAt(${p.x}, ${p.z})`);
   });
 
-  it('landH matches legacy exactly, bit for bit, away from the shores', () => {
+  it('landH matches the baseline exactly, away from the shores', () => {
     for (const p of awayFromShore) expect(landH(p.x, p.z)).toBe(p.landH);
   });
 
@@ -33,11 +33,11 @@ describe('world/depth: golden fidelity against legacy/index.html', () => {
     for (const p of awayFromShore) expect(zoneAt(p.x, p.z)).toBe(p.zoneAt);
   });
 
-  it('offshoreF matches legacy exactly, bit for bit', () => {
+  it('offshoreF matches the baseline exactly', () => {
     for (const p of allSamples) expect(offshoreF(p.x, p.z)).toBe(p.offshoreF);
   });
 
-  it('creekDist matches legacy exactly, bit for bit', () => {
+  it('creekDist matches the baseline exactly', () => {
     for (const p of allSamples) expect(creekDist(p.x, p.z)).toBe(p.creekDist);
   });
 

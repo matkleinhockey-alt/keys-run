@@ -29,13 +29,13 @@ describe('world/chain: golden fidelity against legacy/index.html', () => {
     });
   });
 
-  it('chainZ matches legacy over the 60x60 golden grid', () => {
+  it('chainZ matches the baseline over the 60x60 grid', () => {
     for (const p of golden.grid) {
       expect(chainZ(p.x)).toBe(p.chainZ);
     }
   });
 
-  it('shoreInfo matches legacy wherever the mainland (still legacy\'s ellipse) is the nearest shore', () => {
+  it('shoreInfo matches the baseline wherever the mainland ellipse is the nearest shore', () => {
     const near = [...golden.grid, ...golden.points].filter((p) => p.shoreIsl === 'Florida mainland (Miami)' && shoreInfo(p.x, p.z).isl?.mainland);
     expect(near.length).toBeGreaterThan(100);
     for (const p of near) {

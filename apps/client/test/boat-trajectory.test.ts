@@ -1,213 +1,92 @@
 /**
- * Physics fidelity test (docs/ARCHITECTURE.md Phase 0 acceptance criterion A, "the strong
- * test"): drives an independent, legacy-extracted oracle (boat-oracle.ts) and the new pure
- * `stepBoat` (packages/shared/src/sim/boat.ts) through an identical ~600-step scripted input
- * sequence at a forced fixed dt of 1/30, and asserts the trajectories match tightly.
+ * The boat physics does not change by accident.
  *
- * If this test fails, the port has a real bug — per the task brief, the fix is to find and fix
- * it, not to loosen the tolerance.
+ * ## What this replaced, and why
  *
- * ## The one deliberate divergence from legacy: wake ring spacing
+ * This used to drive an oracle extracted at test time from `legacy/index.html` alongside
+ * `stepBoat` and assert they agreed. That was the right test while the port was in flight, and
+ * it earned its keep — it caught a real mistake the day it was removed, when a `seaEffects` gate
+ * was applied to legacy's own low-speed yaw term as well as to the new one.
  *
- * Legacy emits a wake ring every 0.35 s and gives each one the same amplitude regardless of how
- * far the boat moved in between. At trolling speed that lays the rings about a metre apart and a
- * dozen of them overlap and stack, so the wake gets BIGGER the slower you go: measured peak
- * height 0.97 m one metre astern at 5 knots, against 0.21 m at 37. On screen that is a white
- * mound sitting on the transom, and because a boat's own wake feeds back into its own buoyancy
- * (sim/boat.ts), the boat rides up on a mountain it invented. `WAKE_FULL_SPACING_SPEED` scales a
- * ring's amplitude by the distance travelled since the last one, which is the water it actually
- * stands for.
+ * It had two problems by the end. It could only compare the parts of the model legacy also had,
+ * so every piece of physics added since — the short wind chop under the hull, the speed a seaway
+ * costs, the bow being pushed around at speed — had to be switched OFF (`seaEffects: 0`) for the
+ * comparison to mean anything. The test therefore verified a configuration the game does not
+ * ship. And it pinned the boat to a historical artifact rather than to a decision.
  *
- * That is a deliberate behaviour change, so it cannot be bit-identical to legacy and this test
- * records exactly how far it may differ rather than quietly relaxing:
+ * So it is a baseline of its own behaviour now, recorded with the physics as shipped. It detects
+ * change; it does not claim correctness. When the physics is MEANT to change, regenerate:
  *
- *  - x, z, heading and speed stay at 1e-9. The boat goes to precisely the same places; measured
- *    divergence over the whole run is exactly 0 on all four. If any of those move, something
- *    other than the wake correction has changed and the port has a real bug.
- *  - y, pitch and roll are how the hull RIDES, which is the thing being corrected. Measured
- *    maxima against legacy are 0.287 m, 0.039 rad and 0.119 rad — the boat sitting lower and
- *    flatter at low speed because it is no longer climbing its own phantom wake. Bounded below
- *    with headroom, so a regression that reintroduced the mound (or invented a bigger one) would
- *    still fail.
+ *     node apps/client/test/boat-baseline.mjs
+ *
+ * and read the diff before committing it. A regenerate with no explanation is the same as
+ * deleting the test.
+ *
+ * ## Why the tolerances are what they are
+ *
+ * Tight, because the trajectory turns out not to be chaotic over this script: nudging the start
+ * by 1e-9 m leaves the run 1e-9 m away six hundred steps later, with no amplification and no
+ * collision flipping sides. So the only drift to absorb is last-ulp differences in `Math.sin` and
+ * `Math.cos` between architectures — the same thing that had the world goldens failing on CI for
+ * months. These sit far above that and far below any real change, which moves the boat metres.
  */
-
 import { describe, expect, it } from 'vitest';
-import { createBoatState, stepBoat, type BoatEnv, type BoatInput, type BoatState, type DockRect, type Piling } from '@keysrun/shared/sim/boat';
-import { chainZ } from '@keysrun/shared/world/chain';
-import { WB } from '@keysrun/shared/world/depth';
-import { createBoatOracle, type OracleControls, type OracleDockRect, type OraclePiling, type OracleSnapshot } from './boat-oracle.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { run, waypoints, SCRIPT } from './boat-script.mjs';
 
-const DT = 1 / 30;
-
-/**
- * How far the hull's ride may differ from legacy because of the wake-spacing correction (see the
- * module header). Measured maxima are 0.287 m / 0.039 rad / 0.119 rad; these sit just above, so
- * the test still fails if the divergence grows.
- */
-const WAKE_FIX_Y = 0.35;
-const WAKE_FIX_PITCH = 0.06;
-const WAKE_FIX_ROLL = 0.15;
-
-// legacy's grady-white hull (BOATS[1] — legacy's actual default boat), trimmed to the fields
-// updateBoat/autoChaseControl read. See packages/shared/src/content/boats.ts.
-const HULL = { len: 9.3, beam: 3.23, top: 58, accel: 0.5, turn: 0.9, draft: 0.72 };
-
-// legacy SPAWN: open water in Boot Key Harbor (index.html:367).
-const SPAWN_X = -1150;
-const SPAWN_Z = chainZ(SPAWN_X) + 305;
-const SPAWN_H = Math.PI / 2;
-
-interface ScriptStep {
-  fwd: boolean; back: boolean; left: boolean; right: boolean;
-  trimUp: boolean; trimDn: boolean;
-  gear: 'D' | 'N' | 'R';
-  trimMode: boolean;
-  sw: number; ch: number;
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+interface Step { x: number; z: number; h: number; speed: number; y: number; pitch: number; roll: number }
+interface Baseline {
+  dock: { x0: number; x1: number; z0: number; z1: number };
+  piling: { x: number; z: number };
+  steps: Step[];
+  events: Record<string, number>;
 }
+const baseline = JSON.parse(fs.readFileSync(path.join(HERE, 'boat-baseline.json'), 'utf8')) as Baseline;
 
-const CALM = { sw: 0.9, ch: 1 };       // legacy's initial SW/CH (index.html:435)
-const ROUGH = { sw: 2.6, ch: 1.1 };    // legacy SEA_STATES[3], "Big swell"
+/** Per-field tolerance. See the header for why these are safe to have this tight. */
+const TOL: Record<keyof Step, number> = {
+  x: 1e-5, z: 1e-5, y: 1e-5,
+  h: 1e-7, speed: 1e-6, pitch: 1e-6, roll: 1e-6,
+};
 
-const base: ScriptStep = { fwd: false, back: false, left: false, right: false, trimUp: false, trimDn: false, gear: 'D', trimMode: false, ...CALM };
+describe('boat trajectory', () => {
+  it('matches its baseline over a ~600-step scripted run at a fixed 1/30 s timestep', () => {
+    const { dock, piling } = waypoints();
+    // The obstacles are derived from the boat's own path, so if the physics moved, these move
+    // too — and a baseline compared against a different course would be meaningless.
+    expect(dock, 'the dock waypoint moved, so the trajectory did').toEqual(baseline.dock);
+    expect(piling, 'the piling waypoint moved, so the trajectory did').toEqual(baseline.piling);
 
-/**
- * ~600 steps: accelerate, trim, turn, chop, throttle off, reverse, hard turn, trim-mode, idle.
- * Both the oracle and stepBoat are driven by this exact same array — see docs/ARCHITECTURE.md
- * acceptance criterion A.
- */
-function buildScript(): ScriptStep[] {
-  const steps: ScriptStep[] = [];
-  const push = (n: number, over: Partial<ScriptStep>) => {
-    for (let i = 0; i < n; i++) steps.push({ ...base, ...over });
-  };
-  push(90, { fwd: true });                                              // accelerate
-  push(15, { fwd: true, trimUp: true });                                 // trim up at speed
-  push(90, { fwd: true, left: true });                                   // turn under power
-  push(90, { fwd: true, ...ROUGH });                                     // chop
-  push(60, {});                                                          // throttle off, coast
-  push(40, { fwd: true, gear: 'R' });                                    // reverse thrust
-  push(80, { right: true, gear: 'D' });                                  // hard turn, coasting
-  push(30, { fwd: true, trimDn: true, trimMode: true });                 // trim mode, trimming down
-  push(105, {});                                                         // idle, settle
-  return steps;
-}
+    const { steps, events } = run([dock], [piling]);
+    expect(steps.length).toBe(baseline.steps.length);
+    expect(steps.length).toBe(SCRIPT.length);
 
-const SCRIPT = buildScript();
-
-function toOracleControls(s: ScriptStep): OracleControls {
-  return { fwd: s.fwd, back: s.back, left: s.left, right: s.right, trimUp: s.trimUp, trimDn: s.trimDn, gear: s.gear, engineOn: true, trimMode: s.trimMode, autoChaseEnabled: true };
-}
-
-function toBoatInput(s: ScriptStep): BoatInput {
-  return { fwd: s.fwd, back: s.back, left: s.left, right: s.right, trimUp: s.trimUp, trimDn: s.trimDn };
-}
-
-function baseEnv(sw: number, ch: number, dockRects: readonly DockRect[], pilings: readonly Piling[]): Omit<BoatEnv, 't'> {
-  return {
-    hull: HULL, sw, ch, worldBounds: WB, pilings, dockRects,
-    canDrive: true, fightActive: false, lineOut: false, luigiOn: false,
-    // The oracle is extracted from legacy, which has none of the sea effects added since: the
-    // short wind chop under the hull, the speed a seaway costs, or the bow being pushed around
-    // at speed. With them on this test would measure nothing else; with them off it keeps doing
-    // its real job, which is proving the rest of the integrator still matches legacy exactly.
-    seaEffects: 0,
-  };
-}
-
-/** Run stepBoat alone through the full script with a given (fixed) obstacle set, recording x/z at every step. */
-function runPortOnly(dockRects: readonly DockRect[], pilings: readonly Piling[]): Array<{ x: number; z: number }> {
-  let state = createBoatState(SPAWN_X, SPAWN_Z, SPAWN_H);
-  let t = 0;
-  const positions: Array<{ x: number; z: number }> = [];
-  for (const s of SCRIPT) {
-    t += DT;
-    state = { ...state, gear: s.gear, trimMode: s.trimMode };
-    state = stepBoat(state, toBoatInput(s), { ...baseEnv(s.sw, s.ch, dockRects, pilings), t }, DT);
-    positions.push({ x: state.x, z: state.z });
-  }
-  return positions;
-}
-
-/**
- * Pick two real waypoints on stepBoat's own trajectory to drop a synthetic dock rect and a
- * synthetic piling on — guaranteeing dockCollide/piling-collide are actually exercised, without
- * hand-predicting coordinates. Done in two stages because placing the dock perturbs every later
- * position: stage 1 finds the dock from the *unobstructed* trajectory (valid, since the dock is
- * encountered first); stage 2 finds the piling from the trajectory *with that dock already in
- * play* (so it reflects what Pass 1 will actually fly through by the time it gets there).
- */
-function findWaypoints(): { dock: DockRect; piling: Piling } {
-  const clean = runPortOnly([], []);
-  const a = clean[60];
-  const dock: DockRect = { x0: a.x - 4, x1: a.x + 4, z0: a.z - 4, z1: a.z + 4 };
-
-  const withDock = runPortOnly([dock], []);
-  const b = withDock[400];
-  const piling: Piling = { x: b.x, z: b.z };
-
-  return { dock, piling };
-}
-
-describe('boat trajectory: stepBoat vs. an independent legacy-extracted oracle', () => {
-  it('matches over a ~600-step scripted input sequence at a fixed 1/30 s timestep', () => {
-    const { dock, piling } = findWaypoints();
-    const dockRects: DockRect[] = [dock];
-    const pilings: Piling[] = [piling];
-    const oracleDockRects: OracleDockRect[] = [dock];
-    const oraclePilings: OraclePiling[] = [piling];
-
-    let portState: BoatState = createBoatState(SPAWN_X, SPAWN_Z, SPAWN_H);
-    const oracle = createBoatOracle(HULL, SPAWN_X, SPAWN_Z, SPAWN_H);
-
-    const maxDiff = { x: 0, z: 0, h: 0, speed: 0, y: 0, pitch: 0, roll: 0 };
-    let t = 0;
-    let dockHits = 0, pilingHits = 0, slams = 0, beaches = 0;
-
-    for (let i = 0; i < SCRIPT.length; i++) {
-      const s = SCRIPT[i];
-      t += DT;
-
-      portState = { ...portState, gear: s.gear, trimMode: s.trimMode };
-      portState = stepBoat(portState, toBoatInput(s), { ...baseEnv(s.sw, s.ch, dockRects, pilings), t }, DT);
-      for (const ev of portState.events) {
-        if (ev.type === 'bumpedDock') dockHits++;
-        if (ev.type === 'bumpedPiling') pilingHits++;
-        if (ev.type === 'slam') slams++;
-        if (ev.type === 'beached') beaches++;
+    const worst: Record<string, { d: number; at: number }> = {};
+    for (let i = 0; i < steps.length; i++) {
+      for (const k of Object.keys(TOL) as Array<keyof Step>) {
+        const d = Math.abs(steps[i][k] - baseline.steps[i][k]);
+        if (!worst[k] || d > worst[k].d) worst[k] = { d, at: i };
+        // Fail at the first step that diverges, with the step number: an aggregate alone makes
+        // this very slow to debug.
+        expect(d, `${k} at step ${i}`).toBeLessThanOrEqual(TOL[k]);
       }
-
-      oracle.setEnv(s.sw, s.ch, oracleDockRects, oraclePilings);
-      oracle.setControls(toOracleControls(s));
-      const o: OracleSnapshot = oracle.step(DT, t);
-
-      maxDiff.x = Math.max(maxDiff.x, Math.abs(portState.x - o.x));
-      maxDiff.z = Math.max(maxDiff.z, Math.abs(portState.z - o.z));
-      maxDiff.h = Math.max(maxDiff.h, Math.abs(portState.h - o.h));
-      maxDiff.speed = Math.max(maxDiff.speed, Math.abs(portState.speed - o.speed));
-      maxDiff.y = Math.max(maxDiff.y, Math.abs(portState.y - o.y));
-      maxDiff.pitch = Math.max(maxDiff.pitch, Math.abs(portState.pitch - o.pitch));
-      maxDiff.roll = Math.max(maxDiff.roll, Math.abs(portState.roll - o.roll));
-
-      // Fail fast with full context at the exact step where things first diverge, rather than
-      // only a final aggregate — much faster to debug. Explicit tolerances per
-      // docs/ARCHITECTURE.md acceptance criterion A: 1e-9 on x/z/heading/speed, 1e-6 on
-      // y/pitch/roll.
-      const ctx = `at step ${i} (t=${t.toFixed(3)})`;
-      expect(Math.abs(portState.x - o.x), `x ${ctx}`).toBeLessThanOrEqual(1e-9);
-      expect(Math.abs(portState.z - o.z), `z ${ctx}`).toBeLessThanOrEqual(1e-9);
-      expect(Math.abs(portState.h - o.h), `heading ${ctx}`).toBeLessThanOrEqual(1e-9);
-      expect(Math.abs(portState.speed - o.speed), `speed ${ctx}`).toBeLessThanOrEqual(1e-9);
-      // See the header: y/pitch/roll carry the wake-spacing correction and legacy does not.
-      expect(Math.abs(portState.y - o.y), `y ${ctx}`).toBeLessThanOrEqual(WAKE_FIX_Y);
-      expect(Math.abs(portState.pitch - o.pitch), `pitch ${ctx}`).toBeLessThanOrEqual(WAKE_FIX_PITCH);
-      expect(Math.abs(portState.roll - o.roll), `roll ${ctx}`).toBeLessThanOrEqual(WAKE_FIX_ROLL);
     }
+    console.log('boat-trajectory worst |diff|:', Object.fromEntries(
+      Object.entries(worst).map(([k, v]) => [k, `${v.d.toExponential(1)} @${v.at}`]),
+    ));
 
-    console.log('boat-trajectory max |diff| over', SCRIPT.length, 'steps:', maxDiff,
-      '| events — dock:', dockHits, 'piling:', pilingHits, 'slam:', slams, 'beached:', beaches);
+    // The events have to match too, or the boat could take the same path while silently no
+    // longer noticing it hit anything.
+    expect(events).toEqual(baseline.events);
+  });
 
-    // Sanity: the collision/slam code paths actually got exercised at least once (otherwise
-    // this test would silently stop covering dockCollide/piling-collide/slam).
-    expect(dockHits + pilingHits).toBeGreaterThan(0);
+  it('actually exercises the collision paths it claims to', () => {
+    // Without this the dock and piling could drift off the course and the test would keep
+    // passing while covering nothing but open water.
+    expect(baseline.events.bumpedDock + baseline.events.bumpedPiling,
+      'the scripted run no longer hits the dock or the piling').toBeGreaterThan(0);
   });
 });

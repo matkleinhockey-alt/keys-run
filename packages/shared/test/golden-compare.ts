@@ -1,5 +1,5 @@
 /**
- * Golden comparison for a value that goes through `Math.sin`/`Math.cos`.
+ * Comparison for a baseline value that goes through `Math.sin`/`Math.cos`.
  *
  * These were `toBe` — bit equality — and that is not a contract any platform can keep. The
  * transcendentals are not required to be correctly rounded, and V8 does not compute them the

@@ -10,8 +10,8 @@ interface WaveSample { x: number; z: number; t: number; amp: number; sw: number;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const golden: any = JSON.parse(fs.readFileSync(path.join(HERE, 'golden.json'), 'utf8'));
 
-describe('waves: golden fidelity against legacy/index.html', () => {
-  it('waveHBase matches legacy\'s wave-sum loop over 500 (x,z,t) samples', () => {
+describe('waves: the wave sum does not change by accident', () => {
+  it('waveHBase matches the baseline over 500 (x,z,t) samples', () => {
     for (const s of golden.waves as WaveSample[]) {
       expectGolden(waveHBase(s.x, s.z, s.t, s.amp, s.sw, s.ch), s.waveHBase, `waveHBase(${s.x}, ${s.z}, ${s.t})`);
     }
