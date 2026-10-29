@@ -5,22 +5,25 @@
 import * as THREE from 'three';
 import { clamp, lerp } from '../../core/math.js';
 import { F } from './state.js';
-import type { BoatModel } from '../../entities/boat/model.js';
 import { aimFlex, applyFlex, bendTarget, createFlex, kickFlex, lineTarget, recoilFlex, stepFlex, worldRodFor } from './rod-bend.js';
 
 export interface RodViewModel {
   group: THREE.Group;
   tip: THREE.Object3D;
-  /** `model` is the boat's third-person rod, flexed by the same solver. */
-  update(dt: number, fpOn: boolean, reeling: boolean, actionHeld: boolean, model?: BoatModel): void;
+  /** `model` is the third-person rod — the boat's, or the one in the walker's hands ashore
+   * (shore-rod.ts) — flexed by the same solver. */
+  update(dt: number, fpOn: boolean, reeling: boolean, actionHeld: boolean, model?: RodHolder): void;
   whip(): void;
   /** A transient load hit the line (bolt, head shake, jump landing): tip yanks down. */
   kick(mag: number): void;
   /** The load just vanished (hook pulled, line parted): tip whips back past straight. */
   recoil(load: number): void;
   /** Where the line is tied: the first-person tip, or the third-person rod's *flexing* tip. */
-  lineTip(model: BoatModel, fpOn: boolean): THREE.Object3D;
+  lineTip(model: RodHolder, fpOn: boolean): THREE.Object3D;
 }
+
+/** Anything carrying a third-person rod: the boat model, or the walker's shore rod. */
+export interface RodHolder { rodPivot: THREE.Group }
 
 export function createRodViewModel(camera: THREE.Camera): RodViewModel {
   const group = new THREE.Group();
@@ -132,7 +135,7 @@ export function createRodViewModel(camera: THREE.Camera): RodViewModel {
   let lift = 0;
   let worldFlex: ReturnType<typeof createFlex> | null = null;
 
-  function update(dt: number, fpOn: boolean, reeling: boolean, actionHeld: boolean, model?: BoatModel): void {
+  function update(dt: number, fpOn: boolean, reeling: boolean, actionHeld: boolean, model?: RodHolder): void {
     // The third-person rod flexes whether or not the camera is first-person: it is what you see from
     // the boat camera, and a kick landing while the view is toggled must not be lost.
     if (model) {

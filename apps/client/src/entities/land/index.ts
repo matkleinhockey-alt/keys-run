@@ -29,7 +29,9 @@
  */
 import * as THREE from 'three';
 import type { BoatState } from '@keysrun/shared/sim/boat';
-import { DECK_TOP, PAD, PAD_Y, SURFACES, TOWN_FRAME, LOTS, toLocal, toWorld, COLLIDERS, groundAt } from '@keysrun/shared/world/town';
+import type { WalkerState } from '@keysrun/shared/sim/walker';
+import { DECK_TOP, PAD, PAD_Y, SURFACES, TOWN_FRAME, LOTS, toLocal, toWorld, COLLIDERS, groundAt, inTownFootprint, type Rect } from '@keysrun/shared/world/town';
+import { shoreInfo } from '@keysrun/shared/world/chain';
 import { VENUES } from '@keysrun/shared/content/venues';
 import { buy, emptyInventory } from '@keysrun/shared/sim/shop';
 import { CASINO_LOT } from '@keysrun/shared/world/casino';
@@ -41,6 +43,7 @@ import { createOutfitSync, wardrobe } from '../life/outfit.js';
 import { createTown, type Town } from '../town/town.js';
 import { animateGait } from '../town/people.js';
 import { createLandController, type LandController, type LandMode, type WalkableEstate } from './controller.js';
+import type { WalkDock } from './ground.js';
 import { updateLandCamera, cycleLandView } from './camera.js';
 import type { ShopPort } from '../../ui/gear.js';
 import { createLandHud, type LandHudHandles } from './hud.js';
@@ -87,11 +90,25 @@ export interface LandDeps {
   getRunBest?(): RunBest | null;
   /** Your own Keys Run Estates lots: walkable, and their docks are somewhere to tie up. */
   estates?(): readonly WalkableEstate[];
+  /** The waterfront houses' private docks (walkable, somewhere to tie up) and the houses (solid). */
+  docks?: readonly WalkDock[];
+  solid?: readonly Rect[];
 }
 
 export interface LandSystem {
   readonly mode: LandMode;
   readonly town: Town;
+  /** The walker while ashore (null aboard), for other players to see (net/remote-bodies.ts). */
+  readonly walker: WalkerState | null;
+  /** Standing on a pier, a private dock or a marina's planks: where, and which way you face, for
+   * rod fishing ashore. Null on dry land or aboard. */
+  fishSpot(): { name: string; x: number; y: number; z: number; yaw: number } | null;
+  /** The walking body while ashore (null aboard): fishing puts a rod in its hands. */
+  readonly body: Human | null;
+  /** The land camera is first-person (the body is hidden, the camera-space rod is the one in view). */
+  readonly firstPerson: boolean;
+  /** Rod fishing ashore (game/world.ts wires it once both systems exist) — see `LandAngler`. */
+  attachAngler(a: LandAngler): void;
   /** While ashore the boat is pinned where you left it; call on the state each fixed step. */
   holdBoat(s: BoatState): BoatState;
   /** One fixed physics step. */
@@ -104,6 +121,22 @@ export interface LandSystem {
   update(dt: number, t: number): void;
   exitToBoat(): void;
   dispose(): void;
+}
+
+/**
+ * What land mode asks of rod fishing (game/fishing/shore.ts has the rules). A port rather than
+ * `LandDeps`, because fishing is built before land and needs `fishSpot()` from it: whichever is
+ * built second wires the two together.
+ */
+export interface LandAngler {
+  /** Stand still: a cast is charging, a line is out, or a catch card is up. */
+  holdStill(): boolean;
+  /** The prompt for fishing off `deck` ("Space  Cast off the pier"), or null when the fishing HUD has it. */
+  prompt(deck: string): string | null;
+  /** Why you cannot go back aboard right now (a fish on, a catch card up), or null. */
+  refuseBoard(): string | null;
+  /** The touch pad's cast button, pressed or released. */
+  cast(down: boolean): void;
 }
 
 function $(id: string): HTMLElement | null { return document.getElementById(id); }
@@ -119,7 +152,7 @@ interface Snapshot {
 
 export function createLandSystem(deps: LandDeps): LandSystem {
   const { scene, camera } = deps;
-  const ctl: LandController = createLandController({ canvas: deps.canvas, estates: deps.estates });
+  const ctl: LandController = createLandController({ canvas: deps.canvas, estates: deps.estates, docks: deps.docks, solid: deps.solid });
   const hud: LandHudHandles = createLandHud(deps.isTouch, deps.shop);
   const town: Town = createTown({ scene, lightMats: deps.lightMats, getTodK: deps.getTodK, onBuilt: deps.onBuilt });
 
@@ -130,6 +163,7 @@ export function createLandSystem(deps: LandDeps): LandSystem {
   let panel: 'none' | 'open' = 'none';
   const visits = new Map<string, number>();
   let lastDockPrompt: string | null = null;
+  let angler: LandAngler | null = null;
   // Cosmetics (entities/life/outfit.ts): dresses the walking body and the captain from the shared
   // Inventory.wearing. Lives here because this facade already owns the body and is handed the model
   // and the shadow sweep -- which keeps game/world.ts untouched.
@@ -174,6 +208,8 @@ export function createLandSystem(deps: LandDeps): LandSystem {
   }
   function board(): void {
     if (panel === 'open') { closePanel(); return; }
+    const why = angler?.refuseBoard();
+    if (why) { deps.toast(why); return; }
     const d = ctl.boardDistance();
     const bearing = ctl.boatBearing();
     const r = ctl.board();
@@ -184,6 +220,21 @@ export function createLandSystem(deps: LandDeps): LandSystem {
     interact, board, close: closePanel,
     view: () => { deps.toast(cycleLandView(ctl.cam)); },
   });
+  // The touch pad's 🎣: press to charge, release to cast, press again to strike — Space's twin.
+  const castBtn = $('tlCast');
+  if (castBtn) {
+    let held = false;
+    castBtn.addEventListener('pointerdown', (e) => {
+      if (ctl.mode !== 'land' || !angler) return;
+      e.preventDefault(); e.stopPropagation();
+      castBtn.setPointerCapture(e.pointerId); castBtn.classList.add('on');
+      held = true; angler.cast(true);
+    });
+    const up = (): void => { castBtn.classList.remove('on'); if (held) { held = false; angler?.cast(false); } };
+    castBtn.addEventListener('pointerup', up);
+    castBtn.addEventListener('pointercancel', up);
+    castBtn.addEventListener('lostpointercapture', up);
+  }
 
   // ---------------------------------------------------------------- tie up (boat mode)
   function tieUp(): void {
@@ -203,7 +254,7 @@ export function createLandSystem(deps: LandDeps): LandSystem {
     if (m.estate) { deps.toast(`Tied up at your own dock, ${m.marina}. WASD to walk your land, B to go back to the boat.`); return; }
     deps.toast(m.marina.startsWith('Boot Key Harbor City')
       ? 'Tied up at Boot Key Harbor City Marina. WASD to walk, drag to look, F to use things, B to go back to the boat.'
-      : `Tied up at ${m.marina}. Nothing much here but the dock — Boot Key Harbor City Marina has the town. B to go back to the boat.`);
+      : `Tied up at ${m.marina}. WASD to walk — the whole key is yours to explore. B to go back to the boat.`);
   }
   window.addEventListener('keydown', (e) => {
     if (e.code !== 'KeyF' || e.repeat || ctl.mode !== 'boat') return;
@@ -277,7 +328,11 @@ export function createLandSystem(deps: LandDeps): LandSystem {
       const s = SURFACES[i];
       if (u >= s.u0 && u <= s.u1 && v >= s.v0 && v <= s.v1) return { place: names[s.id] ?? 'Boot Key Harbor City', sub: 'Boot Key Harbor City' };
     }
-    return { place: 'Boot Key Harbor City', sub: 'Marathon, Florida Keys' };
+    if (inTownFootprint(x, z)) return { place: 'Boot Key Harbor City', sub: 'Marathon, Florida Keys' };
+    // out of town: the pier or dock you are on, else the key you are walking
+    const deck = ctl.fishingDeck();
+    if (deck) return { place: deck === 'a private dock' ? 'A private dock' : deck, sub: shoreInfo(x, z).isl?.name ?? 'Florida Keys' };
+    return { place: shoreInfo(x, z).isl?.name ?? 'Florida Keys', sub: 'Florida Keys' };
   }
 
   // ---------------------------------------------------------------- the casino's room tone
@@ -323,7 +378,9 @@ export function createLandSystem(deps: LandDeps): LandSystem {
     hud.setBoat(d <= 9 ? 'Boat: <b>alongside</b> · B to board' : `Boat: <b>${Math.round(d)} m</b> ${ctl.boatBearing()}`);
     if (panel === 'open') { hud.setPrompt(null); return; }
     const hit = town.nearestInteract(w.x, w.z);
-    hud.setPrompt(hit ? hit.interact.prompt : null);
+    const deck = ctl.fishingDeck();
+    hud.setPrompt(hit ? hit.interact.prompt : deck && angler ? angler.prompt(deck) : null);
+    hud.showCast(!!deck && !!angler);
   }
 
   function updateDockPrompt(): void {
@@ -375,6 +432,14 @@ export function createLandSystem(deps: LandDeps): LandSystem {
 
   return {
     get mode() { return ctl.mode; },
+    get walker() { return ctl.mode === 'land' ? ctl.state : null; },
+    fishSpot() {
+      const w = ctl.state, name = ctl.fishingDeck();
+      return w && name ? { name, x: w.x, y: w.y, z: w.z, yaw: w.yaw } : null;
+    },
+    get body() { return ctl.mode === 'land' ? body : null; },
+    get firstPerson() { return ctl.cam.mode === 'first'; },
+    attachAngler(a) { angler = a; },
     town,
 
     holdBoat(s) {
@@ -385,7 +450,9 @@ export function createLandSystem(deps: LandDeps): LandSystem {
       return { ...s, x: m.boatX, z: m.boatZ, h: m.boatH, speed: 0, dvx: 0, dvz: 0 };
     },
 
-    step(dt) { ctl.step(dt, panel === 'open'); },
+    // A line out roots you to the planks: S is the reel as well as a walking key (see
+    // game/fishing/shore.ts's `shoreHoldsStill`). Looking around still works.
+    step(dt) { ctl.step(dt, panel === 'open' || (!!angler?.holdStill() && ctl.fishingDeck() !== null)); },
 
     syncMode,
 

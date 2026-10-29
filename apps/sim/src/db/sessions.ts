@@ -9,13 +9,14 @@ import { constantTimeEqualHex, hashSessionToken, isWellFormedToken } from '../au
 
 export interface ResolvedSession {
   userId: string;
+  displayName: string;
 }
 
 export async function resolveSessionToken(pool: Pool, presentedToken: string): Promise<ResolvedSession | null> {
   if (!isWellFormedToken(presentedToken)) return null;
   const tokenHash = hashSessionToken(presentedToken);
-  const result = await pool.query<{ user_id: string; token_hash: string; expires_at: Date; revoked_at: Date | null }>(
-    'SELECT user_id, token_hash, expires_at, revoked_at FROM sessions WHERE token_hash = $1 LIMIT 1',
+  const result = await pool.query<{ user_id: string; display_name: string; token_hash: string; expires_at: Date; revoked_at: Date | null }>(
+    'SELECT s.user_id, u.display_name, s.token_hash, s.expires_at, s.revoked_at FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = $1 LIMIT 1',
     [tokenHash],
   );
   const row = result.rows[0];
@@ -23,5 +24,5 @@ export async function resolveSessionToken(pool: Pool, presentedToken: string): P
   if (!constantTimeEqualHex(row.token_hash, tokenHash)) return null;
   if (row.revoked_at) return null;
   if (new Date(row.expires_at).getTime() <= Date.now()) return null;
-  return { userId: row.user_id };
+  return { userId: row.user_id, displayName: row.display_name };
 }

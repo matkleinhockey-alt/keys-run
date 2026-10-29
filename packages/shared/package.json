@@ -26,6 +26,10 @@
       "types": "./dist/world/town.d.ts",
       "default": "./dist/world/town.js"
     },
+    "./world/piers": {
+      "types": "./dist/world/piers.d.ts",
+      "default": "./dist/world/piers.js"
+    },
     "./world/town-life": {
       "types": "./dist/world/town-life.d.ts",
       "default": "./dist/world/town-life.js"

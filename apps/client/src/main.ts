@@ -29,6 +29,7 @@ import { hydrate } from './net/cloud-save.js';
 import { mountLeaderboard } from './ui/leaderboard/panel.js';
 import { NetClient } from './net/client.js';
 import { createRemoteBoatManager } from './net/remote-boats.js';
+import { createRemoteBodyManager } from './net/remote-bodies.js';
 import { createBanner } from './net/banner.js';
 import { SIM_WS_URL } from './net/config.js';
 
@@ -66,10 +67,12 @@ async function boot(): Promise<void> {
 
   let net: NetClient | null = null;
   let remoteBoats: ReturnType<typeof createRemoteBoatManager> | null = null;
+  let remoteBodies: ReturnType<typeof createRemoteBodyManager> | null = null;
 
   if (gate.mode === 'online') {
     const banner = createBanner(wrap!);
     remoteBoats = createRemoteBoatManager(world.scene, world.camera, wrap!);
+    remoteBodies = createRemoteBodyManager(world.scene, world.camera, wrap!);
     net = new NetClient({
       wsUrl: SIM_WS_URL,
       tokenHex: gate.token,
@@ -104,6 +107,7 @@ async function boot(): Promise<void> {
     try {
       if (net) {
         net.setLocalState(world.getLocalBoat());
+        net.setLocalBody(world.getLocalBody());
         const correction = net.consumeCorrection(Math.min(0.1, dt));
         if (correction) world.applyNetCorrection(correction);
       }
@@ -114,7 +118,10 @@ async function boot(): Promise<void> {
         // markers must agree, and extrapolation is time-dependent, so calling it twice per frame
         // would hand them poses from two different instants.
         const snapshots = net.getRemoteBoats(now);
-        remoteBoats.update(now, netSimT, snapshots);
+        const nameOf = (slotId: number): string | undefined => net?.nameOf(slotId);
+        remoteBoats.update(now, netSimT, snapshots, nameOf);
+        // People off their boats: walking ashore, or in the water (net/remote-bodies.ts).
+        remoteBodies?.update(Math.min(0.1, dt), now / 1000, net.getRemoteBodies(), nameOf);
         world.setRemoteBoatsForNet(snapshots.map((s) => ({ x: s.pose.x, z: s.pose.z, h: s.pose.h, slotId: s.slotId })));
       }
     } catch (e) {

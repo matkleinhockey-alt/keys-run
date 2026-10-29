@@ -25,6 +25,7 @@ import type { FishingVisuals } from './visuals.js';
 import type { RodViewModel } from './rod-viewmodel.js';
 import { strikeWindowS, STRIKE_BASE_S, type HandInputs } from '@keysrun/shared/sim/steady';
 import { resolveCastSpot, type SpotQuery } from './spot.js';
+import type { ShoreAngler } from './shore.js';
 
 function $(id: string): HTMLElement | null { return document.getElementById(id); }
 
@@ -36,6 +37,8 @@ export interface LandedFish {
   zone: string;
   /** Non-null when this was a tagged fish being recaptured. */
   tag: TaggedFish | null;
+  /** Landed from a pier or a dock (shore.ts), not over the boat's gunwale. */
+  ashore: boolean;
 }
 
 export interface FishingDeps {
@@ -62,6 +65,10 @@ export interface FishingDeps {
   /** The player's inventory (rod.*, reel.lever, bait, leader). Omitted = stock rod, no bait —
    * exactly the pre-shop behaviour; wiring the real inventory in is passing this one object. */
   gear?: GearPort;
+  /** The angler standing on a pier or a dock, or null aboard (shore.ts). Omitted = always aboard.
+   * Ashore the line hangs from the rod in the walker's hands instead of the boat's, and the cast
+   * goes where the land camera looks. */
+  getShore?(): ShoreAngler | null;
   /** legacy's `case 'caught': if (now-caughtT>1600) releaseFish();` — delegated to game/catch. */
   onActionWhileCaught(): void;
   /** Tag-and-release registry (game/catch/tags.ts). Omitted = every fish is untagged. */
@@ -89,7 +96,17 @@ export function createFishingLogic(deps: FishingDeps) {
   let rig: CastRig | null = null;
   let simNow = 0;
 
-  function setRod(v: boolean): void { deps.getModel().rodPivot.visible = v; }
+  /** The rod the line is tied to when the view is not first-person: the boat's, or the one in the
+   * walker's hands ashore. */
+  function rodHolder(shore: ShoreAngler | null): { rodPivot: THREE.Group } { return shore ? shore.rod : deps.getModel(); }
+  /** First-person rod in view: the boat's fishing view (`fp.on`), or the land camera's first person. */
+  function fpOn(shore: ShoreAngler | null): boolean { return shore ? shore.firstPerson : deps.fp.on; }
+
+  function setRod(v: boolean): void {
+    const shore = deps.getShore?.() ?? null;
+    deps.getModel().rodPivot.visible = v && !shore;
+    if (shore) shore.rod.rodPivot.visible = v;
+  }
 
   function startCharge(boat: BoatState): void {
     if (Math.abs(boat.speed) > 1.6) { toast('Slow under 3 knots to cast.'); return; }
@@ -106,8 +123,10 @@ export function createFishingLogic(deps: FishingDeps) {
   }
 
   function cast(power: number, boat: BoatState): void {
-    const model = deps.getModel();
-    if (deps.fp.on) {
+    const shore = deps.getShore?.() ?? null;
+    // Ashore the boat's fishing view is not running (`fp.yaw` is stale): cast where the land
+    // camera looks, which in first person is where you are looking and in third is over your head.
+    if (deps.fp.on && !shore) {
       tmpDir.set(-Math.sin(deps.fp.yaw), 0, -Math.cos(deps.fp.yaw));
     } else {
       deps.camera.getWorldDirection(tmpDir);
@@ -115,8 +134,15 @@ export function createFishingLogic(deps: FishingDeps) {
     }
     let dist = 12 + power * 73;
     for (let k = 0; k < 8 && landH(boat.x + tmpDir.x * dist, boat.z + tmpDir.z * dist) > -0.4; k++) dist *= 0.8;
+    // A boat is always on the water, so the shortened cast always lands in some. Standing at the
+    // root of a pier facing the beach it need not: refuse rather than float a bobber on the sand.
+    if (shore && landH(boat.x + tmpDir.x * dist, boat.z + tmpDir.z * dist) > -0.4) {
+      setRod(false);
+      toast('Face the water to cast.');
+      return;
+    }
     F.to = { x: boat.x + tmpDir.x * dist, y: 0, z: boat.z + tmpDir.z * dist };
-    deps.rodVM.lineTip(model, deps.fp.on).getWorldPosition(tmpTarget);
+    deps.rodVM.lineTip(rodHolder(shore), fpOn(shore)).getWorldPosition(tmpTarget);
     F.from = { x: tmpTarget.x, y: tmpTarget.y, z: tmpTarget.z };
     F.castT = 0; F.castDur = 0.5 + power * 0.9; F.castH = 3 + power * 14;
     F.state = 'casting'; F.key = null; F.tag = null;
@@ -224,7 +250,7 @@ export function createFishingLogic(deps: FishingDeps) {
   }
 
   function land(): void {
-    const key = F.key!, weight = F.weight, fx = F.fx, fz = F.fz, zone = F.zone, tag = F.tag;
+    const key = F.key!, weight = F.weight, fx = F.fx, fz = F.fz, zone = F.zone, tag = F.tag, ashore = !!deps.getShore?.();
     F.tag = null;
     F.state = 'caught';
     F.caughtT = performance.now();
@@ -232,7 +258,7 @@ export function createFishingLogic(deps: FishingDeps) {
     setRod(false);
     $('fight')?.classList.add('hidden');
     F.fight = null; F.fightParams = null;
-    deps.onLanded({ key, weight, fx, fz, zone, tag });
+    deps.onLanded({ key, weight, fx, fz, zone, tag, ashore });
   }
 
   function onAction(boat: BoatState): void {
@@ -262,7 +288,6 @@ export function createFishingLogic(deps: FishingDeps) {
   }
 
   function update(dt: number, t: number, boat: BoatState, sw: number, ch: number): void {
-    const model = deps.getModel();
     simNow = t;
 
     if (F.charging) {
@@ -275,8 +300,12 @@ export function createFishingLogic(deps: FishingDeps) {
 
     const reel = deps.boatInput.back || (actionInput.held && F.state === 'fight');
     F.reeling = reel;
-    const aimTarget = F.state === 'fight' ? tmpTarget.set(F.fx, 0, F.fz) : tmpTarget.set(F.bob.x, 0, F.bob.z);
-    visuals.aimRod(model, aimTarget, F.state === 'fight', F.fight ? F.fight.tension : 0);
+    // Ashore the rod in the walker's hands is aimed per frame instead (shore-rod.ts, from
+    // index.ts's render), because it rides on a body the land facade re-poses every frame.
+    if (!deps.getShore?.()) {
+      const aimTarget = F.state === 'fight' ? tmpTarget.set(F.fx, 0, F.fz) : tmpTarget.set(F.bob.x, 0, F.bob.z);
+      visuals.aimRod(deps.getModel(), aimTarget, F.state === 'fight', F.fight ? F.fight.tension : 0);
+    }
 
     if (F.state === 'casting') {
       F.castT += dt / F.castDur;

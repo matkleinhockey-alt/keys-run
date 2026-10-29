@@ -26,6 +26,8 @@ export interface LandHudHandles {
   setBoat(html: string): void;
   setPrompt(text: string | null): void;
   setDockPrompt(text: string | null): void;
+  /** The touch pad's cast button: shown only where you can fish (a pier, a dock, a marina's planks). */
+  showCast(show: boolean): void;
   openVenue(id: Venue['id'], visit: number, onClose: () => void): void;
   openPlaque(title: string, text: string, onClose: () => void): void;
   closePanel(): void;
@@ -47,12 +49,12 @@ export function createLandHud(touch: boolean, shop: ShopPort): LandHudHandles {
     const hud = el('div', 'landHud', 'hidden');
     const card = el('div', null, 'landCard panel');
     card.append(el('span', 'landPlace'), el('span', 'landSub'), el('span', 'landBoat'));
-    hud.append(card, el('div', 'landHelp', '', 'WASD walk · Shift run · drag to look · V first / third person · F use · B back to the boat'));
+    hud.append(card, el('div', 'landHelp', '', 'WASD walk · Shift run · drag to look · V first / third person · F use · Space cast off a pier or dock · B back to the boat'));
     host.append(hud, el('div', 'landPrompt', 'hidden'), el('div', 'dockPrompt', 'hidden'), el('div', 'landPanel', 'panel hidden'));
     if (touch) {
       const pad = el('div', 'touchLand', 'hidden');
-      for (const [id, label, title] of [['tlL', '◀', 'Left'], ['tlR', '▶', 'Right'], ['tlUp', '▲', 'Forward'], ['tlDn', '▼', 'Back'], ['tlRun', '⚡', 'Run'], ['tlAct', 'F', 'Use'], ['tlBoat', '⚓', 'Back to the boat']] as const) {
-        const b = el('button', id, 'tbtn', label); b.setAttribute('aria-label', title); pad.append(b);
+      for (const [id, label, title] of [['tlL', '◀', 'Left'], ['tlR', '▶', 'Right'], ['tlUp', '▲', 'Forward'], ['tlDn', '▼', 'Back'], ['tlRun', '⚡', 'Run'], ['tlAct', 'F', 'Use'], ['tlBoat', '⚓', 'Back to the boat'], ['tlCast', '🎣', 'Cast and strike']] as const) {
+        const b = el('button', id, id === 'tlCast' ? 'tbtn hidden' : 'tbtn', label); b.setAttribute('aria-label', title); pad.append(b);
       }
       ($('wrap') ?? document.body).append(pad);
     }
@@ -76,6 +78,7 @@ export function createLandHud(touch: boolean, shop: ShopPort): LandHudHandles {
   return {
     showHud(show) { $('landHud')?.classList.toggle('hidden', !show); if (!show) { $('landPrompt')?.classList.add('hidden'); close(); } },
     showTouch(show) { $('touchLand')?.classList.toggle('hidden', !show); },
+    showCast(show) { const b = $('tlCast'); if (b && b.classList.contains('hidden') === show) b.classList.toggle('hidden', !show); },
     setPlace(place, sub) { const a = $('landPlace'), b = $('landSub'); if (a && a.textContent !== place) a.textContent = place; if (b && b.textContent !== sub) b.textContent = sub; },
     setBoat(html) { const b = $('landBoat'); if (b && b.innerHTML !== html) b.innerHTML = html; },
     setPrompt(text) {

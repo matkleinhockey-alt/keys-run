@@ -11,6 +11,10 @@
  * it" — same conversion apps/sim/test/sim-client.ts's `sendHello` does server-side-test-client.
  */
 import {
+  AVATAR_FIELDS,
+  AVATARS_FIELDS,
+  PEER_FIELDS,
+  decodePeerName,
   BitReader,
   BitWriter,
   decodeMessageBody,
@@ -26,6 +30,8 @@ import {
   SERVER_RESTART_FIELDS,
   SNAPSHOT_FIELDS,
   WELCOME_FIELDS,
+  type AvatarMsg,
+  type AvatarsMsg,
   type CorrectionMsg,
   type InputMsg,
   type PongMsg,
@@ -63,6 +69,12 @@ export function encodeInput(msg: InputMsg): Uint8Array {
   return writer.finish().slice();
 }
 
+export function encodeAvatar(msg: AvatarMsg): Uint8Array {
+  writer.reset(scratch);
+  encodeMessage(MSG.AVATAR, AVATAR_FIELDS, msg, writer);
+  return writer.finish().slice();
+}
+
 export function encodePing(clientTimeMs: number): Uint8Array {
   writer.reset(scratch);
   encodeMessage(MSG.PING, PING_FIELDS, { clientTimeMs }, writer);
@@ -76,6 +88,8 @@ export type ServerMessage =
   | { type: 'correction'; msg: CorrectionMsg }
   | { type: 'pong'; msg: PongMsg }
   | { type: 'server_restart'; msg: ServerRestartMsg }
+  | { type: 'avatars'; msg: AvatarsMsg }
+  | { type: 'peer'; slotId: number; name: string }
   | { type: 'unknown'; id: number };
 
 /** Decode one inbound binary frame. Pure function — no socket/transport knowledge. */
@@ -95,9 +109,15 @@ export function decodeServerMessage(bytes: Uint8Array): ServerMessage {
       return { type: 'pong', msg: decodeMessageBody(PONG_FIELDS, reader) };
     case MSG.SERVER_RESTART:
       return { type: 'server_restart', msg: decodeMessageBody(SERVER_RESTART_FIELDS, reader) };
+    case MSG.AVATARS:
+      return { type: 'avatars', msg: decodeMessageBody(AVATARS_FIELDS, reader) };
+    case MSG.PEER: {
+      const p = decodeMessageBody(PEER_FIELDS, reader);
+      return { type: 'peer', slotId: p.slotId, name: decodePeerName(p.name) };
+    }
     default:
       return { type: 'unknown', id };
   }
 }
 
-export { RejectReason } from '@keysrun/shared/proto';
+export { RejectReason, AVATAR_MODE } from '@keysrun/shared/proto';

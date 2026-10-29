@@ -5,12 +5,13 @@
  */
 import type { Pool } from 'pg';
 import { BitReader, decodeMessageBody, readMessageId } from '@keysrun/shared/proto';
-import { HELLO_FIELDS, INPUT_FIELDS, MSG, PING_FIELDS, RejectReason } from '@keysrun/shared/proto';
+import { AVATAR_FIELDS, HELLO_FIELDS, INPUT_FIELDS, MSG, PING_FIELDS, RejectReason, encodePeerName } from '@keysrun/shared/proto';
 import type { TransportConnection } from './transport.js';
 import type { World, Spawn } from '../world/world.js';
 import { resolveSessionToken } from '../db/sessions.js';
 import { loadResume } from '../db/players.js';
-import { encodePong, encodeReject, encodeWelcome } from './encode.js';
+import { encodePeer, encodePong, encodeReject, encodeWelcome } from './encode.js';
+import { setBody } from '../world/bodies.js';
 
 const SMALL_SCRATCH = new Uint8Array(64);
 
@@ -63,6 +64,16 @@ export function attachConnection(conn: TransportConnection, ctx: DispatchContext
         speed: result.speed,
       }),
     );
+
+    // Names for nametags: everyone already here to the newcomer, and the newcomer to everyone.
+    const me = ctx.world.conns.get(result.slot);
+    if (me) me.name = session.displayName;
+    const mine = encodePeer(SMALL_SCRATCH, { slotId: result.slot, name: encodePeerName(session.displayName) }).slice();
+    for (const [s, c] of ctx.world.conns) {
+      if (s === result.slot) continue;
+      c.send(mine);
+      conn.send(encodePeer(SMALL_SCRATCH, { slotId: s, name: encodePeerName(c.name) }));
+    }
   }
 
   conn.onMessage((bytes) => {
@@ -83,6 +94,9 @@ export function attachConnection(conn: TransportConnection, ctx: DispatchContext
     if (id === MSG.INPUT) {
       const input = decodeMessageBody(INPUT_FIELDS, reader);
       ctx.world.onInput(slot, input, Date.now());
+    } else if (id === MSG.AVATAR) {
+      const c = ctx.world.conns.get(slot);
+      if (c) setBody(c, decodeMessageBody(AVATAR_FIELDS, reader), Date.now());
     } else if (id === MSG.PING) {
       const ping = decodeMessageBody(PING_FIELDS, reader);
       conn.send(encodePong(SMALL_SCRATCH, { clientTimeMs: ping.clientTimeMs, serverTimeMs: Date.now() >>> 0 }));

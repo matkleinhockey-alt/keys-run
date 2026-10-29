@@ -49,6 +49,10 @@ export interface CaughtFishInfo {
    * the speargun (the underwater grip-and-grin, see underwater-trophy.ts). Optional/defaults to
    * 'rod' so game/fishing's existing call site (which predates this field) needs no change. */
   source?: 'rod' | 'spear';
+  /** Landed off a pier or a dock (game/fishing/shore.ts): the card's portrait, but no grip-and-grin
+   * on the boat's deck — the boat is tied up somewhere behind you, and the captain posing with
+   * your fish on it while you stand on the pier would be a photo of someone else's catch. */
+  ashore?: boolean;
   /** Set when the rod hooked a tagged individual (game/catch/tags.ts) — the card then shows its
    * history, and keeping or releasing it is reported back to the tag registry. */
   tag?: TaggedFish | null;
@@ -269,6 +273,9 @@ export function createCatchFlow(deps: CatchFlowDeps) {
       // near the boat (this function deliberately takes no `BoatState`, see its own header note).
       photo = null;
       try { trophy.show(S.color, scaledLenM(fish.key, fish.weight)); } catch (e) { console.error('trophy setup', e); }
+    } else if (fish.ashore) {
+      photo = null;
+      try { portrait.show(S.color, scaledLenM(fish.key, fish.weight), ELONGATED_SPECIES.has(fish.key), fish.weight); } catch (e) { console.error('portrait setup', e); }
     } else {
       model.station = 0;
       model.fishSpot.copy(model.stations[0].spot);

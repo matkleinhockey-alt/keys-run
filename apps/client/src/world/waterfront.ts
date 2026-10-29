@@ -27,7 +27,9 @@ import * as THREE from 'three';
 import { hashCell } from '@keysrun/shared/rng';
 import { islands, islandDist, chainZ, type Island } from '@keysrun/shared/world/chain';
 import { landH, depthAt, onCourse, creekDist } from '@keysrun/shared/world/depth';
-import { inTownFootprint } from '@keysrun/shared/world/town';
+import { inTownFootprint, type Rect } from '@keysrun/shared/world/town';
+import { PIERS } from '@keysrun/shared/world/piers';
+import type { WalkDock } from '../entities/land/ground.js';
 import type { DockRect } from '@keysrun/shared/sim/boat';
 import { islandLocal } from '@keysrun/shared/world/chain';
 import { makeBoat } from '../entities/boat/model.js';
@@ -75,6 +77,10 @@ export interface WaterfrontResult {
    * only part a verification shot actually needs to aim at.
    */
   sites: Array<{ x: number; z: number; r: number; lx: number; lz: number }>;
+  /** Each estate's dock, to walk on and tie up at (entities/land/ground.ts). */
+  walkDocks: WalkDock[];
+  /** The houses, solid to a person on foot: a square the size of the house's short side. */
+  houseRects: Rect[];
   /** Builds the nearby estates' hulls and hides the far ones. See `BOAT_BUILD_M`. */
   update(boat: { x: number; z: number }): void;
   /** VERIFICATION ONLY: what is on each lift, and whether it has been built yet. */
@@ -101,6 +107,8 @@ export function createWaterfront(): WaterfrontResult {
   const group = new THREE.Group();
   group.name = 'waterfront';
   const dockRects: DockRect[] = [];
+  const walkDocks: WalkDock[] = [];
+  const houseRects: Rect[] = [];
   const floating: THREE.Group[] = [];
   const sites: Array<{ x: number; z: number; r: number; lx: number; lz: number }> = [];
   const geos: THREE.BufferGeometry[] = [];
@@ -190,6 +198,8 @@ export function createWaterfront(): WaterfrontResult {
       if (!reach || reach > MAX_DOCK_M) continue;
 
       if (sites.some((s) => Math.hypot(s.x - hx, s.z - hz) < SPACING_M)) continue;
+      // keep clear of the public fishing piers (shared world/piers.ts)
+      if (PIERS.some((p) => Math.hypot(p.x0 - sx, p.z0 - sz) < 120 || Math.hypot(p.x1 - sx, p.z1 - sz) < 160)) continue;
 
       const lift = buildEstate(I, ii, k, hx, hz, nx, nz, reach);
       sites.push({ x: hx, z: hz, r: 54, lx: lift[0], lz: lift[1] });
@@ -285,6 +295,8 @@ export function createWaterfront(): WaterfrontResult {
     const mx = hx + nx * (d0 + planks / 2), mz = hz + nz * (d0 + planks / 2);
     box(dockW, 0.22, planks, mx, 1.05, mz, wood, yaw);
     dockRects.push({ x0: mx - planks / 2, x1: mx + planks / 2, z0: mz - planks / 2, z1: mz + planks / 2 });
+    walkDocks.push({ x0: hx + nx * d0, z0: hz + nz * d0, nx, nz, len: planks, w: dockW, top: 1.05 + 0.11, name: 'a private dock' });
+    houseRects.push({ x0: hx - hd / 2, x1: hx + hd / 2, z0: hz - hd / 2, z1: hz + hd / 2 });
     for (let s = 0; s <= planks; s += 5) {
       const px = hx + nx * (d0 + s), pz = hz + nz * (d0 + s);
       for (const o of [-dockW / 2, dockW / 2]) {
@@ -388,6 +400,8 @@ export function createWaterfront(): WaterfrontResult {
     dockRects,
     floating,
     sites,
+    walkDocks,
+    houseRects,
     update(boat) {
       for (const lot of lots) {
         const d = Math.hypot(lot.cx - boat.x, lot.cz - boat.z);

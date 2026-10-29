@@ -11,7 +11,8 @@ import { createHttpServer, type ReadinessState } from './http.js';
 import { WsTransport } from './net/ws-transport.js';
 import { attachConnection } from './net/dispatch.js';
 import { buildSnapshot } from './net/snapshot.js';
-import { encodeSnapshot } from './net/encode.js';
+import { encodeAvatars, encodeSnapshot } from './net/encode.js';
+import { bodiesFor } from './world/bodies.js';
 import { SimMetrics } from './metrics.js';
 import { autosaveDirtyPlayers, gracefulShutdown, type ShutdownResult } from './lifecycle.js';
 import { BOATS } from '@keysrun/shared/content/boats';
@@ -91,6 +92,9 @@ export function buildSimApp(opts: SimAppOptions): SimApp {
       const bytes = encodeSnapshot(snapshotScratch, msg);
       metrics.recordBytesSent(bytes.length);
       conn.send(bytes);
+      const bodies = encodeAvatars(snapshotScratch, bodiesFor(conn, world.conns, world.entities, Date.now()));
+      metrics.recordBytesSent(bodies.length);
+      conn.send(bodies);
     }
     world.clearCorrectedFlags();
     snapshotCounter++;

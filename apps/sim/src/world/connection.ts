@@ -44,6 +44,18 @@ export interface ConnMeta {
   connectedAtMs: number;
   lastInputAtMs: number;
   dirty: boolean;
+
+  /** The player's display name, for other players' nametags (PEER). */
+  name: string;
+  /** The player's body while off the boat (AVATAR), or null while aboard. */
+  body: Body | null;
+}
+
+/** Where a player's body is when it is off the boat: walking ashore or in the water (world/bodies.ts). */
+export interface Body {
+  mode: number;
+  x: number; y: number; z: number; h: number; speed: number;
+  atMs: number;
 }
 
 export function createConnMeta(slot: number, userId: string, send: (bytes: Uint8Array) => void, nowMs: number): ConnMeta {
@@ -74,6 +86,8 @@ export function createConnMeta(slot: number, userId: string, send: (bytes: Uint8
     connectedAtMs: nowMs,
     lastInputAtMs: nowMs,
     dirty: true,
+    name: '',
+    body: null,
   };
 }
 

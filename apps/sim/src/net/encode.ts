@@ -6,6 +6,8 @@
  */
 import { BitWriter, encodeMessage } from '@keysrun/shared/proto';
 import {
+  AVATARS_FIELDS,
+  PEER_FIELDS,
   CORRECTION_FIELDS,
   MSG,
   PONG_FIELDS,
@@ -13,6 +15,8 @@ import {
   SERVER_RESTART_FIELDS,
   SNAPSHOT_FIELDS,
   WELCOME_FIELDS,
+  type AvatarsMsg,
+  type PeerMsg,
   type CorrectionMsg,
   type PongMsg,
   type RejectMsg,
@@ -56,5 +60,17 @@ export function encodeServerRestart(buf: Uint8Array, msg: ServerRestartMsg): Uin
 export function encodeSnapshot(buf: Uint8Array, msg: SnapshotMsg): Uint8Array {
   sharedWriter.reset(buf);
   encodeMessage(MSG.SNAPSHOT, SNAPSHOT_FIELDS, msg, sharedWriter);
+  return sharedWriter.finish();
+}
+
+export function encodeAvatars(buf: Uint8Array, msg: AvatarsMsg): Uint8Array {
+  sharedWriter.reset(buf);
+  encodeMessage(MSG.AVATARS, AVATARS_FIELDS, msg, sharedWriter);
+  return sharedWriter.finish();
+}
+
+export function encodePeer(buf: Uint8Array, msg: PeerMsg): Uint8Array {
+  sharedWriter.reset(buf);
+  encodeMessage(MSG.PEER, PEER_FIELDS, msg, sharedWriter);
   return sharedWriter.finish();
 }

@@ -6,11 +6,13 @@
  *
  * ## Entering (`tryEnter`)
  * Refuses, with a reason the HUD can show, unless ALL of these hold:
- *   - the hull is lying alongside a dock (`findBerth` within `hullLen/2 + 9` m of the boat) —
- *     a marina's, or the dock on one of your own Keys Run Estates lots (`deps.estates`);
+ *   - the hull is lying alongside a dock (`nearestBerth` within `hullLen/2 + 9` m of the boat) —
+ *     a marina's, a public fishing pier (shared world/piers.ts), a waterfront house's private dock
+ *     (`deps.docks`), or the dock on one of your own Keys Run Estates lots (`deps.estates`);
  *   - the boat is nearly stopped (the same 2.5 threshold the dock weigh-in uses, game/catch);
  *   - there is somewhere safe to put a person (`canStand` at the berth point).
- * It places the walker on the planks nearest the boat and records the mooring: the boat's exact
+ * It places the walker on the planks nearest the boat, from where the whole key is walkable
+ * (ground.ts: any dry land, the piers, the docks), and records the mooring: the boat's exact
  * x/z/heading, which `holdBoat` re-applies every tick so a tied-up boat does not wander off on the
  * current while you are in a bar.
  *
@@ -31,6 +33,7 @@ import { findBerth, groundAt, COLLIDERS, type Rect } from '@keysrun/shared/world
 import { estateDockBerth, estateGround, type Parcel, type SiteLayout } from '@keysrun/shared/content/estates';
 import { createLandButtons, bindLandInput, type LandButtons, type LandActions } from './input.js';
 import { createLandCamState, bindLandPointerControls, type LandCamState } from './camera.js';
+import { outsideGround, dockBerth, pierBerth, fishableDeck, type WalkDock } from './ground.js';
 
 export type LandMode = 'boat' | 'land';
 
@@ -39,19 +42,20 @@ export const TIE_UP_MAX_SPEED = 2.5;
 export const BOARD_REACH = 9;
 const CAB_WINDOW = 3.5;
 
-export const WALK_ENV: WalkerEnv = { ground: groundAt, colliders: COLLIDERS };
+/** The town's surfaces, then everything outside it (ground.ts), with no private docks. */
+export const WALK_ENV: WalkerEnv = { ground: (x, z) => groundAt(x, z) ?? outsideGround([], x, z), colliders: COLLIDERS };
 
 /** A lot of yours you may walk on and tie up at (Keys Run Estates). */
 export interface WalkableEstate { parcel: Parcel; layout: SiteLayout }
 
 /**
  * The town's walk surface plus your own estates': their dry ground, their dock and its ramp
- * (shared `estateGround`). The house itself is solid — a square the size of its short side, so a
- * turned house still never blocks the dock path that runs out past its corner.
+ * (shared `estateGround`), then the rest of the world (ground.ts). The house itself is solid — a
+ * square the size of its short side, so a turned house still never blocks the dock path that runs
+ * out past its corner. `solid` adds the waterfront houses the same way.
  */
-function estateWalkEnv(list: readonly WalkableEstate[]): WalkerEnv {
-  if (!list.length) return WALK_ENV;
-  const colliders: Rect[] = [...COLLIDERS];
+function estateWalkEnv(list: readonly WalkableEstate[], docks: readonly WalkDock[], solid: readonly Rect[]): WalkerEnv {
+  const colliders: Rect[] = [...COLLIDERS, ...solid];
   for (const e of list) {
     const h = e.layout.house, r = Math.min(h.w, h.d) / 2;
     if (e.parcel.tier !== 'harbor') colliders.push({ x0: h.x - r, x1: h.x + r, z0: h.z - r, z1: h.z + r });
@@ -61,7 +65,7 @@ function estateWalkEnv(list: readonly WalkableEstate[]): WalkerEnv {
       const g = groundAt(x, z);
       if (g !== null) return g;
       for (const e of list) { const eg = estateGround(e.parcel, e.layout, x, z); if (eg !== null) return eg; }
-      return null;
+      return outsideGround(docks, x, z);
     },
     colliders,
   };
@@ -97,6 +101,8 @@ export interface LandController {
   /** Try to climb aboard. 'cab' = you were far away and asked twice; the walker is now at the dock. */
   board(): 'boarded' | 'far' | 'cab' | 'idle';
   exitToBoat(): void;
+  /** Where you could fish from, standing here: the pier's or dock's name, or null on dry land. */
+  fishingDeck(): string | null;
   /** VERIFICATION-ONLY: put the walker somewhere (refuses unwalkable spots). */
   debugPlace(x: number, z: number, yaw?: number): boolean;
   step(dt: number, frozen: boolean): void;
@@ -104,7 +110,16 @@ export interface LandController {
   dispose(): void;
 }
 
-export function createLandController(deps: { canvas: HTMLCanvasElement; estates?: () => readonly WalkableEstate[] }): LandController {
+export interface LandControllerDeps {
+  canvas: HTMLCanvasElement;
+  estates?: () => readonly WalkableEstate[];
+  /** The waterfront houses' private docks, and the houses themselves as solid squares. */
+  docks?: readonly WalkDock[];
+  solid?: readonly Rect[];
+}
+
+export function createLandController(deps: LandControllerDeps): LandController {
+  const docks = deps.docks ?? [], solid = deps.solid ?? [];
   const buttons = createLandButtons();
   const cam = createLandCamState();
   let unbindInput: (() => void) | null = null;
@@ -115,12 +130,12 @@ export function createLandController(deps: { canvas: HTMLCanvasElement; estates?
   let mooring: Mooring | null = null;
   let farPressedAt = -Infinity;
   let clock = 0;
-  let envList: readonly WalkableEstate[] = [];
+  let envList: readonly WalkableEstate[] | null = null;
   let env: WalkerEnv = WALK_ENV;
   /** Re-derived only when the estate list itself changes (the registry hands out a new array). */
   function walkEnv(): WalkerEnv {
     const list = deps.estates?.() ?? [];
-    if (list !== envList) { envList = list; env = estateWalkEnv(list); }
+    if (list !== envList) { envList = list; env = estateWalkEnv(list, docks, solid); }
     return env;
   }
 
@@ -132,6 +147,10 @@ export function createLandController(deps: { canvas: HTMLCanvasElement; estates?
       const b = estateDockBerth(e.layout, x, z, reach);
       if (b && (!best || b.dist < best.dist)) best = { name: e.parcel.name, estate: e.parcel.id, x: b.x, z: b.z, dist: b.dist };
     }
+    const p = pierBerth(x, z, reach);
+    if (p && (!best || p.dist < best.dist)) best = { name: p.pier.name, x: p.x, z: p.z, dist: p.dist };
+    const d = dockBerth(docks, x, z, reach);
+    if (d && (!best || d.dist < best.dist)) best = { name: d.dock.name, x: d.x, z: d.z, dist: d.dist };
     return best;
   }
 
@@ -210,6 +229,10 @@ export function createLandController(deps: { canvas: HTMLCanvasElement; estates?
     },
 
     exitToBoat(): void { leave(); },
+
+    fishingDeck(): string | null {
+      return mode === 'land' && state ? fishableDeck(docks, state.x, state.z) : null;
+    },
 
     debugPlace(x, z, yaw): boolean {
       if (mode !== 'land' || !state) return false;

@@ -38,6 +38,8 @@ import { createMarinas } from '../world/marinas.js';
 import { createChannelBuoys } from '../world/channel-buoys.js';
 import { createLighthouse } from '../world/lighthouse.js';
 import { createWaterfront } from '../world/waterfront.js';
+import { createPiers } from '../world/piers.js';
+import { PIERS, pierDockRects } from '@keysrun/shared/world/piers';
 import { createParticleSystem } from '../world/particles.js';
 
 import { makeBoat, type BoatModel } from '../entities/boat/model.js';
@@ -60,6 +62,7 @@ import { applyDiverVisuals } from '../entities/diver/visuals.js';
 import { createDiverBubbles } from '../entities/diver/bubbles.js';
 import { updateDiverCamera } from '../entities/diver/camera.js';
 import { updateDiverHud, showDiverHud, clearBlackoutOverlay } from '../entities/diver/hud.js';
+import type { LocalBody } from '../net/client.js';
 import { createLandSystem } from '../entities/land/index.js';
 
 import { SPEAR_RANGE_MAX, closestDistSqSegmentSegment } from '@keysrun/shared/sim/spear';
@@ -70,6 +73,7 @@ import { createHandgunSystem } from '../entities/handgun/index.js'; // handgun m
 import { createFishing } from './fishing/index.js';
 import { createRaceMode } from './race/index.js';
 import { F as FishF, lineOut as fishingLineOut } from './fishing/state.js';
+import { shoreHoldsStill, shorePrompt } from './fishing/shore.js';
 import { createCatchFlow } from './catch/catch-flow.js';
 import { createEconomySystem } from './economy/system.js';
 import { createGearScreen } from '../ui/gear.js';
@@ -169,6 +173,9 @@ export interface World {
    * the poses it already has rather than giving world.ts its own net dependency. Pass an empty
    * array when offline — the chart then simply draws no contacts. */
   setRemoteBoatsForNet(remotes: readonly MinimapContact[]): void;
+  /** Where the player's body is when off the boat — ashore or in the water — for other players to
+   * see (net/remote-bodies.ts); null while aboard. */
+  getLocalBody(): LocalBody | null;
 }
 
 function hullOf(spec: Boat) {
@@ -299,8 +306,13 @@ export function initWorld(wrap: HTMLElement): World {
   scene.add(waterfront.group);
   // The scattered conch houses are instanced scenery and know nothing about these lots, so one
   // would otherwise stand in the middle of somebody's pool deck.
-  islands.clearScenery((hx, hz) => waterfront.sites.some((q) => Math.hypot(q.x - hx, q.z - hz) < q.r), () => false);
-  const dockRects: DockRect[] = [...marinas.dockRects, ...waterfront.dockRects];
+  // Public fishing piers (shared world/piers.ts): walkable, somewhere to tie up, and fished off.
+  scene.add(createPiers());
+  islands.clearScenery(
+    (hx, hz) => waterfront.sites.some((q) => Math.hypot(q.x - hx, q.z - hz) < q.r) || PIERS.some((p) => Math.hypot(p.x0 - hx, p.z0 - hz) < 18),
+    (px, pz) => PIERS.some((p) => Math.hypot(p.x0 - px, p.z0 - pz) < 8),
+  );
+  const dockRects: DockRect[] = [...marinas.dockRects, ...waterfront.dockRects, ...pierDockRects()];
 
   const readout: BoatReadout = { x: 0, z: 0, h: 0, speed: 0 };
   const electronics = createElectronics(readout);
@@ -605,7 +617,8 @@ export function initWorld(wrap: HTMLElement): World {
 
   const fishing = createFishing({
     // Not when a raise already has the camera on this fish — it is the same fish, mid-shot.
-    onHookset: (x, z) => { if (!raiseCamShot) fishCam.trigger(x, z); },
+    // Nor ashore: the fish cam is composed around a boat and only the boat camera runs it.
+    onHookset: (x, z) => { if (!raiseCamShot && land.mode !== 'land') fishCam.trigger(x, z); },
     getModifiers: () => buffs.mods,
     // Rod, reel, bait and leader. Without this the rod is permanently the stock outfit no matter
     // what the tackle store sold you.
@@ -622,7 +635,10 @@ export function initWorld(wrap: HTMLElement): World {
     boatInput: input,
     getBoat: () => stateBox.state,
     spots: life.spots,
-    onLanded(fish) { catchFlow.landFish({ key: fish.key, weight: fish.weight, x: fish.fx, z: fish.fz, zone: fish.zone, tag: fish.tag }); },
+    onLanded(fish) { catchFlow.landFish({ key: fish.key, weight: fish.weight, x: fish.fx, z: fish.fz, zone: fish.zone, tag: fish.tag, ashore: fish.ashore }); },
+    // Fishing off a pier, a private dock or a marina's planks (game/fishing/shore.ts). `land` is
+    // built below; these only run once the game is.
+    shore: { spot: () => land.fishSpot(), firstPerson: () => land.firstPerson, body: () => land.body },
     tags: catchFlow.tags,
     onActionWhileCaught() { catchFlow.releaseFish(); },
     // Space doubles as the diver's ascend key (entities/diver/input.ts) and this module's own
@@ -632,7 +648,8 @@ export function initWorld(wrap: HTMLElement): World {
     // (entities/handgun/input.ts), so without it every shot charged a rod cast in the background
     // and the Space release sent a real bobber into the water with the gun still out. The
     // handgun's `prepare` below only clears a charge that was already running when you drew.
-    isSuspended: () => diver.mode === 'diver' || land.mode === 'land' || handgun.mode === 'gun',
+    // Ashore the rod is live only standing on something you can fish off (`land.fishSpot()`).
+    isSuspended: () => diver.mode === 'diver' || (land.mode === 'land' && !land.fishSpot()) || handgun.mode === 'gun',
   });
   bindCatchInput(catchFlow, () => stateBox.state);
 
@@ -680,6 +697,16 @@ export function initWorld(wrap: HTMLElement): World {
     // F underwater opens treasure, not the dock (entities/land/index.ts's `diving` dep).
     diving: () => diver.mode === 'diver',
     estates: () => myEstates,
+    docks: waterfront.walkDocks,
+    solid: waterfront.houseRects,
+  });
+
+  // Rod fishing ashore: what the walker needs from the rod (game/fishing/shore.ts has the rules).
+  land.attachAngler({
+    holdStill: () => shoreHoldsStill(FishF.state, FishF.charging),
+    prompt: (deck) => shorePrompt(FishF.state, FishF.charging, deck),
+    refuseBoard: () => (FishF.state === 'fight' ? 'Land your fish first.' : catchFlow.current ? 'Finish with your catch first.' : null),
+    cast: (down) => fishing.action(down),
   });
 
   // 13c-3. trolling (game/fishing/trolling.ts, rules in @keysrun/shared/sim/troll): outriggers
@@ -866,6 +893,7 @@ export function initWorld(wrap: HTMLElement): World {
   bindBoatInput(input, stateBox, {
     toggleTrim() {
       if (FishF.state === 'fight') { fishing.setDrag(FishF.drag + (shiftHeld ? -1 : 1)); return; }
+      if (land.mode === 'land') return; // ashore, T is only the drag: the boat is tied up behind you
       stateBox.state = { ...stateBox.state, trimMode: !stateBox.state.trimMode };
       dropCruise();
       input.fwd = false; input.back = false;
@@ -1758,6 +1786,13 @@ export function initWorld(wrap: HTMLElement): World {
     },
     setRemoteBoatsForNet(remotes) {
       netRemoteBoats = remotes;
+    },
+    getLocalBody() {
+      const d = diver.mode === 'diver' ? diver.state : null;
+      if (d) return { mode: 'dive', x: d.x, y: d.y, z: d.z, h: d.yaw, speed: Math.hypot(d.vx, d.vy, d.vz) };
+      const w = land.walker;
+      if (w) return { mode: 'walk', x: w.x, y: w.y, z: w.z, h: w.yaw, speed: w.speed };
+      return null;
     },
   };
 

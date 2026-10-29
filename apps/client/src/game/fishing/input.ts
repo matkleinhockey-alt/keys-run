@@ -22,6 +22,8 @@ export function bindFishingInput(
   fp: FpState,
   getBoat: () => BoatState,
   isSuspended: () => boolean = () => false,
+  /** False while V belongs to someone else — ashore it is the land camera's view toggle. */
+  ownsViewKey: () => boolean = () => true,
 ): () => void {
   const onKeyDown = (e: KeyboardEvent): void => {
     const start = document.getElementById('start');
@@ -44,7 +46,7 @@ export function bindFishingInput(
       logic.reelIn('Line reeled in.');
       return;
     }
-    if (e.code === 'KeyV') {
+    if (e.code === 'KeyV' && ownsViewKey()) {
       fp.pref = !fp.pref;
       toast(fp.pref ? 'First-person fishing view on.' : 'Third-person fishing view.');
     }

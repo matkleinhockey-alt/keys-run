@@ -15,6 +15,9 @@ import { createFishingLogic, type FishingDeps, type LandedFish } from './update.
 import { bindFishingInput } from './input.js';
 import { F, lineOut, fishingActive } from './state.js';
 import { NO_SPOTS, type SpotQuery } from './spot.js';
+import type { Human } from '../../entities/life/human.js';
+import { shoreBoat, type ShoreAngler, type ShoreSpot } from './shore.js';
+import { createShoreRod } from './shore-rod.js';
 
 export { F, lineOut, fishingActive } from './state.js';
 export type { LandedFish } from './update.js';
@@ -46,6 +49,20 @@ export interface FishingSystemDeps {
   isSuspended?(): boolean;
   /** Hand steadiness / sway for the strike window (game/buffs.ts `mods`). */
   getModifiers?: FishingDeps['getModifiers'];
+  /**
+   * Fishing off a pier, a private dock or a marina's planks (shore.ts). Omitted = only ever from
+   * the boat. While `spot()` is non-null the state machine is handed a stand-in boat at the
+   * walker's feet, the line hangs from a rod in the walking body's hands, and stepping off the
+   * deck (or back aboard) with a line out reels it in.
+   */
+  shore?: {
+    /** Where the walker stands on a fishable deck — `LandSystem.fishSpot()`; null aboard or on dry land. */
+    spot(): ShoreSpot | null;
+    /** The land camera is first-person. */
+    firstPerson(): boolean;
+    /** The walking body, to put the rod in its hands; null while there is none. */
+    body(): Human | null;
+  };
 }
 
 export interface FishingSystem {
@@ -55,6 +72,9 @@ export interface FishingSystem {
   reelIn(msg?: string): void;
   /** Returns the rod to idle after a catch card is dismissed — see update.ts's `clearCaught`. */
   clearCaught(): void;
+  /** The cast/strike button, pressed or released — for a touch control that is not `#tAct` (the
+   * land pad's, entities/land/hud.ts). Same as Space. */
+  action(down: boolean): void;
   /**
    * Set the hook on whatever `F` is currently holding, exactly as hitting the strike window does.
    *
@@ -70,6 +90,13 @@ export interface FishingSystem {
 export function createFishing(deps: FishingSystemDeps): FishingSystem {
   const visuals = createFishingVisuals(deps.scene);
   const rodVM = createRodViewModel(deps.camera);
+  const shoreRod = createShoreRod();
+  function getShore(): ShoreAngler | null {
+    const spot = deps.shore?.spot() ?? null;
+    return spot ? { spot, rod: shoreRod, firstPerson: deps.shore!.firstPerson() } : null;
+  }
+  /** The boat as fishing sees it: the real one, or the stand-in at the angler's feet ashore. */
+  const fishingBoat = (boat: BoatState): BoatState => { const s = getShore(); return s ? shoreBoat(boat, s.spot) : boat; };
   const logic = createFishingLogic({
     onHookset: deps.onHookset,
     scene: deps.scene,
@@ -88,20 +115,54 @@ export function createFishing(deps: FishingSystemDeps): FishingSystem {
     getModifiers: deps.getModifiers,
     gear: deps.gear,
     getTackle: deps.getTackle,
+    getShore,
   });
-  const unbindInput = bindFishingInput(logic, deps.fp, deps.getBoat, deps.isSuspended);
+  const getBoat = (): BoatState => fishingBoat(deps.getBoat());
+  // V is the land camera's own first/third toggle ashore (entities/land/input.ts); only the boat's
+  // fishing view answers it here.
+  const unbindInput = bindFishingInput(logic, deps.fp, getBoat, deps.isSuspended, () => !deps.shore?.spot());
 
+  /** Whether the last step was fished from a deck: leaving one with a line out reels it in. */
+  let wasAshore = false;
   function update(dt: number, t: number, boat: BoatState, sw: number, ch: number): void {
-    logic.update(dt, t, boat, sw, ch);
-    rodVM.update(dt, deps.fp.on, F.reeling, logic.actionInput.held, deps.getModel());
+    const shore = getShore();
+    // Stepped off the planks, or back aboard, with a cast charging or a line in the water. The
+    // walker stands still while a line is out (shore.ts's `shoreHoldsStill`), so this is the
+    // boarding and cab paths and anything else that moves the walker for you.
+    if (wasAshore && !shore && (F.charging || lineOut())) logic.reelIn('Line reeled in.');
+    wasAshore = !!shore;
+    logic.update(dt, t, shore ? shoreBoat(boat, shore.spot) : boat, sw, ch);
+    // The boat's `fp.on` is already "fishing view AND fishing"; the land camera's first person is
+    // just a camera, so the rod comes up only once there is something to do with it.
+    rodVM.update(dt, shore ? shore.firstPerson && fishingActive() : deps.fp.on, F.reeling, logic.actionInput.held, shore ? shoreRod : deps.getModel());
   }
 
+  let lastRenderT = 0;
   function render(t: number, boat: BoatState, sw: number, ch: number): void {
-    if (!lineOut()) { visuals.fishLine.visible = false; deps.getModel().rodPivot.visible = fishingActive() && !deps.fp.on; return; }
-    deps.getModel().rodPivot.visible = fishingActive() && !deps.fp.on;
+    const dt = Math.min(0.1, Math.max(0, t - lastRenderT));
+    lastRenderT = t;
+    const shore = getShore();
     const model = deps.getModel();
-    rodVM.lineTip(model, deps.fp.on).getWorldPosition(tipWorld);
-    visuals.drawLine(t, boat, sw, ch, tipWorld);
+    model.rodPivot.visible = !shore && fishingActive() && !deps.fp.on;
+    shoreRod.rodPivot.visible = !!shore && fishingActive();
+    const body = shore && !shore.firstPerson && fishingActive() ? deps.shore!.body() : null;
+    if (body) {
+      // Face the line once it is out; while a cast is charging, face where it is about to go.
+      let target: THREE.Vector3 | null = null;
+      if (F.state === 'fight') target = holdAt.set(F.fx, 0, F.fz);
+      else if (lineOut()) target = holdAt.set(F.bob.x, 0, F.bob.z);
+      else if (F.charging) { deps.camera.getWorldDirection(holdAt); holdAt.y = 0; holdAt.normalize().multiplyScalar(10).add(body.group.position); target = holdAt; }
+      shoreRod.hold(body, target, F.state === 'fight', F.fight ? F.fight.tension : 0, dt);
+    }
+    if (!lineOut()) { visuals.fishLine.visible = false; return; }
+    rodVM.lineTip(shore ? shoreRod : model, shore ? shore.firstPerson : deps.fp.on).getWorldPosition(tipWorld);
+    visuals.drawLine(t, shore ? shoreBoat(boat, shore.spot) : boat, sw, ch, tipWorld);
+  }
+
+  function action(down: boolean): void {
+    if (deps.isSuspended?.()) { if (!down) logic.actionInput.held = false; return; }
+    logic.actionInput.held = down;
+    if (down) logic.onAction(getBoat()); else logic.onActionUp(getBoat());
   }
 
   function dispose(): void {
@@ -109,7 +170,8 @@ export function createFishing(deps: FishingSystemDeps): FishingSystem {
     visuals.dispose();
   }
 
-  return { update, render, setDrag: logic.setDrag, reelIn: logic.reelIn, clearCaught: logic.clearCaught, setHook: logic.setHook, dispose };
+  return { update, render, setDrag: logic.setDrag, reelIn: logic.reelIn, clearCaught: logic.clearCaught, setHook: logic.setHook, action, dispose };
 }
 
 const tipWorld = new THREE.Vector3();
+const holdAt = new THREE.Vector3();

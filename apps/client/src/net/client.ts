@@ -22,7 +22,9 @@
  *     simple rolling 1 s window over inbound frame sizes.
  */
 import {
+  AVATAR_MODE,
   decodeServerMessage,
+  encodeAvatar,
   encodeHello,
   encodeInput,
   encodePing,
@@ -55,6 +57,21 @@ export interface RemoteBoatSnapshot {
   fade: number;
 }
 
+/** The player's body off the boat (AVATAR): walking ashore, or in the water. */
+export interface LocalBody {
+  mode: 'walk' | 'dive';
+  x: number; y: number; z: number;
+  /** Facing, radians, boat-heading convention. */
+  h: number;
+  speed: number;
+}
+
+/** Another player's body, as last heard (net/remote-bodies.ts smooths it). */
+export interface RemoteBody extends LocalBody {
+  slotId: number;
+  receivedAtMs: number;
+}
+
 export interface NetClientEvents {
   onConnectionState?(state: ConnectionState, detail?: { attempt?: number; nextRetryMs?: number; reason?: string }): void;
   onWelcome?(w: { slotId: number; hullIndex: number; x: number; z: number; h: number; speed: number }): void;
@@ -72,6 +89,8 @@ export interface NetClientOptions {
 const INPUT_HZ = 30;
 const PING_INTERVAL_MS = 2000;
 const SPAWN_FADE_MS = 400;
+/** Bodies go up every 3rd input tick: 10 Hz is plenty for a walk or a swim. */
+const BODY_EVERY_N_INPUTS = 3;
 
 export class NetClient {
   private ws: WebSocket | null = null;
@@ -88,6 +107,12 @@ export class NetClient {
   private seq = 0;
   private lastAppliedTick = 0;
   private latestLocalState: LocalBoatInput | null = null;
+  private localBody: LocalBody | null = null;
+  /** The body as last sent: null = aboard (and the sim has been told). */
+  private sentBody: LocalBody | null = null;
+  private inputCount = 0;
+  private bodies = new Map<number, RemoteBody>();
+  private names = new Map<number, string>();
 
   private tracks = new Map<number, RemoteBoatTrack>();
   private reconciler = createReconciler();
@@ -128,6 +153,21 @@ export class NetClient {
   /** Called every render frame (cheap: just copies numbers for the 30 Hz input timer to pick up). */
   setLocalState(input: LocalBoatInput): void {
     this.latestLocalState = input;
+  }
+
+  /** Called every render frame: where the player's body is, or null while aboard the boat. */
+  setLocalBody(body: LocalBody | null): void {
+    this.localBody = body;
+  }
+
+  /** Other players' bodies near you, as last heard. */
+  getRemoteBodies(): readonly RemoteBody[] {
+    return [...this.bodies.values()];
+  }
+
+  /** A player's display name, once the sim has said (PEER). */
+  nameOf(slotId: number): string | undefined {
+    return this.names.get(slotId);
   }
 
   /**
@@ -247,6 +287,16 @@ export class NetClient {
         x: s.x, z: s.z, h: s.h, speed: s.speed,
       }),
     );
+    this.inputCount++;
+    const b = this.localBody;
+    // While off the boat, every BODY_EVERY_N_INPUTS-th tick; once more on climbing aboard.
+    if (b ? this.inputCount % BODY_EVERY_N_INPUTS === 0 : this.sentBody !== null) {
+      this.ws.send(encodeAvatar({
+        mode: b ? (b.mode === 'walk' ? AVATAR_MODE.WALK : AVATAR_MODE.DIVE) : AVATAR_MODE.NONE,
+        x: b?.x ?? 0, y: b?.y ?? 0, z: b?.z ?? 0, h: b?.h ?? 0, speed: Math.max(0, b?.speed ?? 0),
+      }));
+      this.sentBody = b ? { ...b } : null;
+    }
   }
 
   private sendPing(): void {
@@ -278,6 +328,8 @@ export class NetClient {
       case 'welcome': {
         this.welcomed = true;
         this.attempt = 0;
+        this.sentBody = { mode: 'walk', x: 0, y: 0, z: 0, h: 0, speed: 0 }; // a fresh sim knows nothing: tell it, either way
+        this.names.clear();
         this.localSlotId = decoded.msg.slotId;
         this.lastAppliedTick = decoded.msg.tick;
         this.startPerConnectionTimers();
@@ -340,6 +392,20 @@ export class NetClient {
           this.rttMs = performance.now() - sentAt;
           this.pingSentAtMs.delete(decoded.msg.clientTimeMs);
         }
+        break;
+      }
+      case 'avatars': {
+        const nowMs = performance.now();
+        this.bodies.clear();
+        for (const b of decoded.msg.bodies) {
+          if (b.slotId === this.localSlotId) continue;
+          if (b.mode !== AVATAR_MODE.WALK && b.mode !== AVATAR_MODE.DIVE) continue;
+          this.bodies.set(b.slotId, { slotId: b.slotId, mode: b.mode === AVATAR_MODE.WALK ? 'walk' : 'dive', x: b.x, y: b.y, z: b.z, h: b.h, speed: b.speed, receivedAtMs: nowMs });
+        }
+        break;
+      }
+      case 'peer': {
+        this.names.set(decoded.slotId, decoded.name);
         break;
       }
       case 'server_restart': {

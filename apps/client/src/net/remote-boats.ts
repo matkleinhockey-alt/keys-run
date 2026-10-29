@@ -36,7 +36,7 @@ interface RemoteInstance {
 
 export interface RemoteBoatManager {
   /** Called every rendered frame with the net client's current extrapolated snapshots. */
-  update(nowMs: number, simTimeS: number, snapshots: readonly RemoteBoatSnapshot[]): void;
+  update(nowMs: number, simTimeS: number, snapshots: readonly RemoteBoatSnapshot[], nameOf?: (slotId: number) => string | undefined): void;
   dispose(): void;
 }
 
@@ -91,7 +91,7 @@ export function createRemoteBoatManager(scene: THREE.Scene, camera: THREE.Perspe
     instances.delete(slotId);
   }
 
-  function update(nowMs: number, simTimeS: number, snapshots: readonly RemoteBoatSnapshot[]): void {
+  function update(nowMs: number, simTimeS: number, snapshots: readonly RemoteBoatSnapshot[], nameOf?: (slotId: number) => string | undefined): void {
     const liveSlots = new Set<number>();
     for (const snap of snapshots) {
       liveSlots.add(snap.slotId);
@@ -119,6 +119,8 @@ export function createRemoteBoatManager(scene: THREE.Scene, camera: THREE.Perspe
 
       inst.model.props.forEach((p) => { p.rotation.z += dt * (speed * 0.8); });
 
+      const name = nameOf?.(snap.slotId);
+      if (name && inst.tag.textContent !== name) inst.tag.textContent = name;
       ndc.set(x, y + 5.5, z).project(camera);
       const dx = x - camera.position.x, dz = z - camera.position.z;
       const visible = ndc.z < 1 && Math.hypot(dx, dz) < 1400;
