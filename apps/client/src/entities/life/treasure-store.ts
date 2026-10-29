@@ -20,13 +20,14 @@
  * the wrecks re-fill on reload, which is the failure a player forgives.
  */
 import { createTreasureState, type TreasureState } from '@keysrun/shared/sim/treasure';
+import { readSave, writeSave, removeSave } from '../../net/cloud-save.js';
 
 const STORE_KEY = 'keysrun.treasure.v1';
 
 /** SERVER SEAM 1/2: where "what have I emptied" comes from. */
 export function loadTreasure(): TreasureState {
   try {
-    const raw = globalThis.localStorage?.getItem(STORE_KEY);
+    const raw = readSave(STORE_KEY);
     if (!raw) return createTreasureState();
     const o = JSON.parse(raw) as { opened?: unknown };
     // Degrade to the nearest legal state rather than throwing, like `sanitizeInventory`: a
@@ -40,10 +41,10 @@ export function loadTreasure(): TreasureState {
 
 /** SERVER SEAM 2/2: where it goes. */
 export function saveTreasure(s: TreasureState): void {
-  try { globalThis.localStorage?.setItem(STORE_KEY, JSON.stringify(s)); } catch { /* unremembered, not fatal */ }
+  try { writeSave(STORE_KEY, JSON.stringify(s)); } catch { /* unremembered, not fatal */ }
 }
 
 /** Test/verification only: re-fill every wreck in the world. */
 export function resetTreasure(): void {
-  try { globalThis.localStorage?.removeItem(STORE_KEY); } catch { /* ignore */ }
+  try { removeSave(STORE_KEY); } catch { /* ignore */ }
 }

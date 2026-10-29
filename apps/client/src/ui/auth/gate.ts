@@ -50,8 +50,7 @@ export async function mountAuthGate(): Promise<GateResult> {
  * without duplicating the API call + storage-clear logic. Reloads the page: the simplest correct
  * way to fully unwind an in-progress net connection + rendered world back to the gate. */
 export async function logOutAndReload(token: string): Promise<void> {
-  const session = loadSavedSession();
-  if (session) await signOutSave(session); // last save up, offline game back (net/cloud-save.ts)
+  await signOutSave(); // last changes up to the account (net/cloud-save.ts)
   clearSession();
   try { await logout(token); } catch { /* best-effort */ }
   location.reload();

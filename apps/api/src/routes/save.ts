@@ -2,12 +2,13 @@
  * The signed-in player's game save, so money, boats, gear and the rest follow the account instead
  * of the browser.
  *
- *   GET /save   { data: {key: json} | null, updatedAt }   (auth)
- *   PUT /save   { data: {key: json} }                     (auth) — replaces the save
+ *   GET /save   { data: {key: value} | null, updatedAt }   (auth)
+ *   PUT /save   { data: {key: value} }                     (auth) — replaces the save
  *
- * `data` is a map of the client's localStorage keys to the JSON strings stored under them
- * (apps/client/src/net/cloud-save.ts). The server keeps it as given: only the key names, the count
- * and the size are checked. Like the wallet it holds, it is the client's word — cash is not yet a
+ * `data` maps each game system's save key to its state, as JSON (apps/client/src/net/cloud-save.ts),
+ * so the row reads like the game: data->'keysrun.economy.v1'->>'cash' is the wallet. Saves from the
+ * first build hold JSON strings instead; the client reads both. The server keeps it as given: only
+ * the key names, the count and the size are checked. Like the wallet it holds, it is the client's word — cash is not yet a
  * server-validated ledger (apps/client/src/game/economy/system.ts says when that changes).
  */
 import type { FastifyInstance } from 'fastify';
@@ -15,11 +16,11 @@ import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { playerSaves } from '../db/schema.js';
 
-/** The longest save accepted, in characters of JSON across all values. */
+/** The longest save accepted, in characters of JSON. */
 export const MAX_SAVE_CHARS = 512 * 1024;
 
 const SaveBody = z.object({
-  data: z.record(z.string().regex(/^keysrun\.[a-z0-9.-]{1,60}$/), z.string()).refine((d) => Object.keys(d).length <= 32, 'too many keys'),
+  data: z.record(z.string().regex(/^keysrun\.[a-z0-9.-]{1,60}$/), z.unknown()).refine((d) => Object.keys(d).length <= 32, 'too many keys'),
 });
 
 export default async function saveRoutes(fastify: FastifyInstance): Promise<void> {
@@ -34,7 +35,7 @@ export default async function saveRoutes(fastify: FastifyInstance): Promise<void
     async (request, reply) => {
       const body = SaveBody.safeParse(request.body);
       if (!body.success) return reply.code(400).send({ error: 'bad_save' });
-      const size = Object.values(body.data.data).reduce((n, v) => n + v.length, 0);
+      const size = JSON.stringify(body.data.data).length;
       if (size > MAX_SAVE_CHARS) return reply.code(413).send({ error: 'save_too_large' });
       const now = new Date();
       await fastify.db.insert(playerSaves)

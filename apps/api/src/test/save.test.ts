@@ -22,13 +22,16 @@ describe('game saves', () => {
   it('starts empty, then keeps exactly what was saved, per account', async () => {
     const a = await token(), b = await token();
     expect((await get(a)).json()).toEqual({ data: null, updatedAt: null });
-    const data = { 'keysrun.economy.v1': JSON.stringify({ v: 1, cash: 12345 }), 'keysrun.inventory.v1': '{"inventory":{}}' };
+    const data = { 'keysrun.economy.v1': { v: 1, cash: 12345, owned: ['skiff'] }, 'keysrun.inventory.v1': { inventory: {} } };
     expect((await put(a, data)).statusCode).toBe(200);
     expect((await get(a)).json()).toMatchObject({ data });
     expect((await get(b)).json()).toMatchObject({ data: null });
-    const next = { 'keysrun.economy.v1': '{"v":1,"cash":1}' };
+    const next = { 'keysrun.economy.v1': { v: 1, cash: 1 } };
     await put(a, next);
     expect((await get(a)).json().data).toEqual(next);
+    // stored as JSON, so the database can read the wallet
+    const [row] = (await handle.pool.query(`SELECT data->'keysrun.economy.v1'->>'cash' AS cash FROM player_saves`)).rows as { cash: string }[];
+    expect(row.cash).toBe('1');
   });
 
   it('needs a session, and refuses keys that are not the game\'s or a save that is too big', async () => {

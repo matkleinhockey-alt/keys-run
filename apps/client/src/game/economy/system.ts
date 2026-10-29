@@ -30,16 +30,16 @@ import { loadInventory, saveInventory } from './inventory.js';
 import { toast } from '../../ui/toast.js';
 import type { BoatModel } from '../../entities/boat/model.js';
 import type { BoatMarket } from '../../ui/start.js';
+import { readSave, writeSave } from '../../net/cloud-save.js';
 
 const STORAGE_KEY = 'keysrun.economy.v1';
 
-/** SERVER SEAM 1/2: where the wallet comes from. Today: this browser's localStorage. Later: the
- * server's copy, fetched at login, with localStorage kept only for the offline fallback. Wrapped
- * because storage throws in private windows and when site data is blocked — the game must still
- * run, on a fresh wallet that simply isn't remembered. */
+/** SERVER SEAM 1/2: where the wallet comes from: the account's save when signed in, else this
+ * browser's localStorage (net/cloud-save.ts). Wrapped because storage throws in private windows and
+ * when site data is blocked — the game must still run, on a fresh wallet that simply isn't remembered. */
 function load(): EconomyState {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = readSave(STORAGE_KEY);
     return raw ? sanitizeEconomy(JSON.parse(raw)) : createEconomy();
   } catch {
     return createEconomy();
@@ -49,7 +49,7 @@ function load(): EconomyState {
 /** SERVER SEAM 2/2: where the wallet goes. Today a local write; later a no-op for money (the
  * server owns it) and only a selected-hull preference would be sent. */
 function save(s: EconomyState): void {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch { /* unremembered, not fatal */ }
+  try { writeSave(STORAGE_KEY, JSON.stringify(s)); } catch { /* unremembered, not fatal */ }
 }
 
 const usd = (n: number): string => '$' + Math.round(n).toLocaleString('en-US');

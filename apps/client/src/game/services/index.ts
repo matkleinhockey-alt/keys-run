@@ -31,6 +31,7 @@ import {
 } from '@keysrun/shared/sim/services';
 import type { Inventory } from '@keysrun/shared/sim/shop';
 import './services.css';
+import { readSave, writeSave } from '../../net/cloud-save.js';
 
 const STORAGE_KEY = 'keysrun.services.v1';
 
@@ -43,14 +44,14 @@ function load(): ServicesState {
     try { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0]; } catch { return (Date.now() ^ 0x5bd1e995) >>> 0; }
   };
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = readSave(STORAGE_KEY);
     return raw ? sanitizeServices(JSON.parse(raw), fresh()) : createServices(fresh());
   } catch {
     return createServices(fresh());
   }
 }
 function save(s: ServicesState): void {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch { /* unremembered, not fatal */ }
+  try { writeSave(STORAGE_KEY, JSON.stringify(s)); } catch { /* unremembered, not fatal */ }
 }
 
 export interface InventoryPort {
