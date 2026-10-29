@@ -90,9 +90,10 @@ export interface LandDeps {
   getRunBest?(): RunBest | null;
   /** Your own Keys Run Estates lots: walkable, and their docks are somewhere to tie up. */
   estates?(): readonly WalkableEstate[];
-  /** The waterfront houses' private docks (walkable, somewhere to tie up) and the houses (solid). */
+  /** The waterfront houses' private docks (walkable, somewhere to tie up). */
   docks?: readonly WalkDock[];
-  solid?: readonly Rect[];
+  /** Everything solid out on the keys; a new array when it changes (controller.ts). */
+  solid?: () => readonly Rect[];
 }
 
 export interface LandSystem {
@@ -254,7 +255,9 @@ export function createLandSystem(deps: LandDeps): LandSystem {
     if (m.estate) { deps.toast(`Tied up at your own dock, ${m.marina}. WASD to walk your land, B to go back to the boat.`); return; }
     deps.toast(m.marina.startsWith('Boot Key Harbor City')
       ? 'Tied up at Boot Key Harbor City Marina. WASD to walk, drag to look, F to use things, B to go back to the boat.'
-      : `Tied up at ${m.marina}. WASD to walk — the whole key is yours to explore. B to go back to the boat.`);
+      : m.marina.endsWith('Fishing Pier')
+        ? `Tied up at ${m.marina}. Walk out to the T and hold Space to cast — or WASD off the end to explore the key. B to go back to the boat.`
+        : `Tied up at ${m.marina}. WASD to walk — the whole key is yours to explore. B to go back to the boat.`);
   }
   window.addEventListener('keydown', (e) => {
     if (e.code !== 'KeyF' || e.repeat || ctl.mode !== 'boat') return;

@@ -5,7 +5,8 @@
  * ## Where they go
  * Chosen from the real shorelines (coast-data.ts), deterministically, the way waterfront.ts picks
  * its estates: walk each key's outline, and keep a spot only if
- *   - it is away from the town, the marinas, US-1, the creeks and the golf courses;
+ *   - it is away from the town, the marinas, US-1, the creeks and the golf courses, and no part
+ *     of it passes under either Seven Mile Bridge (BRIDGE_CLEAR);
  *   - the land behind it comes up to deck height within a few metres (so you step off the end of
  *     the pier onto the ground — the walker refuses a step of more than STEP_MAX);
  *   - the water reaches FISH_DEPTH within MAX_LEN, and nothing but water lies under the span.
@@ -16,7 +17,7 @@
  * client renders them from this list (apps/client/src/world/piers.ts).
  */
 import { islands, islandDist, chainZ, type Island } from './chain.js';
-import { landH, depthAt, creekDist, MARINAS } from './depth.js';
+import { landH, depthAt, creekDist, MARINAS, OLDBR, WB } from './depth.js';
 import { inTownFootprint } from './town.js';
 
 /** Deck height above the still water. */
@@ -31,6 +32,14 @@ const MIN_LEN = 30;
 const MAX_LEN = 150;
 const PIER_SPACING = 900;
 const MAX_PIERS = 6;
+/** No part of a pier comes nearer than this to either bridge's line (the T is 14 m across). */
+const BRIDGE_CLEAR = 16;
+
+/** True if (x,z) is within BRIDGE_CLEAR of the new bridge or the old one. */
+function underBridge(x: number, z: number): boolean {
+  if (x >= WB.x0 && x <= WB.x1 && Math.abs(z - chainZ(x)) < BRIDGE_CLEAR) return true;
+  return x >= OLDBR.x0 - BRIDGE_CLEAR && x <= OLDBR.x1 + BRIDGE_CLEAR && Math.abs(z - chainZ(x) - OLDBR.dz) < BRIDGE_CLEAR;
+}
 
 export interface Pier {
   id: string;
@@ -75,6 +84,9 @@ function site(I: Island, sx: number, sz: number): Omit<Pier, 'id' | 'name'> | nu
   }
   if (len < 0) return null;
   for (let r = len; r <= len + HEAD_D; r += 2) if (landH(sx + nx * r, sz + nz * r) > -0.3) return null;
+  for (let r = -root; r <= len + HEAD_D; r += 3) {
+    for (const c of [-HEAD_W / 2, 0, HEAD_W / 2]) if (underBridge(sx + nx * r - nz * c, sz + nz * r + nx * c)) return null;
+  }
   return { x0: sx - nx * root, z0: sz - nz * root, x1: sx + nx * len, z1: sz + nz * len, nx, nz, len: len + root };
 }
 
@@ -104,9 +116,15 @@ function buildPiers(): Pier[] {
   for (const c of cands) {
     if (out.length >= MAX_PIERS) break;
     if (out.some((p) => Math.hypot(p.x1 - c.x1, p.z1 - c.z1) < PIER_SPACING)) continue;
-    out.push({ id: `pier-${out.length + 1}`, name: `${c.isl} Fishing Pier`, x0: c.x0, z0: c.z0, x1: c.x1, z1: c.z1, nx: c.nx, nz: c.nz, len: c.len });
+    out.push({ id: `pier-${out.length + 1}`, name: c.isl, x0: c.x0, z0: c.z0, x1: c.x1, z1: c.z1, nx: c.nx, nz: c.nz, len: c.len });
   }
-  return out;
+  // Names: "<key> Fishing Pier", or West/East ones where a key has two.
+  for (const p of out) {
+    const same = out.filter((q) => q.name === p.name);
+    const side = same.length < 2 ? '' : p.x0 === Math.min(...same.map((q) => q.x0)) ? 'West ' : p.x0 === Math.max(...same.map((q) => q.x0)) ? 'East ' : 'Middle ';
+    (p as { label?: string }).label = `${p.name} ${side}Fishing Pier`;
+  }
+  return out.map((p) => ({ ...p, name: (p as { label?: string }).label ?? p.name }));
 }
 
 export const PIERS: readonly Pier[] = buildPiers();

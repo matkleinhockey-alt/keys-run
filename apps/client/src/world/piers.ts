@@ -1,12 +1,15 @@
 /**
  * The public fishing piers (shared world/piers.ts), drawn: a weathered plank walkway on paired
  * pilings, a rail either side once it is over the water, the T at the end with a bench and a
- * cleaning table, and a lamp post at each corner of the T. Everything is one batched geometry
- * (entities/town/batch.ts), so all of them together cost one draw call.
+ * cleaning table, and a lamp post at each corner of the T. Also the Old Seven Mile Bridge's
+ * fishing-pier furniture (shared world/old-bridge.ts): a rail down each side of its deck, and the
+ * ramps up to it. Everything is one batched geometry (entities/town/batch.ts), so all of it
+ * together costs one draw call.
  */
 import * as THREE from 'three';
 import { PIERS, PIER_TOP, PIER_W, HEAD_W, HEAD_D } from '@keysrun/shared/world/piers';
 import { landH } from '@keysrun/shared/world/depth';
+import { OLD_DECK_SEGS, OLD_RAMPS, OLD_DECK_TOP } from '@keysrun/shared/world/old-bridge';
 import { GeoBatch } from '../entities/town/batch.js';
 
 const PLANK = 0x9c8a70;
@@ -93,6 +96,43 @@ export function createPiers(): THREE.Group {
     const [tx, tz] = at(p.len - 0.6, HEAD_W / 4);
     g.box(tx, top + 0.9, tz, 1.6, 0.08, 0.7, 0xe9e6de, { ry });
     g.box(tx, top + 0.45, tz, 0.12, 0.9, 0.5, STEEL, { ry });
+  }
+
+  // ---- the Old Seven Mile Bridge: rails along the deck, and the ramps
+  const CONCRETE = 0xb9ad98;
+  for (const sgm of OLD_DECK_SEGS) {
+    const ux = sgm.xb - sgm.xa, uz = sgm.zb - sgm.za, L = Math.hypot(ux, uz), ry = Math.atan2(ux / L, uz / L);
+    for (const side of [-1, 1]) {
+      const ox = (-uz / L) * 3.6 * side, oz = (ux / L) * 3.6 * side;
+      const mx = (sgm.xa + sgm.xb) / 2 + ox, mz = (sgm.za + sgm.zb) / 2 + oz;
+      g.box(mx, OLD_DECK_TOP + RAIL_H, mz, 0.09, 0.09, L + 0.4, RAIL, { ry });
+      for (let a = 0; a < L; a += 3) {
+        g.box(sgm.xa + (ux / L) * a + ox, OLD_DECK_TOP + RAIL_H / 2, sgm.za + (uz / L) * a + oz, 0.12, RAIL_H, 0.12, RAIL, { ry });
+      }
+    }
+  }
+  for (const r of OLD_RAMPS) {
+    const ry = Math.atan2(r.dx, r.dz);
+    // half-metre slabs stepping down: at 1 in 9 that reads as a smooth ramp
+    for (let s = 0; s < r.len; s += 0.5) {
+      const y = OLD_DECK_TOP + (r.foot - OLD_DECK_TOP) * (s + 0.25) / r.len;
+      const x = r.x0 + r.dx * (s + 0.25), z = r.z0 + r.dz * (s + 0.25);
+      g.box(x, y - 0.3, z, 4, 0.6, 0.52, CONCRETE, { ry });
+      for (const side of [-1, 1]) {
+        if (Math.round(s * 2) % 6 === 0) g.box(x - r.dz * 1.95 * side, y + RAIL_H / 2, z + r.dx * 1.95 * side, 0.1, RAIL_H, 0.1, RAIL, { ry });
+      }
+    }
+    for (const side of [-1, 1]) {
+      // the hand rail, laid along the slope
+      const mx = r.x0 + r.dx * r.len / 2 - r.dz * 1.95 * side, mz = r.z0 + r.dz * r.len / 2 + r.dx * 1.95 * side;
+      g.box(mx, (OLD_DECK_TOP + r.foot) / 2 + RAIL_H, mz, 0.08, 0.08, Math.hypot(r.len, OLD_DECK_TOP - r.foot), RAIL, { ry, rx: Math.atan2(OLD_DECK_TOP - r.foot, r.len) });
+    }
+    // columns under the high end
+    for (let s = 4; s < r.len * 0.7; s += 8) {
+      const y = OLD_DECK_TOP + (r.foot - OLD_DECK_TOP) * s / r.len, x = r.x0 + r.dx * s, z = r.z0 + r.dz * s;
+      const gnd = Math.min(landH(x, z), y - 0.6);
+      g.box(x, (gnd + y - 0.6) / 2, z, 0.5, y - 0.6 - gnd, 0.5, CONCRETE, { ry });
+    }
   }
 
   const mesh = new THREE.Mesh(g.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }));

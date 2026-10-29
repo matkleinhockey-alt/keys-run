@@ -8,7 +8,8 @@ import { PIERS, PIER_TOP } from '@keysrun/shared/world/piers';
 import { PAD, TOWN_FRAME, toWorld } from '@keysrun/shared/world/town';
 import { canStand, STEP_MAX } from '@keysrun/shared/sim/walker';
 import { createLandController, WALK_ENV } from '../src/entities/land/controller.js';
-import { naturalGround, type WalkDock } from '../src/entities/land/ground.js';
+import { naturalGround, fishableDeck, OLD_BRIDGE_NAME, type WalkDock } from '../src/entities/land/ground.js';
+import { OLD_RAMPS, OLD_DECK_TOP, onOldDeck } from '@keysrun/shared/world/old-bridge';
 
 const canvas = { addEventListener() {}, removeEventListener() {}, setPointerCapture() {} } as unknown as HTMLCanvasElement;
 const HULL = 9.3;
@@ -60,6 +61,51 @@ describe('the land', () => {
     const [x0, z0] = toWorld(TOWN_FRAME, -60, PAD.v1 - 6), [x1, z1] = toWorld(TOWN_FRAME, -60, PAD.v1 + 6);
     expect(walkable(x0, z0, x1, z1)).toBe(true);
     expect(STEP_MAX).toBeLessThan(0.75); // the pad edge itself is still a step too far; the apron is what makes it work
+  });
+});
+
+describe('the Old Seven Mile Bridge', () => {
+  it('has ramps up onto it from Pigeon Key, both spans', () => {
+    const pigeon = OLD_RAMPS.filter((r) => r.x0 > -2730 && r.x0 < -2600);
+    expect(pigeon.length).toBe(2);
+  });
+
+  it('is walked up from the land, along, and fished off', () => {
+    for (const r of OLD_RAMPS) {
+      const fx = r.x0 + r.dx * (r.len + 3), fz = r.z0 + r.dz * (r.len + 3); // on the key, past the foot
+      const dx = r.x0 - r.dx * 30, dz = r.z0 - r.dz * 30;                     // 30 m out along the deck
+      expect(walkable(fx, fz, dx, dz), `ramp at ${r.x0.toFixed(0)}`).toBe(true);
+      expect(WALK_ENV.ground(dx, dz)).toBe(OLD_DECK_TOP);
+      expect(onOldDeck(dx, dz)).toBe(true);
+      expect(fishableDeck([], dx, dz)).toBe(OLD_BRIDGE_NAME);
+    }
+  });
+
+  it('has no way off its side: the edge of the deck is a drop the walker refuses', () => {
+    const r = OLD_RAMPS[0];
+    const x = r.x0 - r.dx * 30, z = r.z0 - r.dz * 30;
+    expect(walkable(x, z, x - r.dz * 8, z + r.dx * 8)).toBe(false);
+  });
+});
+
+describe('houses and palms out on the keys', () => {
+  it('stop you walking through them', () => {
+    const p = PIERS[0];
+    // stand 12 m inland of the pier, facing further inland, with a house 4 m ahead
+    const x = p.x0 - p.nx * 12, z = p.z0 - p.nz * 12;
+    const hx = x - p.nx * 7, hz = z - p.nz * 7;
+    const house = { x0: hx - 2.9, x1: hx + 2.9, z0: hz - 2.9, z1: hz + 2.9 };
+    for (const solid of [[], [house]]) {
+      const c = createLandController({ canvas, solid: () => solid });
+      expect(c.tryEnter({ x: p.x1 + p.nx * 7, z: p.z1 + p.nz * 7, h: 0, speed: 0 }, HULL).ok).toBe(true);
+      const yaw = Math.atan2(p.nx, p.nz); // facing is (-sin, -cos): inland
+      expect(c.debugPlace(x, z, yaw)).toBe(true);
+      c.buttons.fwd = true;
+      for (let i = 0; i < 120; i++) c.step(1 / 30, false);
+      const went = Math.hypot(c.state!.x - x, c.state!.z - z);
+      if (solid.length) expect(went).toBeLessThan(4.2);
+      else expect(went).toBeGreaterThan(6);
+    }
   });
 });
 

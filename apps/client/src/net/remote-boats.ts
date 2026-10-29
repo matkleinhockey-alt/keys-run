@@ -137,7 +137,8 @@ export function createRemoteBoatManager(scene: THREE.Scene, camera: THREE.Perspe
 
     const count = instances.size;
     presence.classList.toggle('hidden', count === 0);
-    if (count > 0) presence.textContent = `👥 ${count} other boat${count === 1 ? '' : 's'} out here`;
+    // every connected player has a boat, wherever they are standing, so this counts players
+    if (count > 0) presence.textContent = `👥 ${count} other player${count === 1 ? '' : 's'} out here`;
   }
 
   function dispose(): void {

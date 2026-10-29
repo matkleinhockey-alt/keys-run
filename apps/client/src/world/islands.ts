@@ -28,7 +28,7 @@ import * as THREE from 'three';
 import { hashCell } from '@keysrun/shared/rng';
 import { islands, islandWorld, islandLocal, islandBox, islandDist, chainZ, type Island } from '@keysrun/shared/world/chain';
 import { landH, onCourse, creekDist, CREEKS, RUNWAY, GOLF, MARINAS } from '@keysrun/shared/world/depth';
-import { inTownFootprint } from '@keysrun/shared/world/town';
+import { inTownFootprint, type Rect } from '@keysrun/shared/world/town';
 import { lerp, rand } from '../core/math.js';
 import { grainTex, normalTex } from '../core/textures.js';
 import { WORLD_SEED, SALT } from '../state/constants.js';
@@ -252,6 +252,7 @@ export type ClearScenery = (house: (x: number, z: number) => boolean, plant: (x:
 interface VegetationResult {
   uTime: { value: number };
   clear: ClearScenery;
+  solids(): readonly Rect[];
   frondMaterial: THREE.MeshStandardMaterial;
   frondBaseCompile: THREE.MeshStandardMaterial['onBeforeCompile'];
 }
@@ -581,8 +582,23 @@ uniform float uTime;`)
     });
     mg.forEach((m, i) => show(mm, orig.mm, i, !plant(m.x, m.z)));
     for (const m of [hm, rm, trunks, fronds, mm]) { m.instanceMatrix.needsUpdate = true; m.computeBoundingSphere(); }
+    houses.forEach((h, i) => { houseOn[i] = !house(h.x, h.z); });
+    palms.forEach((p, i) => { palmOn[i] = !plant(p.x, p.z); });
+    solidCache = null;
   };
-  return { uTime: windUniforms.uTime, clear, frondMaterial: frondMat, frondBaseCompile };
+  // What a person on foot bumps into (entities/land): every house still standing, as a square a
+  // touch inside its 6 x 7 m footprint, and every palm trunk. A new array whenever `clear` changes
+  // what stands, so the walker knows to re-index.
+  const houseOn = houses.map(() => true), palmOn = palms.map(() => true);
+  let solidCache: Rect[] | null = null;
+  const solids = (): readonly Rect[] => {
+    if (solidCache) return solidCache;
+    const out: Rect[] = [];
+    houses.forEach((h, i) => { if (houseOn[i]) out.push({ x0: h.x - 2.9, x1: h.x + 2.9, z0: h.z - 2.9, z1: h.z + 2.9 }); });
+    palms.forEach((p, i) => { if (palmOn[i]) out.push({ x0: p.x - 0.22, x1: p.x + 0.22, z0: p.z - 0.22, z1: p.z + 0.22 }); });
+    return (solidCache = out);
+  };
+  return { uTime: windUniforms.uTime, clear, solids, frondMaterial: frondMat, frondBaseCompile };
 }
 
 function buildRunway(group: THREE.Group): void {
@@ -625,6 +641,8 @@ export interface IslandsResult {
   frondBaseCompile: THREE.MeshStandardMaterial['onBeforeCompile'];
   /** Hide conch houses / palms / mangroves (entities/estates clears owned lots with it). */
   clearScenery: ClearScenery;
+  /** The houses and palm trunks still standing, solid to a person on foot. */
+  solids(): readonly Rect[];
 }
 
 export function createIslands(): IslandsResult {
@@ -638,6 +656,7 @@ export function createIslands(): IslandsResult {
     frondMaterial: veg.frondMaterial,
     frondBaseCompile: veg.frondBaseCompile,
     clearScenery: veg.clear,
+    solids: veg.solids,
   };
 }
 

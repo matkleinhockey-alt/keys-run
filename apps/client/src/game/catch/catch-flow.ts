@@ -49,10 +49,10 @@ export interface CaughtFishInfo {
    * the speargun (the underwater grip-and-grin, see underwater-trophy.ts). Optional/defaults to
    * 'rod' so game/fishing's existing call site (which predates this field) needs no change. */
   source?: 'rod' | 'spear';
-  /** Landed off a pier or a dock (game/fishing/shore.ts): the card's portrait, but no grip-and-grin
-   * on the boat's deck — the boat is tied up somewhere behind you, and the captain posing with
-   * your fish on it while you stand on the pier would be a photo of someone else's catch. */
-  ashore?: boolean;
+  /** Landed off a pier or a dock (game/fishing/shore.ts), standing here: the card's portrait at a
+   * pier railing, but no grip-and-grin on the boat's deck — the boat is tied up somewhere behind
+   * you, and the captain posing with your fish on it would be a photo of someone else's catch. */
+  ashore?: { x: number; z: number } | null;
   /** Set when the rod hooked a tagged individual (game/catch/tags.ts) — the card then shows its
    * history, and keeping or releasing it is reported back to the tag registry. */
   tag?: TaggedFish | null;
@@ -275,7 +275,7 @@ export function createCatchFlow(deps: CatchFlowDeps) {
       try { trophy.show(S.color, scaledLenM(fish.key, fish.weight)); } catch (e) { console.error('trophy setup', e); }
     } else if (fish.ashore) {
       photo = null;
-      try { portrait.show(S.color, scaledLenM(fish.key, fish.weight), ELONGATED_SPECIES.has(fish.key), fish.weight); } catch (e) { console.error('portrait setup', e); }
+      try { portrait.show(S.color, scaledLenM(fish.key, fish.weight), ELONGATED_SPECIES.has(fish.key), fish.weight, 'dock'); } catch (e) { console.error('portrait setup', e); }
     } else {
       model.station = 0;
       model.fishSpot.copy(model.stations[0].spot);
@@ -411,6 +411,16 @@ export function createCatchFlow(deps: CatchFlowDeps) {
       // `f` now lives directly in the scene, not under `photo.parent` — finishCatch's
       // `photo.parent.remove(photo.fish)` becomes a harmless no-op (three.js `remove()` on a
       // non-child is a silent no-op) rather than double-handling it, so `photo` is left as-is.
+    } else if (current?.ashore) {
+      // Off a pier there is no deck photo to take the fish from, so it goes back where it was
+      // landed — in the water at the angler's feet — and swims off away from them, through the
+      // same animation a boat release uses.
+      const S = SPECIES[current.key];
+      const f = makeFishMesh(S.color, scaledLenM(current.key, current.weight));
+      f.position.set(current.x, 0, current.z);
+      deps.scene.add(f);
+      const a = Math.atan2(current.x - current.ashore.x, current.z - current.ashore.z);
+      released.push({ m: f, t: 0, dx: Math.sin(a), dz: Math.cos(a) });
     }
     toast(message(bonus));
     finishCatch();

@@ -52,7 +52,7 @@ export interface WalkableEstate { parcel: Parcel; layout: SiteLayout }
  * The town's walk surface plus your own estates': their dry ground, their dock and its ramp
  * (shared `estateGround`), then the rest of the world (ground.ts). The house itself is solid — a
  * square the size of its short side, so a turned house still never blocks the dock path that runs
- * out past its corner. `solid` adds the waterfront houses the same way.
+ * out past its corner. `solid` adds the houses and palms out on the keys.
  */
 function estateWalkEnv(list: readonly WalkableEstate[], docks: readonly WalkDock[], solid: readonly Rect[]): WalkerEnv {
   const colliders: Rect[] = [...COLLIDERS, ...solid];
@@ -110,16 +110,42 @@ export interface LandController {
   dispose(): void;
 }
 
+const NO_RECTS: readonly Rect[] = [];
+
 export interface LandControllerDeps {
   canvas: HTMLCanvasElement;
   estates?: () => readonly WalkableEstate[];
-  /** The waterfront houses' private docks, and the houses themselves as solid squares. */
+  /** The waterfront houses' private docks. */
   docks?: readonly WalkDock[];
-  solid?: readonly Rect[];
+  /** Everything solid out on the keys (houses, palm trunks). A new array when it changes. */
+  solid?: () => readonly Rect[];
+}
+
+/** Colliders bucketed by GRID_M cell, so a step only tests the few near the walker. */
+const GRID_M = 32;
+function gridIndex(rects: readonly Rect[]): Map<number, Rect[]> {
+  const g = new Map<number, Rect[]>();
+  for (const r of rects) {
+    for (let cx = Math.floor(r.x0 / GRID_M); cx <= Math.floor(r.x1 / GRID_M); cx++) {
+      for (let cz = Math.floor(r.z0 / GRID_M); cz <= Math.floor(r.z1 / GRID_M); cz++) {
+        const k = cx * 100003 + cz;
+        let b = g.get(k);
+        if (!b) g.set(k, (b = []));
+        b.push(r);
+      }
+    }
+  }
+  return g;
+}
+/** The colliders in the 3 x 3 cells round (x,z): everything a step from there can touch. */
+function nearby(g: Map<number, Rect[]>, x: number, z: number): Rect[] {
+  const out: Rect[] = [], cx = Math.floor(x / GRID_M), cz = Math.floor(z / GRID_M);
+  for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const b = g.get((cx + i) * 100003 + cz + j); if (b) for (const r of b) out.push(r); }
+  return out;
 }
 
 export function createLandController(deps: LandControllerDeps): LandController {
-  const docks = deps.docks ?? [], solid = deps.solid ?? [];
+  const docks = deps.docks ?? [], solid = deps.solid ?? (() => NO_RECTS);
   const buttons = createLandButtons();
   const cam = createLandCamState();
   let unbindInput: (() => void) | null = null;
@@ -130,13 +156,22 @@ export function createLandController(deps: LandControllerDeps): LandController {
   let mooring: Mooring | null = null;
   let farPressedAt = -Infinity;
   let clock = 0;
-  let envList: readonly WalkableEstate[] | null = null;
-  let env: WalkerEnv = WALK_ENV;
-  /** Re-derived only when the estate list itself changes (the registry hands out a new array). */
+  let envList: readonly WalkableEstate[] | null = null, envSolid: readonly Rect[] | null = null;
+  let env: WalkerEnv = WALK_ENV, grid = new Map<number, Rect[]>();
+  /** Re-derived only when the estate list or what stands on the keys changes (each a new array). */
   function walkEnv(): WalkerEnv {
-    const list = deps.estates?.() ?? [];
-    if (list !== envList) { envList = list; env = estateWalkEnv(list, docks, solid); }
+    const list = deps.estates?.() ?? [], sol = solid();
+    if (list !== envList || sol !== envSolid) {
+      envList = list; envSolid = sol;
+      env = estateWalkEnv(list, docks, sol);
+      grid = gridIndex(env.colliders);
+    }
     return env;
+  }
+  /** The environment for a step taken from (x,z): the same ground, only the colliders near it. */
+  function localEnv(x: number, z: number): WalkerEnv {
+    const e = walkEnv();
+    return { ground: e.ground, colliders: nearby(grid, x, z) };
   }
 
   type Berth = { name: string; estate?: string; x: number; z: number };
@@ -250,7 +285,7 @@ export function createLandController(deps: LandControllerDeps): LandController {
       cam.yaw -= buttons.turn * dt * 1.9;
       const idle = { fwd: false, back: false, left: false, right: false, sprint: false };
       const i = frozen ? idle : buttons;
-      state = stepWalker(state, { fwd: i.fwd, back: i.back, left: i.left, right: i.right, sprint: i.sprint, lookYaw: cam.yaw }, walkEnv(), dt);
+      state = stepWalker(state, { fwd: i.fwd, back: i.back, left: i.left, right: i.right, sprint: i.sprint, lookYaw: cam.yaw }, localEnv(state.x, state.z), dt);
     },
 
     bind(a): void { actions = a; },

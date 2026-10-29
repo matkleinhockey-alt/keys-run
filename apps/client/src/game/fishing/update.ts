@@ -37,8 +37,8 @@ export interface LandedFish {
   zone: string;
   /** Non-null when this was a tagged fish being recaptured. */
   tag: TaggedFish | null;
-  /** Landed from a pier or a dock (shore.ts), not over the boat's gunwale. */
-  ashore: boolean;
+  /** Where the angler stood, when landed from a pier or a dock (shore.ts); null over the boat's gunwale. */
+  ashore: { x: number; z: number } | null;
 }
 
 export interface FishingDeps {
@@ -250,7 +250,7 @@ export function createFishingLogic(deps: FishingDeps) {
   }
 
   function land(): void {
-    const key = F.key!, weight = F.weight, fx = F.fx, fz = F.fz, zone = F.zone, tag = F.tag, ashore = !!deps.getShore?.();
+    const key = F.key!, weight = F.weight, fx = F.fx, fz = F.fz, zone = F.zone, tag = F.tag, shore = deps.getShore?.(), ashore = shore ? { x: shore.spot.x, z: shore.spot.z } : null;
     F.tag = null;
     F.state = 'caught';
     F.caughtT = performance.now();

@@ -81,11 +81,17 @@ interface PortraitRig extends OffscreenRig {
   wrapper: THREE.Group | null;
   /** Non-null only on the hang-rig path: the gin-pole + hanging scale prop itself. */
   hangRigProp: THREE.Group | null;
+  /** Non-null only for a catch landed ashore: the pier railing behind the subject. */
+  railProp: THREE.Group | null;
   last: number;
 }
 
+/** Where the catch was landed, for what stands behind the subject: the boat (the live frame
+ * already shows it) or a pier or dock (a railing — see `buildDockRail`). */
+export type PortraitSetting = 'boat' | 'dock';
+
 export interface Portrait {
-  show(color: string, lenM: number, elongated?: boolean, weightLb?: number): void;
+  show(color: string, lenM: number, elongated?: boolean, weightLb?: number, setting?: PortraitSetting): void;
   /** `behind` is the live world (scene + the camera you are actually looking through). When
    * supplied the card shows the real boat floating on the water behind the catch instead of the
    * painted studio gradient. */
@@ -220,6 +226,45 @@ function buildHangRigProp(totalLen: number): THREE.Group {
   return group;
 }
 
+/**
+ * A pier's wooden railing, for a catch landed ashore (game/fishing/shore.ts).
+ *
+ * On the boat the card needs no set: the live frame composited behind it (render-pipeline.ts's
+ * `Backdrop`) is the chase camera's view of the boat, so the captain reads as standing in it.
+ * Ashore that frame is whatever the land camera sees — in first person, open water — and the
+ * legless, chest-cropped figure (figure.ts's TORSO_BOTTOM_Y) sat in it looking waist-deep in the
+ * sea. A railing just behind the subject puts the planks under them: top rail at hip height,
+ * pickets below it, water showing between them, which is the one thing every pier photo has.
+ *
+ * Built along X (the captain-hold camera looks down -Z); `topY` is the rail's top. Wide enough to
+ * run off both sides of the frame through the pivot's yaw.
+ */
+function buildDockRail(topY: number): THREE.Group {
+  const g = new THREE.Group();
+  const wood = new THREE.MeshStandardMaterial({ color: 0x8a6a4a, roughness: 0.92 });
+  const weathered = new THREE.MeshStandardMaterial({ color: 0x9c8466, roughness: 0.95 });
+  const W = 9, bottomY = topY - 1.1;
+  const rail = (y: number, h: number, d: number, mat: THREE.Material): void => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(W, h, d), mat);
+    m.position.set(0, y, 0);
+    g.add(m);
+  };
+  rail(topY - 0.03, 0.06, 0.16, weathered); // the cap you lean on
+  rail(topY - 0.12, 0.1, 0.05, wood);
+  rail(bottomY + 0.12, 0.1, 0.05, wood);
+  for (let x = -W / 2 + 0.6; x < W / 2; x += 1.25) {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.11, topY - bottomY, 0.11), wood);
+    post.position.set(x, (topY + bottomY) / 2, -0.04);
+    g.add(post);
+  }
+  for (let x = -W / 2 + 0.1; x < W / 2; x += 0.16) {
+    const picket = new THREE.Mesh(new THREE.BoxGeometry(0.045, topY - bottomY - 0.2, 0.025), weathered);
+    picket.position.set(x, (topY + bottomY) / 2 - 0.05, 0.02);
+    g.add(picket);
+  }
+  return g;
+}
+
 /** Replaces each child mesh's shared `fish-mesh.ts` material (flat-shaded, cached per colour —
  * also used by the live hooked-fish mesh / jump animation / hang rig) with a portrait-local
  * `MeshPhysicalMaterial` clone: smooth shading (the shared material forces `flatShading`) plus a
@@ -245,6 +290,7 @@ function applyPortraitMaterial(mesh: THREE.Group, lenM: number): void {
 function clearRigContents(r: PortraitRig): void {
   if (r.figure) { r.pivot.remove(r.figure.group); r.figure.dispose(); r.figure = null; }
   if (r.hangRigProp) { r.pivot.remove(r.hangRigProp); disposeMesh(r.hangRigProp); r.hangRigProp = null; }
+  if (r.railProp) { r.pivot.remove(r.railProp); disposeMesh(r.railProp); r.railProp = null; }
   // The fish is either a direct pivot child (captain-hold path) or nested inside `wrapper` (hang-
   // rig path) — remove whichever one is actually parented to the pivot, then dispose the fish
   // itself either way.
@@ -281,7 +327,7 @@ export function createPortrait(canvasId: string): Portrait {
     if (!base) return null;
     const pivot = new THREE.Group();
     scene.add(pivot);
-    rig = { ...base, pivot, mesh: null, figure: null, wrapper: null, hangRigProp: null, last: -1 };
+    rig = { ...base, pivot, mesh: null, figure: null, wrapper: null, hangRigProp: null, railProp: null, last: -1 };
     return rig;
   }
 
@@ -294,7 +340,7 @@ export function createPortrait(canvasId: string): Portrait {
   // catch real anglers hang from a scale rather than lift overhead. A 600 lb marlin (~3.6 m)
   // clears the threshold by more than 2x, proving the fallback path below.
 
-  function show(color: string, lenM: number, elongated = false, weightLb?: number): void {
+  function show(color: string, lenM: number, elongated = false, weightLb?: number, setting: PortraitSetting = 'boat'): void {
     const r = ensureRig();
     if (!r) return;
     // The card is display:none until the first catch, so the rig was very likely built against a
@@ -391,6 +437,16 @@ export function createPortrait(canvasId: string): Portrait {
       prop.position.sub(center);
       wrapper.position.sub(center);
       size = frameBox.getSize(new THREE.Vector3());
+    }
+
+    // Ashore: the railing behind, its top a third of the way up the frame — under the hands and
+    // the fish, over the cropped bottom of the figure. Not part of the fit: it is set, not subject.
+    if (setting === 'dock') {
+      const rail = buildDockRail(-size.y * 0.5 + size.y * 0.3);
+      if (isHoldable(lenM, weightLb)) rail.position.z = -0.5;
+      else { rail.rotation.y = Math.PI / 2; rail.position.x = -0.4 - size.x * 0.5; } // that camera looks down -X
+      r.pivot.add(rail);
+      r.railProp = rail;
     }
 
     // The pivot yaws +/-0.45 rad every frame (`render()`), so the on-screen width is not simply

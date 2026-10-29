@@ -69,7 +69,7 @@ export function shorePrompt(state: FishFightState, charging: boolean, deck: stri
   return null;
 }
 
-/** "the pier" / "the dock" — a marina's planks and a house's private dock are both docks. */
+/** "the pier" / "the bridge" / "the dock" — a marina's planks and a house's private dock are both docks. */
 function deckLabel(name: string): string {
-  return /pier/i.test(name) ? 'the pier' : 'the dock';
+  return /pier/i.test(name) ? 'the pier' : /bridge/i.test(name) ? 'the bridge' : 'the dock';
 }

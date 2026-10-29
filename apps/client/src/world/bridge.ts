@@ -39,11 +39,14 @@
 import * as THREE from 'three';
 import { chainZ, shoreInfo } from '@keysrun/shared/world/chain';
 import { landH, OLDBR, WB, onUS1Fill } from '@keysrun/shared/world/depth';
+import { OLD_DECK_SEGS } from '@keysrun/shared/world/old-bridge';
 import type { Piling } from '@keysrun/shared/sim/boat';
 import { grainTex, normalTex } from '../core/textures.js';
 import { barrierGeometry, archGeometry } from './bridge/profiles.js';
 import { createPigeonKey } from './bridge/pigeon-key.js';
 import { buildOldBridgeTruss } from './bridge/truss.js';
+
+const OLD_SEG_STARTS = new Set(OLD_DECK_SEGS.map((q) => q.xa));
 
 interface Deck { mx: number; mz: number; ang: number; len: number; h: number; old: boolean }
 interface Rail { mx: number; mz: number; ang: number; h: number }
@@ -107,7 +110,9 @@ export function createBridge(): BridgeResult {
       const sd = shoreInfo(mx, mz).d, lh = landH(mx, mz);
       // on a key (or its US-1 causeway fill, depth.ts) the highway is a road, not a bridge
       if (lh > 0.9 && (sd < -4 || (!old && onUS1Fill(mx, mz)))) { if (!old) roads.push({ mx, mz, ang, len, y: lh }); continue; }
-      if (old && sd < 1) continue;
+      // the old bridge's deck is shared world/old-bridge.ts's list (it is walked and fished off):
+      // over water, never over a key — one source of truth for where its planks are
+      if (old && !OLD_SEG_STARTS.has(xa)) continue;
       const baseH = old ? deckH : sd < 0 ? 5.6 : 2.6 + (deckH - 2.6) * ss0(0, 70, sd);
       const h = old ? baseH : baseH + humpBump(mx);
       decks.push({ mx, mz, ang, len, h, old });

@@ -26,6 +26,10 @@
       "types": "./dist/world/town.d.ts",
       "default": "./dist/world/town.js"
     },
+    "./world/old-bridge": {
+      "types": "./dist/world/old-bridge.d.ts",
+      "default": "./dist/world/old-bridge.js"
+    },
     "./world/piers": {
       "types": "./dist/world/piers.d.ts",
       "default": "./dist/world/piers.js"

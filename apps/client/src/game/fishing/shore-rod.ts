@@ -28,9 +28,22 @@ export interface ShoreRod {
 }
 
 /** Where the butt sits in the body's frame (forward is +z — see entities/land/index.ts). */
-const BUTT = new THREE.Vector3(0.07, 0.12, 0.2);
+const BUTT = new THREE.Vector3(0.12, 0.14, 0.16);
 /** Along the blank, metres from the butt: the reel hand and the fore-grip hand. */
-const REEL_S = 0.02, FORE_S = 0.24;
+const REEL_S = 0.02, FORE_S = 0.2;
+/**
+ * How the rod is held, as tilts from vertical (`rodPivot.rotation.x` is minus this). Waiting on a
+ * float the tip sits low and out over the water, about 25 degrees above level; with a fish on, it
+ * comes UP — an angler fights from the rod's bend, high, and lowers it only to wind — and comes a
+ * little higher still the harder the fish pulls. The first version had both backwards and both
+ * near vertical: from the chase camera behind the angler a 3 m blank pointing away and 45 degrees
+ * up foreshortens to an upright stick.
+ */
+const TILT_WAIT = 1.15, TILT_FIGHT = 0.9, TILT_LOAD = 0.2;
+/** The rod is carried off to the reel-hand side rather than straight down the angler's nose: it is
+ * how a rod is held, and it is what lets the chase camera see the blank and the line clear of the
+ * body instead of hidden behind it. Radians of yaw, toward the butt's side (+x). */
+const SIDE = 0.32;
 
 const angDiff = (a: number, b: number): number => ((b - a + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
 
@@ -71,8 +84,8 @@ export function createShoreRod(): ShoreRod {
       const a = Math.atan2(-(local.x - rodPivot.position.x), -(local.z - rodPivot.position.z));
       yaw = Math.PI + clamp(angDiff(Math.PI, a), -0.9, 0.9);
     }
-    rodPivot.rotation.y = yaw;
-    rodPivot.rotation.x = -(fight ? 0.95 + clamp(tension, 0, 1) * 0.35 : 0.8);
+    rodPivot.rotation.y = yaw + SIDE;
+    rodPivot.rotation.x = -(fight ? TILT_FIGHT - clamp(tension, 0, 1) * TILT_LOAD : TILT_WAIT);
 
     // Hands on the grip: points along the blank's axis, in the body's frame.
     hA.set(0, REEL_S, 0).applyEuler(rodPivot.rotation).add(rodPivot.position);

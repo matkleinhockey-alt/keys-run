@@ -40,6 +40,7 @@ import { createLighthouse } from '../world/lighthouse.js';
 import { createWaterfront } from '../world/waterfront.js';
 import { createPiers } from '../world/piers.js';
 import { PIERS, pierDockRects } from '@keysrun/shared/world/piers';
+import type { Rect } from '@keysrun/shared/world/town';
 import { createParticleSystem } from '../world/particles.js';
 
 import { makeBoat, type BoatModel } from '../entities/boat/model.js';
@@ -698,7 +699,15 @@ export function initWorld(wrap: HTMLElement): World {
     diving: () => diver.mode === 'diver',
     estates: () => myEstates,
     docks: waterfront.walkDocks,
-    solid: waterfront.houseRects,
+    solid: (() => {
+      // the waterfront houses never change; the scattered ones do as estates clear their lots
+      let from: readonly Rect[] | null = null, all: readonly Rect[] = [];
+      return () => {
+        const sc = islands.solids();
+        if (sc !== from) { from = sc; all = [...waterfront.houseRects, ...sc]; }
+        return all;
+      };
+    })(),
   });
 
   // Rod fishing ashore: what the walker needs from the rod (game/fishing/shore.ts has the rules).
@@ -828,6 +837,8 @@ export function initWorld(wrap: HTMLElement): World {
     document.getElementById('gauges')?.classList.toggle('hidden', diving);
     document.getElementById('mapbox')?.classList.toggle('hidden', diving);
     document.getElementById('scorebox')?.classList.toggle('hidden', diving);
+    // the boat's driving hint ("Hold W to get on the throttle") means nothing over the side
+    document.getElementById('hint')?.classList.toggle('hidden', diving);
     if (isTouch()) {
       document.getElementById('touch')?.classList.toggle('hidden', diving);
       document.getElementById('touchDiver')?.classList.toggle('hidden', !diving);
