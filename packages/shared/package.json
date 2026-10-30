@@ -150,6 +150,10 @@
       "types": "./dist/sim/tach.d.ts",
       "default": "./dist/sim/tach.js"
     },
+    "./sim/ocean": {
+      "types": "./dist/sim/ocean.d.ts",
+      "default": "./dist/sim/ocean.js"
+    },
     "./sim/gear": {
       "types": "./dist/sim/gear.d.ts",
       "default": "./dist/sim/gear.js"
