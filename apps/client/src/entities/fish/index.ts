@@ -24,6 +24,7 @@ import {
   instantiateLegend,
   wreckSchoolsFor, instantiateWreckSchool,
 } from './spawn.js';
+import { legendPoseAt } from './legend-path.js';
 import { wrecksFor, WRECK_RESIDENTS } from '@keysrun/shared/world/wrecks';
 import { swimClock } from './swim-clock.js';
 import { fishCapsule } from './hitbox.js';
@@ -192,6 +193,13 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
    * waiting for you.
    */
   const legend: SchoolState | null = instantiateLegend(seed, 'goldbluefin', VIS.goldbluefin);
+  const placeLegend = (l: SchoolState): void => {
+    const pose = legendPoseAt(seed, Date.now(), VIS.goldbluefin.dMin);
+    if (!pose) return;
+    l.cx = pose.x; l.cz = pose.z; l.heading = pose.heading;
+    l.vx = -Math.sin(pose.heading) * pose.speed; l.vz = -Math.cos(pose.heading) * pose.speed;
+  };
+  if (legend) placeLegend(legend);
   const dormant = new Map<string, DormantEntry>(); // id -> frozen roamer
 
   // Whale blow/spout visual — see spout.ts. One shared effect pool for the whole fish world,
@@ -391,7 +399,12 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
     for (const state of nearField.values()) runSchool(state);
     for (const list of wreckSchools.values()) for (const state of list) runSchool(state);
     for (const state of roamers.values()) runSchool(state);
-    if (legend) runSchool(legend);
+    if (legend) {
+      // Position is the world's, not the session's (legend-path.ts): set it before the step so the
+      // step's own wander only ever animates the fish around a point every client agrees on.
+      placeLegend(legend);
+      runSchool(legend);
+    }
 
     let draws = 0, triangles = 0;
     for (const pool of touched) {
