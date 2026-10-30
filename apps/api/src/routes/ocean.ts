@@ -6,9 +6,17 @@
  *   GET  /ocean?cells=cx,cz;cx,cz;...   { cells: [{cx, cz, pressure, lastCaughtAt}] }   (public)
  *   POST /ocean/catch { cx, cz, amount? }   { cx, cz, pressure, lastCaughtAt }          (auth)
  *
- * The routes record what happened and say nothing about what it means: no decay, no thresholds.
- * Recovery is a reader's calculation from `lastCaughtAt` and the clock, so the growth policy can
- * change without touching a row.
+ * The routes say as little as possible about what a row means: no thresholds, no size or rarity
+ * policy. Recovery is a reader's calculation from `lastCaughtAt` and the clock, so the growth
+ * curves can change without touching a row.
+ *
+ * The ONE exception is that a write decays before it adds, because it has to. A row stores a
+ * single `pressure` as of a single `lastCaughtAt`, so adding to it without first ageing it would
+ * sum catches from different weeks as though they were one session: a spot fished once a week
+ * would climb to the cap and stay sour forever, which is the exact opposite of what the ledger
+ * is for. The decay below is `pressureAfterCatch` from sim/ocean.ts, expressed in SQL so that the
+ * read-decay-add-cap stays a single atomic statement, and it imports that module's own constants
+ * so the two can never drift apart.
  *
  * Cells are the client's fish chunks (CHUNK_SIZE in apps/client/src/entities/fish/spawn.ts):
  * cx = floor(x / 64), cz = floor(z / 64). Like the wallet and the save, a catch is the client's
@@ -18,6 +26,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { sql } from 'drizzle-orm';
 import { WB } from '@keysrun/shared/world/depth';
+import { PRESSURE_CAP, PRESSURE_HALF_LIFE_HOURS } from '@keysrun/shared/sim/ocean';
 import { oceanCells } from '../db/schema.js';
 
 /** The fish chunk edge in world units; must match CHUNK_SIZE in the client's fish/spawn.ts. */
@@ -89,10 +98,21 @@ export default async function oceanRoutes(fastify: FastifyInstance): Promise<voi
       // One atomic upsert: two anglers landing a fish in the same chunk both count, which a
       // read-then-write would lose.
       const [row] = await fastify.db.insert(oceanCells)
-        .values({ cx, cz, pressure: amount, lastCaughtAt: now, updatedAt: now })
+        .values({ cx, cz, pressure: Math.min(PRESSURE_CAP, amount), lastCaughtAt: now, updatedAt: now })
         .onConflictDoUpdate({
           target: [oceanCells.cx, oceanCells.cz],
-          set: { pressure: sql`${oceanCells.pressure} + ${amount}`, lastCaughtAt: now, updatedAt: now },
+          // pressureAfterCatch(stored, hours since stored): halve per PRESSURE_HALF_LIFE_HOURS,
+          // add this catch, cap. GREATEST(0, ...) so a clock that stepped back counts as no
+          // rest rather than negative rest, matching decayedPressure's own guard.
+          set: {
+            pressure: sql`LEAST(${PRESSURE_CAP}::double precision, ${oceanCells.pressure} * power(
+              0.5,
+              GREATEST(0, EXTRACT(EPOCH FROM (${now}::timestamptz - ${oceanCells.lastCaughtAt})) / 3600.0)
+                / ${PRESSURE_HALF_LIFE_HOURS}::double precision
+            ) + ${amount})`,
+            lastCaughtAt: now,
+            updatedAt: now,
+          },
         })
         .returning();
       return reply.send({ cx, cz, pressure: row.pressure, lastCaughtAt: row.lastCaughtAt.toISOString() });

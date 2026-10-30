@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import type { DbHandle } from '../db/client.js';
 import { buildTestApp, registerUser, loginUser, testDbHandle, truncateAll } from './helpers.js';
 import { CELL_BOUNDS, MAX_OCEAN_BATCH } from '../routes/ocean.js';
+import { PRESSURE_CAP, PRESSURE_HALF_LIFE_HOURS, pressureAfterCatch } from '@keysrun/shared/sim/ocean';
 
 describe('ocean ledger', () => {
   let handle: DbHandle;
@@ -33,13 +34,75 @@ describe('ocean ledger', () => {
     expect(first.statusCode).toBe(200);
     expect(first.json()).toMatchObject({ cx: 3, cz: 4, pressure: 1 });
     const second = await fish(t, { cx: 3, cz: 4, amount: 2.5 });
-    expect(second.json().pressure).toBe(3.5);
+    // Not `toBe(3.5)`: a write decays the stored pressure across the elapsed time first, and the
+    // milliseconds between these two requests are real elapsed time, so this lands a hair under
+    // (3.499999935... in practice). Exact equality here would be asserting that the clock stood
+    // still. The decay itself is pinned below.
+    expect(second.json().pressure).toBeCloseTo(3.5, 4);
     const { cells } = (await read('3,4')).json();
     expect(cells).toHaveLength(1);
-    expect(cells[0]).toMatchObject({ cx: 3, cz: 4, pressure: 3.5 });
+    expect(cells[0]).toMatchObject({ cx: 3, cz: 4 });
+    expect(cells[0].pressure).toBeCloseTo(3.5, 4);
     expect(new Date(cells[0].lastCaughtAt).getTime()).toBeGreaterThan(0);
     const rows = (await handle.pool.query('SELECT count(*)::int AS n FROM ocean_cells')).rows as { n: number }[];
     expect(rows[0].n).toBe(1);
+  });
+
+  /**
+   * A row holds one `pressure` as of one `lastCaughtAt`, so a write that added without ageing
+   * first would sum catches from different weeks as one session: a spot fished once a week would
+   * climb to the cap and stay sour forever. These pin the SQL against `pressureAfterCatch`, the
+   * model the client reads with — if the two drift, depletion stops recovering.
+   */
+  describe('a write decays the stored pressure before adding to it', () => {
+    /** Backdates a cell so the next catch has real elapsed time to decay across. */
+    const age = (cx: number, cz: number, hours: number) =>
+      handle.pool.query(
+        "UPDATE ocean_cells SET last_caught_at = now() - ($1 || ' hours')::interval WHERE cx = $2 AND cz = $3",
+        [String(hours), cx, cz],
+      );
+
+    it('halves across one half-life, so 30 + a catch a day later is 16, not 31', async () => {
+      const t = await token();
+      await fish(t, { cx: 8, cz: 8, amount: 30 });
+      await age(8, 8, PRESSURE_HALF_LIFE_HOURS);
+      const res = await fish(t, { cx: 8, cz: 8 });
+      expect(res.json().pressure).toBeCloseTo(pressureAfterCatch(30, PRESSURE_HALF_LIFE_HOURS), 6);
+      expect(res.json().pressure).toBeCloseTo(16, 6);
+    });
+
+    it('a week of rest leaves almost nothing behind', async () => {
+      const t = await token();
+      await fish(t, { cx: 8, cz: 9, amount: 17 });
+      await age(8, 9, 24 * 7);
+      const res = await fish(t, { cx: 8, cz: 9 });
+      expect(res.json().pressure).toBeCloseTo(pressureAfterCatch(17, 24 * 7), 6);
+      expect(res.json().pressure).toBeLessThan(1.2);
+    });
+
+    it('back-to-back catches do not decay, so a grind still bites', async () => {
+      const t = await token();
+      await fish(t, { cx: 8, cz: 10 });
+      const res = await fish(t, { cx: 8, cz: 10 });
+      expect(res.json().pressure).toBeCloseTo(2, 3);
+    });
+
+    it('never exceeds the cap, however hard a cell is hammered', async () => {
+      const t = await token();
+      for (let i = 0; i < 4; i++) await fish(t, { cx: 8, cz: 11, amount: 100 });
+      const { cells } = (await read('8,11')).json();
+      expect(cells[0].pressure).toBeLessThanOrEqual(PRESSURE_CAP);
+      expect(cells[0].pressure).toBe(PRESSURE_CAP);
+    });
+
+    it('a clock that stepped backwards counts as no rest, not negative rest', async () => {
+      const t = await token();
+      await fish(t, { cx: 8, cz: 12, amount: 10 });
+      await age(8, 12, -48); // last_caught_at in the future
+      const res = await fish(t, { cx: 8, cz: 12 });
+      // GREATEST(0, ...) in the SQL: decay factor 1, so this is a plain +1, never a blow-up
+      expect(res.json().pressure).toBeCloseTo(11, 6);
+    });
   });
 
   it('batch-reads several cells, returning only the disturbed ones (negative coords too)', async () => {
