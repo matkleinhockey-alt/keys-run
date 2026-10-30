@@ -18,6 +18,7 @@ import catchesRoutes from './routes/catches.js';
 import tagsRoutes from './routes/tags.js';
 import estatesRoutes from './routes/estates.js';
 import saveRoutes from './routes/save.js';
+import oceanRoutes from './routes/ocean.js';
 import healthRoutes from './routes/health.js';
 
 declare module 'fastify' {
@@ -64,6 +65,7 @@ export async function buildApp(opts: BuildAppOptions): Promise<FastifyInstance> 
   await fastify.register(tagsRoutes);
   await fastify.register(estatesRoutes);
   await fastify.register(saveRoutes);
+  await fastify.register(oceanRoutes);
 
   return fastify;
 }
