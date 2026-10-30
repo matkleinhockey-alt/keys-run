@@ -64,6 +64,7 @@ import { createDiverBubbles } from '../entities/diver/bubbles.js';
 import { updateDiverCamera } from '../entities/diver/camera.js';
 import { updateDiverHud, showDiverHud, clearBlackoutOverlay } from '../entities/diver/hud.js';
 import type { LocalBody } from '../net/client.js';
+import { ocean } from '../net/ocean.js';
 import { createLandSystem } from '../entities/land/index.js';
 
 import { SPEAR_RANGE_MAX, closestDistSqSegmentSegment } from '@keysrun/shared/sim/spear';
@@ -656,6 +657,7 @@ export function initWorld(wrap: HTMLElement): World {
     boatInput: input,
     getBoat: () => stateBox.state,
     spots: life.spots,
+    oceanRecovery: (x, z) => ocean.recoveryAt(x, z),
     onLanded(fish) { catchFlow.landFish({ key: fish.key, weight: fish.weight, x: fish.fx, z: fish.fz, zone: fish.zone, tag: fish.tag, ashore: fish.ashore }); },
     // Fishing off a pier, a private dock or a marina's planks (game/fishing/shore.ts). `land` is
     // built below; these only run once the game is.
@@ -752,6 +754,7 @@ export function initWorld(wrap: HTMLElement): World {
     onEaten: (station) => trollSpread.sound(station),
     outriggers: () => model.setOutriggers,
     zone: () => zoneAt(stateBox.state.x, stateBox.state.z),
+    oceanRecovery: (x, z) => ocean.recoveryAt(x, z),
     // A weedline or a hump fishes faster than open water. `life.spots` already answers "what is
     // under me" for the rod, so trolling asks the same question rather than inventing its own.
     richness: () => {
@@ -1135,6 +1138,7 @@ export function initWorld(wrap: HTMLElement): World {
     // After the boat has moved, so the speed the spread is judged on is this step's.
     trolling.update(dt, next);
     stateBox.state = next;
+    ocean.update(next.x, next.z); // a lookup unless the boat changed chunk; any request runs detached
     fishing.update(dt, simTime, next, sw, ch);
     return next.events;
   }

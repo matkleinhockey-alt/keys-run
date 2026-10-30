@@ -40,6 +40,8 @@ export interface FishingSystemDeps {
   /** Frenzy/weedline/rig lookup (life.spots); omitted by harnesses with no life systems. */
   spots?: SpotQuery;
   onLanded(fish: LandedFish): void;
+  /** See FishingDeps.oceanRecovery. */
+  oceanRecovery?: FishingDeps['oceanRecovery'];
   onActionWhileCaught(): void;
   /** Tag-and-release registry — see update.ts's `FishingDeps.tags`. */
   tags?: FishingDeps['tags'];
@@ -110,6 +112,7 @@ export function createFishing(deps: FishingSystemDeps): FishingSystem {
     boatInput: deps.boatInput,
     spots: deps.spots ?? NO_SPOTS,
     onLanded: deps.onLanded,
+    oceanRecovery: deps.oceanRecovery,
     onActionWhileCaught: deps.onActionWhileCaught,
     tags: deps.tags,
     getModifiers: deps.getModifiers,

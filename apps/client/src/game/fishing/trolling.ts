@@ -23,6 +23,7 @@ import {
   TROLL_SPEED_TARGET, TROLL_SPEED_MIN, TROLL_SPEED_MAX, type TrollState,
 } from '@keysrun/shared/sim/troll';
 import { ZONE_TABLE, SPECIES } from '@keysrun/shared/content/species';
+import { applyOceanSize } from '@keysrun/shared/sim/ocean';
 import { scaledLenM } from '@keysrun/shared/sim/fight';
 import type { BoatState } from '@keysrun/shared/sim/boat';
 import { toast } from '../../ui/toast.js';
@@ -68,6 +69,8 @@ export interface TrollingDeps {
   outriggers(): ((t: number) => void) | null;
   /** The zone the boat is in right now, keyed into `ZONE_TABLE`. */
   zone(): string;
+  /** How recovered the water under the boat is (net/ocean.ts); omitted = pristine. */
+  oceanRecovery?(x: number, z: number): number;
   /** Richness of the water under the boat — a weedline or a hump fishes faster. 1 is open water. */
   richness(): number;
   /** A splash where the lure was, and a jolt. */
@@ -158,7 +161,10 @@ export function createTrolling(deps: TrollingDeps): Trolling {
     // Weight skews heavy with a good spread: trolling is how the big ones are caught, and the
     // trim is the player's input into that.
     const t = clamp(Math.pow(Math.random(), 1 - 0.45 * quality), 0, 1);
-    const weight = S.min + (S.max - S.min) * t;
+    let weight = S.min + (S.max - S.min) * t;
+    // Fished water gives smaller fish. Skipped outright in pristine water so that stays today's roll.
+    const rec = deps.oceanRecovery?.(boat.x, boat.z);
+    if (rec !== undefined && rec < 1) weight = applyOceanSize(weight, S.min, S.max, rec);
 
     // Which bait gets eaten. The long riggers carry the outside baits and are what a fish coming
     // up the wake meets first, so they take the larger share — but a flat line down the prop wash
