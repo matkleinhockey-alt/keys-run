@@ -68,7 +68,7 @@ export const VIS: Record<string, CreatureVis> = {
   yellowtail:{kind:'fish',len:.42,h:.12,w:.07,back:'#5f7aa0',belly:'#e8eef4',fin:'#f2cc2f',pattern:'yline',level:'mid',speed:1.5,school:[14,30],spread:3.2,dMin:2,dMax:40},
   mutton:{kind:'fish',len:.65,h:.22,w:.11,back:'#7a6b4e',belly:'#efcfc4',fin:'#d3684f',pattern:'spot',level:'bottom',speed:.9,school:[1,3],spread:2,dMin:2,dMax:40},
   hogfish:{kind:'fish',len:.6,h:.27,w:.11,back:'#d68f73',belly:'#f5ddd2',fin:'#b25e45',level:'bottom',speed:.8,school:[1,2],spread:2,dMin:2.5,dMax:40},
-  grouper:{kind:'fish',len:1.15,h:.38,w:.3,back:'#4c4a43',belly:'#8c8778',fin:'#3a3833',pattern:'mottle',level:'bottom',speed:.5,school:[1,1],spread:0,dMin:3,dMax:60},
+  grouper:{kind:'fish',len:1.15,h:.38,w:.3,back:'#4c4a43',belly:'#8c8778',fin:'#3a3833',pattern:'mottle',level:'bottom',speed:.5,school:[1,1],spread:0,dMin:3,dMax:120},
   parrotfish:{kind:'fish',len:.55,h:.2,w:.12,back:'#2f8f8a',belly:'#7fd3c3',fin:'#d26aa0',pattern:'mottle',level:'bottom',speed:.9,school:[2,5],spread:2.5,dMin:2,dMax:30},
   angelfish:{kind:'fish',len:.38,h:.4,w:.06,back:'#2c5fa8',belly:'#e8c33a',fin:'#f2d23b',level:'mid',speed:.7,school:[1,2],spread:1,dMin:2,dMax:30},
   mahi:{kind:'fish',len:1.25,h:.36,w:.14,back:'#2f8f6a',belly:'#e3d24a',fin:'#2a6fa3',pattern:'spots',blunt:true,level:'surface',speed:2.2,school:[5,22],spread:3.5,dMin:25,dMax:1e5},
@@ -104,8 +104,8 @@ export const VIS: Record<string, CreatureVis> = {
   hammerhead:{kind:'shark',len:3.3,h:.5,w:.5,back:'#6e7a80',belly:'#eef0f1',fin:'#5e6a70',level:'mid',speed:1.4,school:[1,1],spread:0,dMin:6,dMax:1e5},
   marlin:{kind:'fish',len:3.3,h:.52,w:.36,back:'#1b2f6e',belly:'#e6ebf2',fin:'#253f8a',pattern:'lbars',bill:.3,level:'surface',speed:2.2,school:[1,1],spread:0,dMin:40,dMax:1e5},
   blackmarlin:{kind:'fish',len:3.6,h:.62,w:.42,back:'#20262f',belly:'#dfe4ea',fin:'#2a313b',bill:.28,level:'surface',speed:2.1,school:[1,1],spread:0,dMin:40,dMax:1e5},
-  gag:{kind:'fish',len:.9,h:.26,w:.2,back:'#5d5a52',belly:'#a49e90',fin:'#45423c',pattern:'mottle',level:'bottom',speed:.55,school:[1,1],spread:0,dMin:3,dMax:60},
-  redgrouper:{kind:'fish',len:.75,h:.25,w:.2,back:'#8a4a38',belly:'#c79a86',fin:'#6c3a2c',pattern:'spots',level:'bottom',speed:.5,school:[1,1],spread:0,dMin:3,dMax:60},
+  gag:{kind:'fish',len:.9,h:.26,w:.2,back:'#5d5a52',belly:'#a49e90',fin:'#45423c',pattern:'mottle',level:'bottom',speed:.55,school:[1,1],spread:0,dMin:3,dMax:120},
+  redgrouper:{kind:'fish',len:.75,h:.25,w:.2,back:'#8a4a38',belly:'#c79a86',fin:'#6c3a2c',pattern:'spots',level:'bottom',speed:.5,school:[1,1],spread:0,dMin:3,dMax:120},
   swordfish:{kind:'fish',len:2.6,h:.45,w:.3,back:'#3a3446',belly:'#a9a4ae',fin:'#2c2834',bill:.6,level:'mid',speed:1.5,school:[1,1],spread:0,dMin:40,dMax:1e5},
   flyingfish:{kind:'fish',len:.32,h:.06,w:.05,back:'#2d4f8f',belly:'#dfe6f2',fin:'#9fb6dd',wings:true,level:'surface',speed:2.5,school:[10,28],spread:3,dMin:25,dMax:1e5,act:'glide'},
   blacktip:{kind:'shark',len:1.7,h:.28,w:.28,back:'#7a8187',belly:'#eef0f1',fin:'#2a2e32',level:'mid',speed:1.6,school:[1,2],spread:5,dMin:.6,dMax:20},
@@ -140,7 +140,7 @@ export const VIS: Record<string, CreatureVis> = {
   // ---------------------------------------------------------------------------------------
   // Caranx crysos — blue-green back, brassy flanks, yellow-olive forked tail, a dark opercular
   // spot. The Keys' default "wall of fish": big fast-moving schools over reef and channel.
-  bluerunner:{kind:'fish',len:.5,h:.15,w:.09,back:'#43707d',belly:'#eef2f2',fin:'#cdb94e',level:'mid',speed:2,school:[12,26],spread:4.2,dMin:1.5,dMax:60},
+  bluerunner:{kind:'fish',len:.5,h:.15,w:.09,back:'#43707d',belly:'#eef2f2',fin:'#cdb94e',level:'mid',speed:2,school:[12,26],spread:4.2,dMin:1.5,dMax:120},
   // Lutjanus apodus — olive-brown with eight pale vertical bars and yellow fins. Named for the
   // habit this adds to the game: it hangs over patch reef in tight groups.
   schoolmaster:{kind:'fish',len:.45,h:.16,w:.09,back:'#8a7347',belly:'#e8dcc0',fin:'#e0ac3c',pattern:'bars',level:'mid',speed:1.1,school:[8,18],spread:3,dMin:1.5,dMax:30},
@@ -180,6 +180,17 @@ export const VIS: Record<string, CreatureVis> = {
   //
   // Rarity lives in the ZONE_LIFE weights below, not here. These are deliberately tiny — the
   // point of a whale shark is that you have been out there a while and then there is one.
+  //
+  // How tiny, in play terms (measured by test/ocean-census.test.ts: mean boat distance between
+  // encounters, school counted as met inside 100 m). A one-hour session is ~35 km of track (about
+  // 30% of the hour underway at 18-20 m/s; the rest is trolling, drifting and fighting fish), and a
+  // month of play is ~12 such hours, ~400 km. The world is 8.3 x 8.3 km, so the encounter distance
+  // is 68.9 km2 / (N schools x 0.2 km sighting width) = 344 km / N. Whale shark, great white,
+  // sperm whale and sawfish are set to N=2 (170 km expected; the 152-transect sample reads 156-467 km
+  // because two schools is a small sample): you meet one a few sessions in, not every
+  // crossing, and N=1 (344 km) is the floor for "it exists" in a fixed-seed world. They were N=7-8
+  // (35-47 km, i.e. one per crossing of the map). Giant manta, mola and humpback sit a tier up at
+  // N=3-6 (50-95 km): a good session. See the Offshore / Flats / Backcountry / Humps tables.
 
   // Whale shark — the biggest fish in the ocean, and a real if uncommon Keys/Gulf Stream visitor.
   // 9 m here rather than a full-grown 12: it has to read as enormous beside a 7 m Robalo without
@@ -214,21 +225,21 @@ export const VIS: Record<string, CreatureVis> = {
   // animals, so this belongs out past the wall and over the Humps rather than inshore. `blunt`
   // plus a heavy `hump` is that enormous square forehead, which is most of the animal.
   //
-  // Its Humps weight is 0.45, not the 0.1 it started at. At 0.1 it had no resident presence
-  // anywhere within 15 km of five separate offshore origins — the same result the humpback's 0.08
-  // gives, which is the project's deliberate ultra-rarity and is fine for one animal. Two animals
-  // you will never meet is not a roster. The Humps exist to make a rare thing PLACE-BASED and
-  // learnable (see the pilot whale's note), so the sperm whale is findable if you know where to
-  // go, and still an order of magnitude rarer than the pilot whales you went there for.
+  // It lives ONLY in the Humps table (weight 0.3), deliberately not in Offshore. The Humps make a
+  // rare thing PLACE-BASED and learnable (see the pilot whale's note): a hump resident is anchored,
+  // so this whale is findable if you know where to go, where a roamer scattered across 27 km2 of
+  // open water would be luck. At 0.1 it had no presence at all within 15 km of five offshore
+  // origins, hence the floor. Census (test/ocean-census.test.ts) at 0.3: 2 schools in the whole
+  // 68.9 km2 box, one encounter per ~187 km of straight track (was 41 km at 0.45 + Offshore 0.05).
+  // Search area is two 0.2 km2 humps, so a hump-anchored 2 is a pair of places to learn, not a coin flip.
   spermwhale:{kind:'whale',len:14,h:2.3,w:2.1,back:'#4a4542',belly:'#6b6460',pattern:'mottle',blunt:true,level:'surface',speed:1.6,school:[1,3],spread:12,dMin:35,dMax:1e5,act:'blow',catchable:false},
   // Ocean sunfish — a 3 m disc with no tail to speak of, drifting on its side at the surface.
   // Nothing else in the water looks remotely like it, which is the whole reason to have one.
   //
-  // It is in the Humps and DeepWall tables as well as Offshore, and that is not decoration:
-  // Offshore is the ROAMING layer only (see that table's own note and spawn.ts), so a creature
-  // listed there and nowhere else has no resident presence at all — searching 12 km of ocean for
-  // this one turned up nothing while the other five were found immediately. A thing this strange
-  // is worth meeting; weighted low enough that meeting it is still an event.
+  // Offshore only (weight 0.03): it is a pelagic drifter, not a structure-holder, and the Humps /
+  // DeepWall entries it used to carry were a workaround for an earlier "I searched 12 km and found
+  // none" that the roaming layer has since fixed. Census: 6 schools in the box, one encounter per
+  // ~52 km of track (was 18 km at 0.14 + the structure entries). Still an event; no longer a chore.
   mola:{kind:'fish',len:3,h:2.6,w:.55,back:'#8d939a',belly:'#d8dce0',pattern:'mottle',level:'surface',speed:.5,school:[1,1],spread:0,dMin:18,dMax:1e5,act:'roll',catchable:false},
   // Warsaw grouper — the deep-drop monster. Same body plan as the goliath, darker, and it lives
   // where you need the bottle to reach it.
@@ -283,44 +294,61 @@ export function isCatchable(key: string): boolean {
  * in the task brief.
  */
 export const ZONE_LIFE: Record<string, Array<[string, number]>> = {
-  // Mangrove creek channels — juveniles sheltering along the edges.
-  'Creek':[['flounder',2],['sole',1.6],['sawfish',.05],['snook',3],['redfish',2.5],['tarpon',1.5],['manatee',1],['mangrove',3.5],['ladyfish',2.5],['trout',1.5],['jackcrevalle',1]],
+  // Mangrove creek channels — juveniles sheltering along the edges. Creek is 0.1 km2 (14 schools in
+  // the census), so every weight here is a coin flip at the sweep scale: flounder, sole and manatee
+  // fit the 2.6-9 m channel depth and stay (a hogchoker and a manatee are exactly what a creek is
+  // for), but the census may show them at 0. Sawfish was removed from this table — at its rarity it
+  // had a ~0.01 expected placement here; Backcountry and Flats carry it.
+  'Creek':[['flounder',2],['sole',1.6],['snook',3],['redfish',2.5],['tarpon',1.5],['manatee',1],['mangrove',3.5],['ladyfish',2.5],['trout',1.5],['jackcrevalle',1]],
   // Very shallow skinny water — bonefish/permit on the sand, small sharks cruising the edges.
-  'Flats':[['flounder',2.5],['sole',1.2],['sawfish',.07],['bonefish',5],['permit',2.2],['stingray',3],['redfish',1.5],['barracuda',2],['blacktip',1.5],['lemonshark',1],['eagleray',1],['ladyfish',3],['pompano',1.2],['palometa',3],['bluerunner',2],['manatee',.7]],
+  'Flats':[['flounder',2.5],['sole',1.2],['sawfish',.012],['bonefish',5],['permit',2.2],['stingray',3],['redfish',1.5],['barracuda',2],['blacktip',1.5],['lemonshark',1],['eagleray',1],['ladyfish',3],['pompano',1.2],['palometa',3],['bluerunner',2],['manatee',.7]],
   // Florida Bay backcountry — juvenile snapper, small barracuda, rays on the sand, baitfish
   // schools, manatees in the shallows, and dolphin pods working the bay ("the bay" in the task
   // brief).
-  'Backcountry':[['flounder',2.5],['sole',1.8],['sawfish',.06],['redfish',4],['snook',3],['trout',3],['mangrove',2.5],['tarpon',2],['bonefish',1.5],['permit',1],['barracuda',1.2],['manatee',1.2],['stingray',2.2],['jackcrevalle',2],['ladyfish',3],['pompano',1.5],['tripletail',.6],['dolphin',1.5]],
+  'Backcountry':[['flounder',2.5],['sole',1.8],['sawfish',.01],['redfish',4],['snook',3],['trout',3],['mangrove',2.5],['tarpon',2],['bonefish',1.5],['permit',1],['barracuda',1.2],['manatee',1.2],['stingray',2.2],['jackcrevalle',2],['ladyfish',3],['pompano',1.5],['tripletail',.6],['dolphin',1.5]],
   // Bridge pilings and the channels that run under them — structure-holders in current. Dolphin
   // pods regularly work the bridge channels for bait pushed through on the tide.
   'Bridge':[['flounder',1.5],['tarpon',5],['snook',2],['mangrove',3],['eagleray',1],['sheepshead',3],['goliath',.6],['jackcrevalle',1.5],['nurse',1],['cobia',1],['barracuda',1],['dolphin',1.2],['lookdown',3.5],['bluerunner',4],['schoolmaster',2],['manatee',.9]],
+  // (Halibut was listed here at 0.35 but declares 18-240 m and this zone is 2.6-9.4 m deep; the
+  // entry could never place, so it is gone. Offshore carries it.)
   // Mixed mid-water schools, mackerel and jacks between the Bay and the reef line — classic
   // bottlenose water, hence the higher dolphin weight ("less rare" per the task brief).
-  'Hawk Channel':[['halibut',.35],['mangrove',4],['eagleray',2],['turtle',1.5],['barracuda',2],['nurse',1.5],['mutton',2],['dolphin',1.8],['cero',2],['pompano',1.5],['cobia',1],['graytrigger',1.2],['jackcrevalle',1.8],['yellowtail',1.5],['sheepshead',1.2],['tarpon',1.6],['goliath',.5],['bullshark',.35],['bluerunner',4.5],['lanesnapper',3],['spanishmack',3],['lookdown',1.5],['schoolmaster',2]],
+  'Hawk Channel':[['mangrove',4],['eagleray',2],['turtle',1.5],['barracuda',2],['nurse',1.5],['mutton',2],['dolphin',1.8],['cero',2],['pompano',1.5],['cobia',1],['graytrigger',1.2],['jackcrevalle',1.8],['yellowtail',1.5],['sheepshead',1.2],['tarpon',1.6],['goliath',.5],['bullshark',.35],['bluerunner',4.5],['lanesnapper',3],['spanishmack',3],['lookdown',1.5],['schoolmaster',2]],
   // Patch reef / Sombrero crest — the existing shallow reef life (depthAt < REEF_WALL_DEPTH).
   // Dolphins work the reef line hunting bait off the coral too.
   'Reef':[['cubera',.5],['yellowtail',5],['parrotfish',3],['angelfish',2],['hogfish',2],['grouper',2],['gag',1.2],['redgrouper',1.2],['nurse',1],['turtle',1.5],['barracuda',1.5],['mutton',2],['lionfish',1.5],['graytrigger',2],['cero',2],['goliath',1.1],['hammerhead',.3],['bullshark',.3],['tarpon',1.2],['dolphin',1],['schoolmaster',4.5],['lanesnapper',3.5],['bluerunner',4],['vermilion',2],['spanishmack',2]],
-  // The reef wall's top and ledges (depthAt in [REEF_WALL_DEPTH, DEEP_WALL_DEPTH), spawn.ts) —
+  // The reef wall's top and ledges (depthAt in [REEF_WALL_DEPTH, DEEP_WALL_DEPTH), spawn.ts).
+  // Only species whose depth band overlaps 12-20 m are listed: mako (dMin 20), warsaw (dMin 25)
+  // and the whale shark / giant manta (expected placements << 1 at their rarity) were here and
+  // never placed; DeepWall and Offshore carry them.
   // docs/ARCHITECTURE.md bands 3-4 (reef wall top / elkhorn-staghorn, ledges and overhangs):
   // grouper holding on ledges, bigger snapper/jack schools working the drop, dolphins cruising
   // the wall edge. `DeepWall` below (band 5, >= DEEP_WALL_DEPTH) used to be the same table all the
   // way to 45 m — split out so the deep wall/wreck band actually feels different, not just emptier.
-  'ReefWall':[['cubera',.7],['warsaw',.35],['mako',.12],['giantmanta',.18],['whaleshark',.05],['tigershark',.12],['grouper',3],['gag',2],['redgrouper',2],['yellowtail',4],['mutton',2.5],['amberjack',2],['kingfish',1.5],['cero',1.5],['nurse',1],['goliath',.6],['graytrigger',1.2],['lionfish',1],['hammerhead',.8],['bullshark',.5],['cobia',1],['dolphin',1.3],['vermilion',5],['bluerunner',3],['schoolmaster',2]],
+  'ReefWall':[['cubera',.7],['tigershark',.12],['grouper',3],['gag',2],['redgrouper',2],['yellowtail',4],['mutton',2.5],['amberjack',2],['kingfish',1.5],['cero',1.5],['nurse',1],['goliath',.6],['graytrigger',1.2],['lionfish',1],['hammerhead',.8],['bullshark',.5],['cobia',1],['dolphin',1.3],['vermilion',5],['bluerunner',3],['schoolmaster',2]],
   // The deep wall and wrecks (depthAt >= DEEP_WALL_DEPTH, spawn.ts) — docs/ARCHITECTURE.md band 5
   // (20 m+, "deep wall, wrecks, the Humps... torch required, blackout risk"). Bigger-bodied
   // structure-holders and more apex presence than the wall top, less of the small schooling
   // yellowtail/mutton clutter that reads as "shallow reef" — this is what makes the deep band feel
   // like a different place rather than the same reef with the lights turned down.
-  'DeepWall':[['mola',.1],['warsaw',1],['cubera',.6],['mako',.3],['greatwhite',.04],['giantmanta',.14],['whaleshark',.06],['tigershark',.2],['grouper',3.5],['gag',2.5],['redgrouper',2],['amberjack',3],['kingfish',2],['cobia',1.5],['goliath',1.3],['nurse',1.5],['hammerhead',.7],['bullshark',.5],['mutton',1.4],['yellowtail',1],['cero',1],['dolphin',1],['vermilion',3.5],['bluerunner',1.5]],
+  'DeepWall':[['warsaw',1],['cubera',.6],['mako',.3],['giantmanta',.04],['tigershark',.2],['grouper',3.5],['gag',2.5],['redgrouper',2],['amberjack',3],['kingfish',2],['cobia',1.5],['goliath',1.3],['nurse',1.5],['hammerhead',.7],['bullshark',.5],['mutton',1.4],['yellowtail',1],['cero',1],['dolphin',1],['vermilion',3.5],['bluerunner',1.5]],
   // Gulf Stream / open offshore — pelagics (roaming layer only; see spawn.ts). Dolphin pods are a
   // common sight riding the current lines; pilot whales/humpbacks are a genuine *rare* event out
   // here — tiny weights are deliberate (see the task brief's "Encounter rarity").
-  'Offshore':[['halibut',1.1],['mako',.5],['mola',.14],['greatwhite',.05],['spermwhale',.05],['whaleshark',.1],['giantmanta',.12],['tigershark',.14],['mahi',5],['flyingfish',4],['dolphin',2.5],['blackfin',3],['sailfish',1.5],['wahoo',1],['turtle',.8],['marlin',.6],['blackmarlin',.25],['swordfish',.3],['yellowfin',2.5],['albacore',1.2],['bluefin',.8],['kingfish',1.5],['amberjack',1.5],['hammerhead',.3],['pilotwhale',.12],['humpback',.07],['skipjack',4],['bigeye',.7]],
+  'Offshore':[['halibut',1.1],['mako',.5],['mola',.03],['greatwhite',.025],['whaleshark',.04],['giantmanta',.04],['tigershark',.14],['mahi',5],['flyingfish',4],['dolphin',2.5],['blackfin',3],['sailfish',1.5],['wahoo',1],['turtle',.8],['marlin',.6],['blackmarlin',.25],['swordfish',.3],['yellowfin',2.5],['albacore',1.2],['bluefin',.8],['kingfish',1.5],['amberjack',1.5],['hammerhead',.3],['pilotwhale',.12],['humpback',.02],['skipjack',4],['bigeye',.7]],
+  // The Humps are 40 m at the crest and 123 m at the 260 m radius (depthAt: 40 + 0.32 x distance),
+  // so only species that can live deeper than 40 m belong. Barracuda (dMax 20), yellowtail (40),
+  // nurse (30), goliath, bullshark (40) and mutton (40) are shallow-structure fish whose entries
+  // never placed a school and quietly wasted the chunk; humpback is a migrant, not hump-bound, and
+  // lives in Offshore. Gag and red grouper stay: adults of both are deep-ledge fish (50-100+ m), so
+  // their declared band (dMax 60, 0 placed) was the bug and is widened to 120. Grouper (9.8% of this
+  // table, 0 placed) and blue runner (11.8% nominal, 1.1% observed) had the same dMax 60 and get
+  // the same fix: both are common over deep structure.
   // The Humps (Marathon Hump, West Hump) and other named structure far offshore — real relief that
   // concentrates bottom fish and jacks well out in otherwise-open water. Marathon's actual humps
   // are a known pilot-whale spot — a tiny weight here makes that a learnable, place-based rarity
   // (docs/ARCHITECTURE.md's resident-school note) rather than a per-frame dice roll.
-  'Humps':[['mola',.35],['spermwhale',.45],['warsaw',1.2],['mako',.35],['amberjack',4],['grouper',2.5],['gag',1.5],['redgrouper',1.5],['cobia',2],['mutton',2],['yellowtail',2],['kingfish',1.5],['barracuda',1.5],['goliath',.5],['bullshark',.4],['nurse',1],['pilotwhale',2.6],['humpback',.08],['vermilion',3],['bluerunner',3],['skipjack',2]]
+  'Humps':[['spermwhale',.3],['warsaw',1.2],['mako',.35],['amberjack',4],['grouper',2.5],['gag',1.5],['redgrouper',1.5],['cobia',2],['kingfish',1.5],['pilotwhale',2.6],['vermilion',3],['bluerunner',3],['skipjack',2]]
 };
 
 /** [startU, endU, heightScale, finStyle] along the body, used by finEdge/buildFishGeo. */
