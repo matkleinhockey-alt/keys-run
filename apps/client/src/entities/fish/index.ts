@@ -29,6 +29,7 @@ import { wrecksFor, WRECK_RESIDENTS } from '@keysrun/shared/world/wrecks';
 import { swimClock } from './swim-clock.js';
 import { fishCapsule } from './hitbox.js';
 import type { SchoolState, Threat } from './types.js';
+import { shownCount } from './thin.js';
 import { chumPull, type Carcass } from '@keysrun/shared/sim/chum';
 import { WORLD_SEED } from '../../state/constants.js';
 
@@ -167,7 +168,11 @@ const SCHOOL_QUERY_MARGIN = 20;
  * levels materialise on first use, long after world.ts's one boot-time sweep; see pool.ts's
  * `MeshReadyHook`.
  */
-export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshReadyHook): FishWorld {
+export function createFishWorld(
+  seed: number = WORLD_SEED, onMeshReady?: MeshReadyHook,
+  /** How recovered the water at (x, z) is, 0..1 (net/ocean.ts). Omitted = every school whole. */
+  oceanRecovery?: (x: number, z: number) => number,
+): FishWorld {
   const group = new THREE.Group();
   group.name = 'fish';
 
@@ -392,8 +397,17 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
       const events = stepSchool(state, pool.V, ctx);
       for (const ev of events) if (ev.type === 'blow') { spoutSystem.spawn(ev.x, ev.y, ev.z); blowCount++; }
       if (!touched.has(pool)) { beginPoolFrame(pool); touched.add(pool); }
+      // Worked water holds fewer fish (thin.ts). Undefined unless a school is actually thinned,
+      // so pristine and offline water never touch the new path.
+      state.shown = undefined;
+      if (oceanRecovery) {
+        let rec = 1;
+        try { rec = oceanRecovery(state.cx, state.cz); } catch { rec = 1; }
+        const n = shownCount(state.members.length, rec);
+        if (n < state.members.length) state.shown = n;
+      }
       renderSchool(state, pool, view);
-      fishCount += state.members.length;
+      fishCount += state.shown ?? state.members.length;
     };
     for (const state of residents.values()) runSchool(state);
     for (const state of nearField.values()) runSchool(state);
@@ -498,7 +512,9 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
     const catchable = isCatchable(state.type);
     const r2 = radius * radius;
 
-    for (let i = 0; i < state.members.length; i++) {
+    // A fish that is not drawn cannot be speared: thinned members are skipped here as in render.ts.
+    const live = state.shown ?? state.members.length;
+    for (let i = 0; i < live; i++) {
       const m = state.members[i];
       // NOTE: there used to be an `if (m.slot < 0) continue` here, meaning "skip members with no
       // render slot". That guard made spearfishing impossible.
