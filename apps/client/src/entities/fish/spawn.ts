@@ -40,7 +40,7 @@
  */
 import { hashCell, weightedPick } from '@keysrun/shared/rng';
 import { VIS, ZONE_LIFE, isCatchable, type CreatureVis } from '@keysrun/shared/content/creatures';
-import { depthAt, zoneAt, WB, HUMPS, type Zone } from '@keysrun/shared/world/depth';
+import { depthAt, landH, zoneAt, WB, HUMPS, type Zone } from '@keysrun/shared/world/depth';
 import { shoreInfo, chainZ } from '@keysrun/shared/world/chain';
 import { holdPoints, type Wreck } from '@keysrun/shared/world/wrecks';
 import { wreckSizeT } from '@keysrun/shared/sim/fight';
@@ -122,6 +122,24 @@ function nearestHumpDist(x: number, z: number): number {
 interface LifeTable {
   table: ReadonlyArray<readonly [string, number]>;
   density: number;
+  /** The habitat key the table was resolved under ('Reef', 'ReefWall', 'Humps', ...). */
+  key: string;
+}
+
+/**
+ * True where a school must not be anchored: on land, on made ground, or within 4 m of the outline.
+ *
+ * Every placement layer used to gate on `shoreInfo(x,z).d >= 4` alone, which is the distance from
+ * the natural island OUTLINE. `landH` also raises made ground that lies outside that outline - the
+ * US-1 causeways, the town pad, the golf courses, the runway - and `depthAt` knows nothing about
+ * that fill, so it reports 0.4-2.5 m of water on top of a causeway. Measured by the ocean census:
+ * 49 of 205,070 schools (a goliath grouper, a cobia and a nurse shark among them) anchored at
+ * landH 1.6 on the US-1 corridor, 6-80 m from the chain. `landH` is the ground truth the renderer
+ * and the boat both use, so it is checked directly, in every layer, rather than inferred from the
+ * outline.
+ */
+function noWaterAt(x: number, z: number): boolean {
+  return landH(x, z) >= 0 || shoreInfo(x, z).d < 4;
 }
 
 /**
@@ -134,14 +152,14 @@ interface LifeTable {
 function lifeTableFor(x: number, z: number, zone: Zone, d: number, allowOffshore: boolean): LifeTable | null {
   if (nearestHumpDist(x, z) < HUMP_RADIUS) {
     const table = ZONE_LIFE.Humps;
-    if (table && table.length > 0) return { table, density: HABITAT_DENSITY.Humps };
+    if (table && table.length > 0) return { table, density: HABITAT_DENSITY.Humps, key: 'Humps' };
   }
   if (zone === 'Offshore' && !allowOffshore) return null;
   const key: string = zone === 'Reef' && d >= DEEP_WALL_DEPTH ? 'DeepWall'
     : zone === 'Reef' && d >= REEF_WALL_DEPTH ? 'ReefWall' : zone;
   const table = ZONE_LIFE[key];
   if (!table || table.length === 0) return null;
-  return { table, density: HABITAT_DENSITY[key] ?? 0.2 };
+  return { table, density: HABITAT_DENSITY[key] ?? 0.2, key };
 }
 
 export function chunkOf(x: number, z: number): [number, number] {
@@ -226,7 +244,7 @@ export function residentsForChunk(seed: number, cx: number, cz: number): Residen
   const anchorX = ccx + (hashCell(seed, cx, cz, SALT.RESIDENT_ANCHOR_X) - 0.5) * CHUNK_SIZE * 0.7;
   const anchorZ = ccz + (hashCell(seed, cx, cz, SALT.RESIDENT_ANCHOR_Z) - 0.5) * CHUNK_SIZE * 0.7;
   const d = depthAt(anchorX, anchorZ);
-  if (d < V.dMin || d > V.dMax || shoreInfo(anchorX, anchorZ).d < 4) return null;
+  if (d < V.dMin || d > V.dMax || noWaterAt(anchorX, anchorZ)) return null;
   if (anchorX < WB.x0 || anchorX > WB.x1 || anchorZ < WB.z0 || anchorZ > WB.z1) return null;
 
   const count = V.school[0] + Math.floor(hashCell(seed, cx, cz, SALT.RESIDENT_COUNT) * (V.school[1] - V.school[0] + 1));
@@ -301,7 +319,7 @@ export function tryRoamCell(seed: number, cellX: number, cellZ: number): RoamSpa
   const x = cx + (hashCell(seed, cellX, cellZ, SALT.ROAM_OFFSET_X) - 0.5) * ROAM_CELL;
   const z = cz + (hashCell(seed, cellX, cellZ, SALT.ROAM_OFFSET_Z) - 0.5) * ROAM_CELL;
   const d = depthAt(x, z);
-  if (d < V.dMin || d > V.dMax || shoreInfo(x, z).d < 4) return null;
+  if (d < V.dMin || d > V.dMax || noWaterAt(x, z)) return null;
   if (x < WB.x0 || x > WB.x1 || z < WB.z0 || z > WB.z1) return null;
   const count = V.school[0] + Math.floor(hashCell(seed, cellX, cellZ, SALT.ROAM_COUNT) * (V.school[1] - V.school[0] + 1));
   const heading = hashCell(seed, cellX, cellZ, SALT.ROAM_HEADING) * Math.PI * 2;
@@ -328,7 +346,7 @@ export function instantiateLegend(seed: number, type: string, V: CreatureVis): S
     const x = WB.x0 + hashCell(seed, 7717, i, SALT.ROAM_OFFSET_X) * (WB.x1 - WB.x0);
     const z = WB.z0 + hashCell(seed, 7717, i, SALT.ROAM_OFFSET_Z) * (WB.z1 - WB.z0);
     const d = depthAt(x, z);
-    if (d < Math.max(V.dMin, 14) || shoreInfo(x, z).d < 60) continue;
+    if (d < Math.max(V.dMin, 14) || shoreInfo(x, z).d < 60 || landH(x, z) >= 0) continue;
     const heading = hashCell(seed, 7717, i, SALT.ROAM_HEADING) * Math.PI * 2;
     return {
       id: `legend:${type}`,
@@ -388,10 +406,30 @@ export const NEAR_CELL = 18;
 /** Activation radius. Comfortably past the ~30 m best-case visibility so schools are already
  * there, already swimming, when they fade in — rather than popping at the edge of sight. */
 export const NEAR_RADIUS = 72;
-/** Gate scale on top of `HABITAT_DENSITY`. Well above 1: this layer's whole job is to be dense,
- * and its cells are small enough that a high hit rate still reads as scattered groups rather than
- * a uniform carpet. */
-const NEAR_DENSITY_FACTOR = 2.6;
+/**
+ * Per-habitat hit rate of a near-field cell: the probability that an 18 m cell holds a school.
+ *
+ * This used to be `HABITAT_DENSITY * 2.6`, which is >= 1 for every habitat above ~0.38 - i.e.
+ * every cell in Reef, Hawk Channel, Bridge, Offshore, Humps and (at 1.3) Flats was a certain hit.
+ * The gate never discriminated; the only thing separating habitats was the depth band, and the
+ * result was a flat world: measured fish/km2 was Blue water 45,923 > Bridge 40,121 > Hawk Channel
+ * 37,297 > Flats 34,222 ~ Reef 34,070 > Backcountry 28,461. The open ocean was the DENSEST water in
+ * the game and the best reef no richer than a sand flat - backwards, since blue water is the desert
+ * you cross to reach structure.
+ *
+ * These are absolute hit rates (no multiplier). 1.0 is kept exactly where the layer earned its
+ * keep - a diver on a reef or under a bridge must still see fish at arm's length, the "zero fish
+ * within 25 m on Sombrero" bug - and the rest fall away with how much there is for fish to hold on:
+ * walls are rich but thin out toward the dark deep, Hawk Channel and flats are middling, mangrove
+ * creeks and backcountry sparser, and open blue water is sparse. The Humps stay at 1.0 and are
+ * reached through `lifeTableFor`'s HUMP_RADIUS override, so blue water near structure remains the
+ * oasis it should be. Sparse is not empty: at 0.12 a diver with 30 m visibility (~9 cells in
+ * view) still expects about one school, and the macro layer is untouched.
+ */
+const NEAR_HABITAT_DENSITY: Record<string, number> = {
+  Reef: 1.0, Bridge: 1.0, Humps: 1.0, ReefWall: 0.85, DeepWall: 0.6,
+  'Hawk Channel': 0.55, Flats: 0.5, Backcountry: 0.4, Creek: 0.4, Offshore: 0.12,
+};
 /** A species must shoal at least this many strong to be eligible. Filters the near field down to
  * the fish that actually form the "schools of them" a reef is supposed to show — snapper, runners,
  * grunts, mackerel — and leaves solitary ambush predators (grouper, barracuda, goliath) to the
@@ -454,10 +492,10 @@ export function nearFieldForCell(seed: number, cellX: number, cellZ: number): Re
   const d = depthAt(cx, cz);
   const life = lifeTableFor(cx, cz, zoneAt(cx, cz), d, true);
   if (!life) return null;
-  if (hashCell(seed, cellX, cellZ, SALT.NEAR_GATE) >= life.density * NEAR_DENSITY_FACTOR) return null;
+  if (hashCell(seed, cellX, cellZ, SALT.NEAR_GATE) >= (NEAR_HABITAT_DENSITY[life.key] ?? 0.4)) return null;
 
   // A minority of cells hold a big solitary fish rather than a shoal — see NEAR_BIG_CHANCE.
-  const tableKey = `${life.table.length}:${life.density}`;
+  const tableKey = life.key;
   const wantBig = hashCell(seed, cellX, cellZ, SALT.NEAR_BIG) < NEAR_BIG_CHANCE;
   const big = wantBig ? bigTable(tableKey, life.table) : [];
   const table = big.length > 0 ? big : shoalingTable(tableKey, life.table);
@@ -470,7 +508,7 @@ export function nearFieldForCell(seed: number, cellX: number, cellZ: number): Re
   const anchorX = cx + (hashCell(seed, cellX, cellZ, SALT.NEAR_OFFSET_X) - 0.5) * NEAR_CELL;
   const anchorZ = cz + (hashCell(seed, cellX, cellZ, SALT.NEAR_OFFSET_Z) - 0.5) * NEAR_CELL;
   const ad = depthAt(anchorX, anchorZ);
-  if (ad < V.dMin || ad > V.dMax || shoreInfo(anchorX, anchorZ).d < 4) return null;
+  if (ad < V.dMin || ad > V.dMax || noWaterAt(anchorX, anchorZ)) return null;
   if (anchorX < WB.x0 || anchorX > WB.x1 || anchorZ < WB.z0 || anchorZ > WB.z1) return null;
 
   const count = V.school[0] + Math.floor(hashCell(seed, cellX, cellZ, SALT.NEAR_COUNT) * (V.school[1] - V.school[0] + 1));
@@ -550,6 +588,8 @@ export function wreckSchoolsFor(seed: number, w: Wreck, table: ReadonlyArray<rea
   holdPoints(w).forEach((hp, i) => {
     const pool = wreckPool(w, hp.label, table).map(([k, wt]) => [k, used.has(k) ? wt * 0.25 : wt] as const);
     if (pool.length === 0) return;
+    // Same ground-truth gate as every other layer: a hold point on fill has no water to hold in.
+    if (landH(hp.x, hp.z) >= 0) return;
     const cx = 1000 + w.index, cz = i;
     const type = weightedPick(() => hashCell(seed, cx, cz, SALT.WRECK_SPECIES), pool);
     const V = VIS[type];

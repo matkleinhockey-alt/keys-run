@@ -37,7 +37,7 @@ interface Rec {
 }
 
 /** Measured baseline of schools anchored on made ground; see test 1d. Lower to 0 when fixed. */
-const KNOWN_DRY_LAND = 49;
+const KNOWN_DRY_LAND = 0;
 const LAYERS: Layer[] = ['resident', 'roamer', 'near', 'wreck', 'legend'];
 const isMacro = (r: Rec): boolean => r.layer !== 'near';
 
