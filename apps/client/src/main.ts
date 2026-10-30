@@ -119,9 +119,15 @@ async function boot(): Promise<void> {
         // would hand them poses from two different instants.
         const snapshots = net.getRemoteBoats(now);
         const nameOf = (slotId: number): string | undefined => net?.nameOf(slotId);
-        remoteBoats.update(now, netSimT, snapshots, nameOf);
-        // People off their boats: walking ashore, or in the water (net/remote-bodies.ts).
-        remoteBodies?.update(Math.min(0.1, dt), now / 1000, net.getRemoteBodies(), nameOf);
+        // People off their boats: walking ashore, or in the water (net/remote-bodies.ts). Their
+        // name goes over them, and their moored boat is labelled as theirs, not tagged twice.
+        const bodies = net.getRemoteBodies();
+        const away = new Set(bodies.map((b) => b.slotId));
+        remoteBoats.update(now, netSimT, snapshots, (slotId) => {
+          const n = nameOf(slotId);
+          return n && away.has(slotId) ? `${n}'s boat` : n;
+        });
+        remoteBodies?.update(Math.min(0.1, dt), now / 1000, bodies, nameOf);
         world.setRemoteBoatsForNet(snapshots.map((s) => ({ x: s.pose.x, z: s.pose.z, h: s.pose.h, slotId: s.slotId })));
       }
     } catch (e) {

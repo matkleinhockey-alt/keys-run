@@ -1309,7 +1309,10 @@ export function initWorld(wrap: HTMLElement): World {
     fishWorld.update(clamped, simTime, focus, boatThreat, fishThreats, life.carcasses());
 
     const amp = ampAt(renderState.x, renderState.z);
-    applyBoatVisuals(renderState, model, { t: simTime, dt: clamped, todK: tod.getK(), sw, ch, amp, hull: { len: boatSpec.len, beam: boatSpec.beam, topMs: boatSpec.top * 0.5144 * SPEED_SCALE }, particles, water }, events);
+    // Tied up while you are ashore, the boat is pinned (land.holdBoat) and can grind against its
+    // own pier's collision boxes; that is not news to someone up on the bridge.
+    const boatEvents = land.mode === 'land' ? events.filter((e) => e.type !== 'bumpedDock' && e.type !== 'bumpedPiling' && e.type !== 'beached' && e.type !== 'chartEdge') : events;
+    applyBoatVisuals(renderState, model, { t: simTime, dt: clamped, todK: tod.getK(), sw, ch, amp, hull: { len: boatSpec.len, beam: boatSpec.beam, topMs: boatSpec.top * 0.5144 * SPEED_SCALE }, particles, water }, boatEvents);
     // Deck crew dance/brace/idle (entities/crew-model/dance.ts) — layered on top of model.group's
     // own heave/pitch/roll, which applyBoatVisuals just set for this frame. curState (not
     // renderState) for speed/steer/air: those are discrete/authoritative fields, same reasoning

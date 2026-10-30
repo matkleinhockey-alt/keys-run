@@ -121,6 +121,7 @@ export function createRemoteBoatManager(scene: THREE.Scene, camera: THREE.Perspe
 
       const name = nameOf?.(snap.slotId);
       if (name && inst.tag.textContent !== name) inst.tag.textContent = name;
+      inst.tag.classList.toggle('krNetTagBoat', !!name?.endsWith("'s boat"));
       ndc.set(x, y + 5.5, z).project(camera);
       const dx = x - camera.position.x, dz = z - camera.position.z;
       const visible = ndc.z < 1 && Math.hypot(dx, dz) < 1400;
