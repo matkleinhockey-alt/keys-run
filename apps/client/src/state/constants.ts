@@ -41,4 +41,12 @@ export const SALT = {
   // Wall-clock world state: which sandbar the raft-up is on today, and whether Larry is out.
   // Hashed off the clock period rather than rolled per session, so every client agrees.
   SANDBAR_PICK: 181, LARRY_OUT: 182, LARRY_ROUTE: 183,
+  // Fish school motion (entities/fish/school.ts). Not placement, but the same rule applies: a roll
+  // that decides when a school glides, dives or surfaces is hashed off (school id, sim time, salt)
+  // so two clients stepping the same school agree without a byte on the wire. One per call site, so
+  // two rolls landing in the same frame stay independent.
+  FISH_GLIDE_ROLL: 191, FISH_GLIDE_LEN: 192,
+  FISH_FRENZY_CD: 193, FISH_FRENZY_RETRY: 194, FISH_FRENZY_LEN: 195,
+  FISH_TURN_SIDE: 196, FISH_DIVE_DEPTH: 197, FISH_DIVE_TIMER: 198,
+  FISH_BREACH: 199, FISH_ACT_CD: 200,
 } as const;
