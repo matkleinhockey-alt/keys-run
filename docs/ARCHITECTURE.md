@@ -202,6 +202,71 @@ around re-rolls the reef. Replace with density-driven spawning over the union
 of all players' radii, plus a 60 s dormant list so turning around does not
 regenerate the world.
 
+## The living ocean — population, growth and depletion
+
+> **Store the deviation, never the fish.** The population is a pure function of
+> the world; the database holds only the places where players have changed it.
+
+Everything about a school — whether it exists, its species, its offset inside
+its cell, its heading, its members — is `hashCell(WORLD_SEED, cx, cz, salt)`.
+That is what makes 2.4 M fish cost zero bytes and zero rows, and it is why two
+players on the same bait ball see the same fish. The constraint that follows is
+absolute: **nothing may be stored per fish.** A table of individuals would
+replace an O(1) function with an O(population) database, and it would have to be
+written to by every client in range.
+
+So persistence is expressed the other way round. A cell with no row is pristine
+and uses the deterministic baseline unchanged. A row exists only where players
+have *disturbed* the water, and carries accumulated fishing pressure plus when
+it was last worked. Cost is one row per spot anyone has actually fished, not per
+fish, and the world still generates from the seed.
+
+- `packages/shared/src/sim/ocean.ts` — the whole policy, pure and testable:
+  `recovery(pressure, hours)`, `sizeScale`, `rarityScale`. Pressure is +1 per
+  catch with a 24 h half-life, capped at 60 (about 90 min of solid fishing).
+- `apps/api/src/routes/ocean.ts` + `ocean_cells` — the storage. Batch read by
+  cell, capped at 256 cells a request; absent cells are simply not returned.
+- Cell key is the 64 m fish chunk, `floor(x/64)`, so pressure is keyed the same
+  way the fish themselves are.
+
+### Pristine water must be bit-identical to a world with no ledger
+Every scale returns **exactly 1.0** at zero pressure, asserted with `toBe`. This
+is not a nicety. The ledger is a live network dependency on a game that has to
+keep working signed out and offline, so "no data" and "server down" must both
+mean "the ocean as it has always been". A fishing game that fishes differently
+when the API is slow is worse than one with no ledger at all.
+
+### The gold bluefin is a fact about the world, not about your session
+The three gold bluefin are the one hand-placed school in the game: a weight
+small enough to make three fish rare also makes them flicker in and out as you
+cross chunk boundaries, which is the opposite of a thing that is always
+somewhere. So they are placed by `entities/fish/legend-path.ts` instead — a
+closed 33 km loop, routed once from the world seed through water that is deep
+enough and far enough offshore along its whole length, and walked by the **wall
+clock** at ~1.3 m/s.
+
+Wall clock, not session time, is the entire point. They used to start from a
+seed-derived position and then drift on each client's own elapsed time, so two
+players who logged in an hour apart hunted the same fish in different places.
+Position must be a function of the instant, so that "where are they right now"
+has one answer for everybody.
+
+### Why motion had to become deterministic too
+Placement was already shared, but `school.ts` stepped every school with
+`Math.random()`, so the moment fish moved, two clients diverged. Motion is now
+hashed from the school id and the sim time — stateless, so a client that
+activates a school late or steps one extra frame does not stay shifted against
+everyone else. That in turn made the school **id** load-bearing: a roamer's id
+used to be a per-client counter incremented in the order *you* drove into cells,
+which is never the order anyone else did, so it is now derived from the cell.
+
+### Measure the ocean, do not reason about it
+`apps/client/test/ocean-census.test.ts` sweeps the whole world through the real
+placement functions and reports population by species and layer, fish/km² by
+zone, mean distance between encounters per species, and dead water. Tune against
+its numbers, not against intuition. It is also a ratchet: it fails if more
+schools end up anchored on dry land than the known count.
+
 ## Spearfishing
 
 **Server-simulated projectile, not hitscan with rewind.** Hitscan would test
