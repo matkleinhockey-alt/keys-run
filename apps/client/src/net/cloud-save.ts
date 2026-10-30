@@ -27,6 +27,7 @@ export const CLOUD_KEYS = [
   'keysrun.services.v1',
   'keysrun.treasure.v1',
   'keysrun.wrecks.charted.v1',
+  'keysrun.trophies.v1', // game/tournament/index.ts TROPHY_KEY
 ] as const;
 
 /** Which account took this browser's offline game. */

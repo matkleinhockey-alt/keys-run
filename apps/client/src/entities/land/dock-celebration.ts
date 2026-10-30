@@ -60,7 +60,7 @@ const pick = <T,>(a: readonly T[], i: number): T => a[((i % a.length) + a.length
 /** Picks a spot on the planks a short walk from where you stepped off (far enough that the first
  * thing you see is the whole scene, not a gantry post in your face), away from the boat, with room
  * for a crowd around it. Returns null when the dock is too cramped for anything sensible. */
-function findStation(spot: DockSpot): { x: number; z: number; y: number } | null {
+export function findStation(spot: DockSpot): { x: number; z: number; y: number } | null {
   const boatD = Math.hypot(spot.dockX - spot.boatX, spot.dockZ - spot.boatZ);
   let best: { x: number; z: number; y: number; score: number } | null = null;
   for (let r = 7; r <= 18; r++) {

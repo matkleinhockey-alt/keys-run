@@ -122,6 +122,10 @@
       "types": "./dist/sim/race.d.ts",
       "default": "./dist/sim/race.js"
     },
+    "./sim/tournament": {
+      "types": "./dist/sim/tournament.d.ts",
+      "default": "./dist/sim/tournament.js"
+    },
     "./sim/economy": {
       "types": "./dist/sim/economy.d.ts",
       "default": "./dist/sim/economy.js"

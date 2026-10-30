@@ -30,6 +30,12 @@ import {
   SERVER_RESTART_FIELDS,
   SNAPSHOT_FIELDS,
   WELCOME_FIELDS,
+  TOURNEY_START_FIELDS,
+  TOURNEY_CATCH_FIELDS,
+  TOURNEY_DOCK_FIELDS,
+  TOURNEY_FIELDS,
+  encodeSpeciesKey,
+  type TourneyMsg,
   type AvatarMsg,
   type AvatarsMsg,
   type CorrectionMsg,
@@ -81,6 +87,23 @@ export function encodePing(clientTimeMs: number): Uint8Array {
   return writer.finish().slice();
 }
 
+/** The tournament's three requests (sim/tournament.ts, apps/sim/src/world/tournament.ts). */
+export function encodeTourneyStart(): Uint8Array {
+  writer.reset(scratch);
+  encodeMessage(MSG.TOURNEY_START, TOURNEY_START_FIELDS, { reserved: false }, writer);
+  return writer.finish().slice();
+}
+export function encodeTourneyCatch(species: string, weight: number): Uint8Array {
+  writer.reset(scratch);
+  encodeMessage(MSG.TOURNEY_CATCH, TOURNEY_CATCH_FIELDS, { species: encodeSpeciesKey(species), weight }, writer);
+  return writer.finish().slice();
+}
+export function encodeTourneyDock(): Uint8Array {
+  writer.reset(scratch);
+  encodeMessage(MSG.TOURNEY_DOCK, TOURNEY_DOCK_FIELDS, { reserved: false }, writer);
+  return writer.finish().slice();
+}
+
 export type ServerMessage =
   | { type: 'welcome'; msg: WelcomeMsg }
   | { type: 'reject'; msg: RejectMsg }
@@ -90,6 +113,7 @@ export type ServerMessage =
   | { type: 'server_restart'; msg: ServerRestartMsg }
   | { type: 'avatars'; msg: AvatarsMsg }
   | { type: 'peer'; slotId: number; name: string }
+  | { type: 'tourney'; msg: TourneyMsg }
   | { type: 'unknown'; id: number };
 
 /** Decode one inbound binary frame. Pure function — no socket/transport knowledge. */
@@ -115,6 +139,8 @@ export function decodeServerMessage(bytes: Uint8Array): ServerMessage {
       const p = decodeMessageBody(PEER_FIELDS, reader);
       return { type: 'peer', slotId: p.slotId, name: decodePeerName(p.name) };
     }
+    case MSG.TOURNEY:
+      return { type: 'tourney', msg: decodeMessageBody(TOURNEY_FIELDS, reader) };
     default:
       return { type: 'unknown', id };
   }

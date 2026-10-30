@@ -27,6 +27,7 @@ import { toast } from './ui/toast.js';
 import { mountAuthGate } from './ui/auth/gate.js';
 import { hydrate } from './net/cloud-save.js';
 import { mountLeaderboard } from './ui/leaderboard/panel.js';
+import { createNetLink } from './game/tournament/link.js';
 import { NetClient } from './net/client.js';
 import { createRemoteBoatManager } from './net/remote-boats.js';
 import { createRemoteBodyManager } from './net/remote-bodies.js';
@@ -73,6 +74,7 @@ async function boot(): Promise<void> {
     const banner = createBanner(wrap!);
     remoteBoats = createRemoteBoatManager(world.scene, world.camera, wrap!);
     remoteBodies = createRemoteBodyManager(world.scene, world.camera, wrap!);
+    let tourneyLink: ReturnType<typeof createNetLink> | null = null;
     net = new NetClient({
       wsUrl: SIM_WS_URL,
       tokenHex: gate.token,
@@ -80,8 +82,11 @@ async function boot(): Promise<void> {
         onConnectionState: (state, detail) => banner.setState(state, detail),
         onWelcome: (w) => world.setHullIndexForNet(w.hullIndex),
         onServerRestart: (etaMs) => banner.showServerRestart(etaMs),
+        onTourney: (msg) => tourneyLink?.onTourney(msg),
       },
     });
+    tourneyLink = createNetLink(net, gate.displayName);
+    world.setTourneyLink(tourneyLink);
     net.connect();
     toast(`Signed in as ${gate.displayName} — connecting to the shared world…`);
     // Debug/verification hook (task brief: "Measure: bytes/sec observed client-side") — query

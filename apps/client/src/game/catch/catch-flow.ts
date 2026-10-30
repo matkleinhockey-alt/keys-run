@@ -192,6 +192,8 @@ export interface CatchFlowDeps {
   /** Player inventory — only the cooler reads it (bagged ice). Omitted = no ice, base capacity. */
   gear?: GearPort;
   economy?: { payForCatch(key: string, weight: number): { value: number; trophy: boolean; personalBest: boolean } };
+  /** A fish went in the cooler (game/tournament: a kept fish is one you can bring in). */
+  onKeep?(key: string, weight: number): void;
 }
 
 export function createCatchFlow(deps: CatchFlowDeps) {
@@ -354,6 +356,7 @@ export function createCatchFlow(deps: CatchFlowDeps) {
     const fish: CoolerFish = { name: S.name, key: current.key, weight: current.weight, inches: lastStats!.inches, sex: lastStats!.sex, pts: lastPts };
     cooler.keepFish(fish);
     toast(`${S.name} is on ice. ${cooler.cooler.length} fish in the cooler.`);
+    try { deps.onKeep?.(current.key, current.weight); } catch (e) { console.error('onKeep', e); }
     if (current.tag) {
       const code = current.tag.code;
       void tags.reportLanded(current.tag, landing(current), true).then((t) => {

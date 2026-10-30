@@ -381,3 +381,32 @@ body.photoing #gauges,body.photoing #mapbox,body.photoing #scorebox,body.photoin
 #buffs{position:absolute;left:12px;top:150px;display:flex;flex-direction:column;gap:4px;pointer-events:none;z-index:5}
 #buffs .buff{padding:3px 9px;border-radius:9px;background:var(--panel);border:1px solid var(--panel-edge);font-size:12px;font-weight:600}
 #buffs .buff.drink{border-color:#e0a030}
+/* Tournament (game/tournament/**): the HUD rides on the race HUD's panel; the opening titles are
+   letterboxed with a lower-third card per boat. */
+.tourneyHud{min-width:250px}
+.tourneyHud .tAll{color:var(--sun,#f2c14e);opacity:1;font-weight:700}
+.tSpecies{list-style:none;margin:7px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:4px;justify-content:center}
+.tSpecies li{padding:2px 7px;border-radius:9px;background:rgba(255,255,255,.07);font-weight:500;opacity:.8}
+.tSpecies li.got{background:rgba(242,193,78,.22);color:var(--sun,#f2c14e);opacity:1;font-weight:700}
+.tourneyCine{position:absolute;inset:0;z-index:7;pointer-events:none;overflow:hidden}
+.tcBar{position:absolute;left:0;right:0;height:11%;background:#000;animation:tcBar .6s ease-out both}
+.tcBar.top{top:0}.tcBar.bot{bottom:0}
+@keyframes tcBar{from{height:0}}
+.tcCard{position:absolute;left:6%;bottom:15%;color:#fff;text-shadow:0 2px 16px rgba(0,0,0,.65);
+  font-family:system-ui,-apple-system,sans-serif;animation:tcIn .55s cubic-bezier(.2,.8,.2,1) both;max-width:88%}
+.tcCard.boat{border-left:5px solid var(--sun,#f2c14e);padding:4px 0 4px 16px;background:linear-gradient(90deg,rgba(6,24,40,.72),rgba(6,24,40,0))}
+.tcCard.title,.tcCard.gun{left:50%;bottom:auto;top:50%;transform:translate(-50%,-50%);text-align:center}
+@keyframes tcIn{from{opacity:0;translate:-24px 0}}
+.tcCard.title,.tcCard.gun{animation-name:tcFade}
+@keyframes tcFade{from{opacity:0;scale:.96}}
+.tcKicker{font-size:13px;letter-spacing:.3em;text-transform:uppercase;opacity:.8}
+.tcTitle{font-size:clamp(28px,5.4vw,58px);font-weight:900;letter-spacing:.02em;text-transform:uppercase;color:var(--sun,#f2c14e)}
+.tcName{font-size:clamp(24px,4vw,44px);font-weight:900;letter-spacing:.01em}
+.tcSub{font-size:clamp(13px,1.6vw,17px);font-weight:600;opacity:.88;margin-top:4px}
+.tcChips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:12px}
+.tcChips span{padding:4px 11px;border-radius:999px;background:rgba(6,24,40,.7);border:1px solid rgba(242,193,78,.6);font-weight:700;font-size:14px}
+.tcSkip{position:absolute;right:16px;bottom:calc(11% + 12px);pointer-events:auto;background:rgba(6,24,40,.7);color:#eaf4f8;
+  border:1px solid rgba(160,220,240,.3);border-radius:999px;padding:6px 14px;font:600 13px system-ui,sans-serif;cursor:pointer}
+/* While the tournament's titles or ceremony have the screen, everything but the 3D view and the
+   titles themselves steps aside (game/tournament/index.ts toggles the class). */
+body.tourneyCinematic #wrap > *:not(canvas):not(.tourneyCine){visibility:hidden!important}

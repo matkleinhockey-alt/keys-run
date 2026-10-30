@@ -76,6 +76,8 @@ import { createRaceMode } from './race/index.js';
 import { F as FishF, lineOut as fishingLineOut } from './fishing/state.js';
 import { shoreHoldsStill, shorePrompt } from './fishing/shore.js';
 import { createCatchFlow } from './catch/catch-flow.js';
+import { createTournamentMode } from './tournament/index.js';
+import type { TourneyLink } from './tournament/link.js';
 import { createEconomySystem } from './economy/system.js';
 import { createGearScreen } from '../ui/gear.js';
 import { createServicesSystem } from './services/index.js';
@@ -174,6 +176,8 @@ export interface World {
    * the poses it already has rather than giving world.ts its own net dependency. Pass an empty
    * array when offline — the chart then simply draws no contacts. */
   setRemoteBoatsForNet(remotes: readonly MinimapContact[]): void;
+  /** Signed in: run the tournament on the sim server (game/tournament/link.ts createNetLink). */
+  setTourneyLink(link: TourneyLink): void;
   /** Where the player's body is when off the boat — ashore or in the water — for other players to
    * see (net/remote-bodies.ts); null while aboard. */
   getLocalBody(): LocalBody | null;
@@ -426,6 +430,20 @@ export function initWorld(wrap: HTMLElement): World {
     opponents: () => raceMode.debugOpponents(),
   };
   document.getElementById('btnRace')?.addEventListener('click', () => raceMode.toggle());
+  // Fishing tournament (game/tournament/**). Offline it runs here against the AI boats; signed in,
+  // main.ts swaps in the sim server's link (`setTourneyLink`) and it runs for everyone online.
+  const tournament = createTournamentMode({
+    scene, wrap, particles, toast,
+    getBoat: () => ({ x: curState.x, z: curState.z, h: curState.h, speed: curState.speed, label: hudBoatLabel(boatSpec) }),
+    getRemotes: () => netRemoteBoats,
+    onBuilt: (g) => shadows.applyToSubtree(g),
+  });
+  document.getElementById('btnTourney')?.addEventListener('click', () => {
+    if (raceMode.isActive()) { toast('Finish the race first.'); return; }
+    tournament.toggle();
+  });
+  // DEV/VERIFICATION HOOK ONLY — same spirit as __raceDebug.
+  (window as unknown as { __tourneyDebug?: unknown }).__tourneyDebug = tournament;
   document.getElementById('btnBuddy')?.addEventListener('click', () => life.toggleBuddy());
   // ONE listener only. A second `addEventListener` for this same button was added further down
   // on the belief that it had none — addEventListener stacks rather than replaces, so every click
@@ -590,6 +608,8 @@ export function initWorld(wrap: HTMLElement): World {
     // Every landed fish also goes to the estates registry: offline, your best fish decides whether
     // your house is throwing the #1 party (signed in, the server's leaderboard does).
     economy: { payForCatch: (key, weight) => { estates.noteCatch(key, weight); return econ.payForCatch(key, weight); } },
+    // Late-bound for the same reason as onCatchFinished: the tournament is built after this.
+    onKeep: (key, weight) => tournament.onKeep(key, weight),
   });
   // Food/drink buffs. `inventory` is a stand-in holder until the shop agent's persisted inventory
   // lands: swap these two accessors for theirs and nothing else changes. Buff state is only ever
@@ -1301,6 +1321,7 @@ export function initWorld(wrap: HTMLElement): World {
     // Other players are entered automatically — see RaceMode.update on why this needs no new
     // network message, and on the one thing it genuinely does not do (a synchronised start).
     raceMode.update(dt, simTime, { x: curState.x, z: curState.z }, netRemoteBoats);
+    tournament.update(dt, simTime);
     fishWorld.setCamera(camera);
     // `life.carcasses()` is the attractor list — dead birds floating after being shot out of the
     // sky (entities/life/carcass.ts). It is one frame stale here, because `life.update` runs
@@ -1438,6 +1459,17 @@ export function initWorld(wrap: HTMLElement): World {
         minimap.draw(simTime, curState, netRemoteBoats);
         catchFlow.updateTouchDock(curState);
       }
+    }
+    // The tournament's opening titles and its ceremony take the camera, whichever rig had it —
+    // after all of them so the shot wins, and the sky dome follows it as every rig's tail does.
+    const tourneyShot = tournament.cameraShot(simTime);
+    if (tourneyShot) {
+      camera.position.copy(tourneyShot.pos);
+      camera.lookAt(tourneyShot.look);
+      camera.updateMatrixWorld(true);
+      sceneCtx.sky.position.copy(camera.position);
+      sceneCtx.sunDisc.position.copy(camera.position).addScaledVector(sunDir, 5000);
+      sceneCtx.sunDisc.lookAt(camera.position);
     }
     // After the camera's final position for this frame (diver rig, boat rig, or the debug
     // override above) is set, so terrain chunks stream around wherever the viewer actually ended
@@ -1800,6 +1832,10 @@ export function initWorld(wrap: HTMLElement): World {
     },
     setRemoteBoatsForNet(remotes) {
       netRemoteBoats = remotes;
+    },
+    /** Signed in: the tournament runs on the sim server for everyone online (net link). */
+    setTourneyLink(link) {
+      tournament.setLink(link);
     },
     getLocalBody() {
       const d = diver.mode === 'diver' ? diver.state : null;

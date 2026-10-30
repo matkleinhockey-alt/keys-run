@@ -10,8 +10,9 @@ import { World, type Spawn } from './world/world.js';
 import { createHttpServer, type ReadinessState } from './http.js';
 import { WsTransport } from './net/ws-transport.js';
 import { attachConnection } from './net/dispatch.js';
+import { TourneyHost } from './world/tournament.js';
 import { buildSnapshot } from './net/snapshot.js';
-import { encodeAvatars, encodeSnapshot } from './net/encode.js';
+import { encodeAvatars, encodeSnapshot, encodeTourney } from './net/encode.js';
 import { bodiesFor } from './world/bodies.js';
 import { SimMetrics } from './metrics.js';
 import { autosaveDirtyPlayers, gracefulShutdown, type ShutdownResult } from './lifecycle.js';
@@ -73,8 +74,18 @@ export function buildSimApp(opts: SimAppOptions): SimApp {
   const httpServer = createHttpServer(world, opts.pool, metrics, readiness);
   const wsTransport = new WsTransport(httpServer);
 
+  const tourneyScratch = new Uint8Array(512);
+  const tourney = new TourneyHost(world, (msg) => {
+    const bytes = encodeTourney(tourneyScratch, msg).slice();
+    for (const [, c] of world.conns) {
+      metrics.recordBytesSent(bytes.length);
+      c.send(bytes);
+    }
+  });
+
   wsTransport.onConnection((conn) => {
     attachConnection(conn, {
+      tourney,
       world,
       pool: opts.pool,
       defaultSpawn,
@@ -121,12 +132,17 @@ export function buildSimApp(opts: SimAppOptions): SimApp {
     }
   }, 5);
 
+  // The tournament's clock: AI boats coming home, the horn, and the periodic resync. Four times a
+  // second is plenty — nothing in it moves faster than a boat docking.
+  const tourneyHandle = setInterval(() => tourney.step(Date.now() / 1000), 250);
+
   const autosaveHandle = setInterval(() => {
     void autosaveDirtyPlayers(world, opts.pool, log);
   }, opts.autosaveIntervalMs);
 
   function stopLoops(): void {
     clearInterval(loopHandle);
+    clearInterval(tourneyHandle);
     clearInterval(autosaveHandle);
   }
 

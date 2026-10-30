@@ -5,13 +5,14 @@
  */
 import type { Pool } from 'pg';
 import { BitReader, decodeMessageBody, readMessageId } from '@keysrun/shared/proto';
-import { AVATAR_FIELDS, HELLO_FIELDS, INPUT_FIELDS, MSG, PING_FIELDS, RejectReason, encodePeerName } from '@keysrun/shared/proto';
+import { AVATAR_FIELDS, HELLO_FIELDS, INPUT_FIELDS, MSG, PING_FIELDS, RejectReason, TOURNEY_CATCH_FIELDS, decodeSpeciesKey, encodePeerName } from '@keysrun/shared/proto';
 import type { TransportConnection } from './transport.js';
 import type { World, Spawn } from '../world/world.js';
 import { resolveSessionToken } from '../db/sessions.js';
 import { loadResume } from '../db/players.js';
-import { encodePeer, encodePong, encodeReject, encodeWelcome } from './encode.js';
+import { encodePeer, encodePong, encodeReject, encodeTourney, encodeWelcome } from './encode.js';
 import { setBody } from '../world/bodies.js';
+import type { TourneyHost } from '../world/tournament.js';
 
 const SMALL_SCRATCH = new Uint8Array(64);
 
@@ -22,7 +23,13 @@ export interface DispatchContext {
   defaultHullIndex: () => number;
   /** Observability hook — bumped on every rejected/invalid auth attempt. */
   onAuthRejected?: (reason: string) => void;
+  /** The online tournament (world/tournament.ts). Optional so tests that only exercise boats can
+   * leave it out. */
+  tourney?: TourneyHost;
 }
+
+const TOURNEY_SCRATCH = new Uint8Array(512);
+const nowS = (): number => Date.now() / 1000;
 
 export function attachConnection(conn: TransportConnection, ctx: DispatchContext): void {
   let slot: number | null = null;
@@ -74,6 +81,12 @@ export function attachConnection(conn: TransportConnection, ctx: DispatchContext
       c.send(mine);
       conn.send(encodePeer(SMALL_SCRATCH, { slotId: s, name: encodePeerName(c.name) }));
     }
+
+    // A tournament already running: enter the newcomer and show them where it stands.
+    if (ctx.tourney) {
+      ctx.tourney.onConnect(result.slot, nowS());
+      conn.send(encodeTourney(TOURNEY_SCRATCH, ctx.tourney.message(nowS())));
+    }
   }
 
   conn.onMessage((bytes) => {
@@ -97,6 +110,14 @@ export function attachConnection(conn: TransportConnection, ctx: DispatchContext
     } else if (id === MSG.AVATAR) {
       const c = ctx.world.conns.get(slot);
       if (c) setBody(c, decodeMessageBody(AVATAR_FIELDS, reader), Date.now());
+    } else if (id === MSG.TOURNEY_START) {
+      // A fresh seed every time — this is what makes the five species different each tournament.
+      ctx.tourney?.start(nowS(), (Math.random() * 0x100000000) >>> 0);
+    } else if (id === MSG.TOURNEY_CATCH) {
+      const m = decodeMessageBody(TOURNEY_CATCH_FIELDS, reader);
+      ctx.tourney?.onCatch(slot, decodeSpeciesKey(m.species), m.weight, nowS());
+    } else if (id === MSG.TOURNEY_DOCK) {
+      ctx.tourney?.onDock(slot, nowS());
     } else if (id === MSG.PING) {
       const ping = decodeMessageBody(PING_FIELDS, reader);
       conn.send(encodePong(SMALL_SCRATCH, { clientTimeMs: ping.clientTimeMs, serverTimeMs: Date.now() >>> 0 }));
@@ -104,6 +125,9 @@ export function attachConnection(conn: TransportConnection, ctx: DispatchContext
   });
 
   conn.onClose(() => {
-    if (slot !== null) ctx.world.disconnectPlayer(slot);
+    if (slot !== null) {
+      ctx.tourney?.onDisconnect(slot);
+      ctx.world.disconnectPlayer(slot);
+    }
   });
 }

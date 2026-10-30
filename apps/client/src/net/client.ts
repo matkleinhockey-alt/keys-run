@@ -28,8 +28,12 @@ import {
   encodeHello,
   encodeInput,
   encodePing,
+  encodeTourneyCatch,
+  encodeTourneyDock,
+  encodeTourneyStart,
   RejectReason,
 } from './protocol.js';
+import type { TourneyMsg } from '@keysrun/shared/proto';
 import { backoffDelayMs } from './backoff.js';
 import { createTrack, pushSample, poseAt, type RemoteBoatTrack, type BoatPose } from './extrapolate.js';
 import { createReconciler } from './reconcile.js';
@@ -78,6 +82,8 @@ export interface NetClientEvents {
   onSpawn?(e: { slotId: number; hullIndex: number }): void;
   onDespawn?(slotId: number): void;
   onServerRestart?(etaMs: number): void;
+  /** The server's tournament, every time it changes (and every few seconds while one runs). */
+  onTourney?(msg: TourneyMsg): void;
 }
 
 export interface NetClientOptions {
@@ -129,6 +135,21 @@ export class NetClient {
 
   get connectionState(): ConnectionState {
     return this.state;
+  }
+
+  /** This connection's slot, once welcomed — how the tournament knows which entry is you. */
+  get slotId(): number | null {
+    return this.localSlotId;
+  }
+
+  /** Tournament requests (apps/sim/src/world/tournament.ts). Dropped while disconnected: the
+   * server's next TOURNEY after reconnecting says where things stand. */
+  sendTourneyStart(): void { this.sendRaw(encodeTourneyStart()); }
+  sendTourneyCatch(species: string, weight: number): void { this.sendRaw(encodeTourneyCatch(species, weight)); }
+  sendTourneyDock(): void { this.sendRaw(encodeTourneyDock()); }
+
+  private sendRaw(bytes: Uint8Array): void {
+    if (this.ws && this.welcomed && this.ws.readyState === WebSocket.OPEN) this.ws.send(bytes);
   }
 
   getLatencyMs(): number | null {
@@ -406,6 +427,10 @@ export class NetClient {
       }
       case 'peer': {
         this.names.set(decoded.slotId, decoded.name);
+        break;
+      }
+      case 'tourney': {
+        this.opts.events?.onTourney?.(decoded.msg);
         break;
       }
       case 'server_restart': {

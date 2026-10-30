@@ -25,6 +25,10 @@ export const MSG = {
   AVATAR: 10,
   AVATARS: 11,
   PEER: 12,
+  TOURNEY_START: 13,
+  TOURNEY_CATCH: 14,
+  TOURNEY_DOCK: 15,
+  TOURNEY: 16,
 } as const;
 
 export type MsgId = (typeof MSG)[keyof typeof MSG];
@@ -40,6 +44,11 @@ export const Q = {
   Y: { min: -80, max: 60, bits: 12 },
   // A body's speed, for the gait / fin-kick animation only: a sprint, or a hard kick.
   BODY_SPEED: { min: 0, max: 12, bits: 8 },
+  // A tournament fish's weight, lb: the heaviest drawable species tops out well under this.
+  FISH_LB: { min: 0, max: 1000, bits: 14 },
+  // Milliseconds since a tournament's lines went in: negative through the countdown, up to the
+  // fifteen minutes plus the ceremony after.
+  TOURNEY_MS: { bits: 22 },
 } as const;
 
 /** What the player's body is doing off the boat. NONE = aboard (the boat is the player). */
@@ -166,6 +175,35 @@ export const PEER_FIELDS = [
   { kind: 'bytes', name: 'name', length: PEER_NAME_BYTES },
 ] as const satisfies readonly FieldSchema[];
 
+/** Client -> server: start a tournament for everyone online (ignored while one is running). */
+export const TOURNEY_START_FIELDS = [{ kind: 'bool', name: 'reserved' }] as const satisfies readonly FieldSchema[];
+
+/** Client -> server: I kept a fish. The server ignores it unless it's a tournament species this
+ * player doesn't have yet (sim/tournament.ts `recordCatch`). */
+export const TOURNEY_CATCH_FIELDS = [
+  { kind: 'bytes', name: 'species', length: 16 },
+  { kind: 'quant', name: 'weight', bits: Q.FISH_LB.bits, min: Q.FISH_LB.min, max: Q.FISH_LB.max },
+] as const satisfies readonly FieldSchema[];
+
+/** Client -> server: I'm in the harbour with all five. Carries nothing — the server judges it on
+ * its own copy of the boat's position and speed, not the client's. */
+export const TOURNEY_DOCK_FIELDS = [{ kind: 'bool', name: 'reserved' }] as const satisfies readonly FieldSchema[];
+
+/** Server -> every client: the tournament as it stands. Sent on every change, every few seconds
+ * to keep clocks in step, and to each player as they connect. `active` false = none running. The
+ * species and the AI boats' progress follow from `seed` (sim/tournament.ts). */
+export const TOURNEY_FIELDS = [
+  { kind: 'bool', name: 'active' },
+  { kind: 'uint', name: 'seed', bits: 32 },
+  { kind: 'int', name: 'clockMs', bits: Q.TOURNEY_MS.bits },
+  /** 0 = nobody yet, 1 = a player (`winnerId` is their slot), 2 = an AI boat (its index). */
+  { kind: 'uint', name: 'winnerKind', bits: 2 },
+  { kind: 'uint', name: 'winnerId', bits: 9 },
+  { kind: 'uint', name: 'winAtMs', bits: 21 },
+  { kind: 'array', name: 'winWeights', countBits: 3, maxCount: 5, element: [{ kind: 'quant', name: 'lb', bits: Q.FISH_LB.bits, min: Q.FISH_LB.min, max: Q.FISH_LB.max }] },
+  { kind: 'array', name: 'entries', countBits: 6, maxCount: 63, element: [{ kind: 'uint', name: 'slotId', bits: 9 }, { kind: 'uint', name: 'mask', bits: 5 }] },
+] as const satisfies readonly FieldSchema[];
+
 /** Registry used by the generic dispatcher (apps/sim) to go from a wire id to its fields table. */
 export const MESSAGES = {
   [MSG.HELLO]: { name: 'HELLO', fields: HELLO_FIELDS },
@@ -180,6 +218,10 @@ export const MESSAGES = {
   [MSG.AVATAR]: { name: 'AVATAR', fields: AVATAR_FIELDS },
   [MSG.AVATARS]: { name: 'AVATARS', fields: AVATARS_FIELDS },
   [MSG.PEER]: { name: 'PEER', fields: PEER_FIELDS },
+  [MSG.TOURNEY_START]: { name: 'TOURNEY_START', fields: TOURNEY_START_FIELDS },
+  [MSG.TOURNEY_CATCH]: { name: 'TOURNEY_CATCH', fields: TOURNEY_CATCH_FIELDS },
+  [MSG.TOURNEY_DOCK]: { name: 'TOURNEY_DOCK', fields: TOURNEY_DOCK_FIELDS },
+  [MSG.TOURNEY]: { name: 'TOURNEY', fields: TOURNEY_FIELDS },
 } as const;
 
 export type HelloMsg = import('./schema.js').InferFields<typeof HELLO_FIELDS>;
@@ -194,6 +236,22 @@ export type ServerRestartMsg = import('./schema.js').InferFields<typeof SERVER_R
 export type AvatarMsg = import('./schema.js').InferFields<typeof AVATAR_FIELDS>;
 export type AvatarsMsg = import('./schema.js').InferFields<typeof AVATARS_FIELDS>;
 export type PeerMsg = import('./schema.js').InferFields<typeof PEER_FIELDS>;
+export type TourneyStartMsg = import('./schema.js').InferFields<typeof TOURNEY_START_FIELDS>;
+export type TourneyCatchMsg = import('./schema.js').InferFields<typeof TOURNEY_CATCH_FIELDS>;
+export type TourneyDockMsg = import('./schema.js').InferFields<typeof TOURNEY_DOCK_FIELDS>;
+export type TourneyMsg = import('./schema.js').InferFields<typeof TOURNEY_FIELDS>;
+
+/** A species key as TOURNEY_CATCH carries it (ASCII, zero-padded to 16 bytes), and back. */
+export function encodeSpeciesKey(key: string): Uint8Array {
+  const out = new Uint8Array(16);
+  for (let i = 0; i < Math.min(16, key.length); i++) out[i] = key.charCodeAt(i) & 0x7f;
+  return out;
+}
+export function decodeSpeciesKey(bytes: Uint8Array): string {
+  let s = '';
+  for (let i = 0; i < bytes.length && bytes[i] !== 0; i++) s += String.fromCharCode(bytes[i]);
+  return s;
+}
 
 /** A display name as PEER carries it, and back: UTF-8 (by hand — this package has no DOM or Node
  * lib), zero-padded, truncated on a character boundary. */
