@@ -101,13 +101,18 @@ export default async function oceanRoutes(fastify: FastifyInstance): Promise<voi
         .values({ cx, cz, pressure: Math.min(PRESSURE_CAP, amount), lastCaughtAt: now, updatedAt: now })
         .onConflictDoUpdate({
           target: [oceanCells.cx, oceanCells.cz],
+          // `.toISOString()` rather than the Date: inside a raw `sql` template drizzle binds a
+          // Date through its default serialization, which is `toString()` — e.g. "Fri Oct 30 2026
+          // 19:33:18 GMT-0400 (Eastern Daylight Time)". Postgres does parse that, so this worked,
+          // but it is locale-dependent and drops the milliseconds, and a wrong decay here fails
+          // silently rather than loudly. The explicit ISO string is unambiguous.
           // pressureAfterCatch(stored, hours since stored): halve per PRESSURE_HALF_LIFE_HOURS,
           // add this catch, cap. GREATEST(0, ...) so a clock that stepped back counts as no
           // rest rather than negative rest, matching decayedPressure's own guard.
           set: {
             pressure: sql`LEAST(${PRESSURE_CAP}::double precision, ${oceanCells.pressure} * power(
               0.5,
-              GREATEST(0, EXTRACT(EPOCH FROM (${now}::timestamptz - ${oceanCells.lastCaughtAt})) / 3600.0)
+              GREATEST(0, EXTRACT(EPOCH FROM (${now.toISOString()}::timestamptz - ${oceanCells.lastCaughtAt})) / 3600.0)
                 / ${PRESSURE_HALF_LIFE_HOURS}::double precision
             ) + ${amount})`,
             lastCaughtAt: now,

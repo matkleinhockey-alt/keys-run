@@ -67,8 +67,13 @@ describe('ocean ledger', () => {
       await fish(t, { cx: 8, cz: 8, amount: 30 });
       await age(8, 8, PRESSURE_HALF_LIFE_HOURS);
       const res = await fish(t, { cx: 8, cz: 8 });
-      expect(res.json().pressure).toBeCloseTo(pressureAfterCatch(30, PRESSURE_HALF_LIFE_HOURS), 6);
-      expect(res.json().pressure).toBeCloseTo(16, 6);
+      // 3dp, not 6: the backdate is exactly one half-life, but the milliseconds spent getting
+      // from that UPDATE to this POST are real elapsed time too, so the answer sits a hair under
+      // 16 (about 15.99998). Asserting 6dp here was asserting that the test itself takes no time.
+      expect(res.json().pressure).toBeCloseTo(pressureAfterCatch(30, PRESSURE_HALF_LIFE_HOURS), 3);
+      expect(res.json().pressure).toBeCloseTo(16, 3);
+      // the physically meaningful part: a shade MORE decayed than a clean half-life, never less
+      expect(res.json().pressure).toBeLessThanOrEqual(16);
     });
 
     it('a week of rest leaves almost nothing behind', async () => {
