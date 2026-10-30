@@ -29,6 +29,7 @@ import { VIS, isCatchable } from '../content/creatures.js';
 import { offshoreF, depthAt, landH, type Zone, type Hump } from '../world/depth.js';
 import { weightedPick, type Rng } from '../rng/index.js';
 import { clamp, lerp } from '../internal/math.js';
+import { applyOceanSize } from './ocean.js';
 import { STARTER_TACKLE, tackleById, type Tackle } from '../content/tackle.js';
 
 // re-exported so callers don't need a second import just for the zone key union
@@ -73,6 +74,10 @@ export interface ChooseFishOpts {
   /** Rigged-bait odds multiplier for the rarer end of the zone table (`Modifiers.rareMul`, here
    * only while a ballyhoo is on the hook). 1/undefined = the table as it always was. */
   rareMul?: number;
+  /** How recovered the water is (sim/ocean.ts `recovery`, 0..1). Undefined or 1 = pristine: the
+   * weight is then returned UNTOUCHED, not multiplied by 1.0, so unfished water is today's game
+   * bit for bit. The caller looks it up (client net/ocean.ts); this module never fetches. */
+  recovery?: number;
 }
 
 /** A table entry counts as the "rarer end" when its raw odds are at most this. Absolute rather
@@ -171,7 +176,13 @@ export interface HookedFish {
 /** legacy `chooseFish()` (index.html:2655-2660), fully: species, weight, and spawn position. */
 export function chooseFish(zone: Zone | (string & {}), bob: { x: number; z: number }, opts: ChooseFishOpts, rng: Rng): HookedFish {
   const key = pickSpecies(zone, bob, opts, rng);
-  const weight = rollWeight(key, bob, opts.hotspot, rng, zone === 'Wreck');
+  let weight = rollWeight(key, bob, opts.hotspot, rng, zone === 'Wreck');
+  // Fished water: smaller fish. The roll above ran first and consumed the same rng draws, so a
+  // seeded sequence is identical with or without this; only the weight differs.
+  if (opts.recovery !== undefined && opts.recovery < 1) {
+    const S = SPECIES[key];
+    weight = +applyOceanSize(weight, S.min, S.max, opts.recovery).toFixed(1);
+  }
   const a = rng() * Math.PI * 2;
   return { key, weight, x: bob.x + Math.cos(a) * 11, z: bob.z + Math.sin(a) * 11, ofx: Math.cos(a) * 1.3, ofz: Math.sin(a) * 1.3 };
 }

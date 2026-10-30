@@ -23,6 +23,7 @@ import { shoreInfo } from '@keysrun/shared/world/chain';
 import { clamp } from '../../core/math.js';
 import { toast } from '../../ui/toast.js';
 import { submitCatch } from '../../ui/leaderboard/submit-catch.js';
+import { ocean } from '../../net/ocean.js';
 import { beamBetween } from '../../entities/boat/hull.js';
 import { makeFishMesh } from '../fishing/fish-mesh.js';
 import { buildPulleyBlock } from './pulley.js';
@@ -240,6 +241,8 @@ export function createCatchFlow(deps: CatchFlowDeps) {
     // submitCatch itself never throws (see its own header) — nothing downstream of a landed fish
     // may ever be allowed to break the catch card or the frame loop over this.
     try { submitCatch(fish.key, fish.weight); } catch (e) { console.error('submitCatch', e); }
+    // The water remembers: this chunk is now fished a little harder (net/ocean.ts; a no-op offline).
+    try { ocean.recordCatch(fish.x, fish.z); } catch (e) { console.error('ocean.recordCatch', e); }
 
     // Paid on landing, before keep/release: see sim/economy.ts's `stepCatch` for why. Wrapped for
     // the same reason as submitCatch above.
