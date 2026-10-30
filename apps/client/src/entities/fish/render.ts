@@ -49,7 +49,9 @@ export function beginRenderStats(): void {
 
 export function renderSchool(state: SchoolState, pool: SpeciesPool, view: RenderView): void {
   const baseLen = pool.V.len;
-  for (const m of state.members) {
+  const live = state.shown ?? state.members.length;
+  for (let i = 0; i < live; i++) {
+    const m = state.members[i];
     const dx = m.wx - view.camX, dy = m.wy - view.camY, dz = m.wz - view.camZ;
     const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
     const worldLen = baseLen * m.worldScale;

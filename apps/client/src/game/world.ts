@@ -260,9 +260,12 @@ export function initWorld(wrap: HTMLElement): World {
   // `registerCustomMaterial`, NOT `applyToSubtree`: the fish material already owns an
   // `onBeforeCompile` (the VAT swim shader), and plain CSM setup overwrites that wholesale — see
   // core/shadows.ts's header. Same path water and the palm fronds take.
+  // Verification-only override (window.__oceanDebug) so a capture script can show the same reef
+  // pristine and worked-out without a signed-in account; null in play, so the ledger decides.
+  let oceanForce: number | null = null;
   const fishWorld = createFishWorld(undefined, (_mesh, material, baseCompile) => {
     shadows.registerCustomMaterial(material, baseCompile);
-  });
+  }, (x, z) => oceanForce ?? ocean.recoveryAt(x, z));
   scene.add(fishWorld.group);
 
   // 9. clouds (one InstancedMesh — see world/clouds.ts header; count fixed at boot per the
@@ -1583,6 +1586,7 @@ export function initWorld(wrap: HTMLElement): World {
   // code path reads `window.__fishDebug`.
   // DEV/VERIFICATION HOOK ONLY — world/underwater/index.ts's `debugCaustics()` doc comment.
   (window as unknown as { __uwInspect?: unknown }).__uwInspect = () => underwater.debugCaustics();
+  (window as unknown as { __oceanDebug?: unknown }).__oceanDebug = { force: (r: number | null) => { oceanForce = r; } };
   (window as unknown as { __fishDebug?: unknown }).__fishDebug = {
     findResidentNear: fishWorld.findResidentNear,
     waterColumnAt: fishWorld.waterColumnAt,

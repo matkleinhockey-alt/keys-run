@@ -94,6 +94,9 @@ export interface SchoolAnchor {
 
 export interface SchoolState {
   id: string;
+  /** Members actually drawn and speared, set per frame only when worked water thins the school
+   * (thin.ts). Undefined = all of them, which is every school in pristine or offline water. */
+  shown?: number;
   /** Species key into @keysrun/shared/content/creatures' VIS. */
   type: string;
   cx: number;
