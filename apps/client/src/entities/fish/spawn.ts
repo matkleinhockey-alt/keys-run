@@ -277,6 +277,10 @@ export interface RoamSpawn {
   z: number;
   heading: number;
   members: FishMember[];
+  /** The roam cell this came from. Carried through only so the school's id can be derived from
+   * it — see `instantiateRoamer`, where it is what keeps two clients' roamers in step. */
+  cellX: number;
+  cellZ: number;
 }
 
 /** One deterministic roll for a single roamer candidate cell — legacy `trySpawn`'s per-attempt
@@ -302,7 +306,7 @@ export function tryRoamCell(seed: number, cellX: number, cellZ: number): RoamSpa
   const count = V.school[0] + Math.floor(hashCell(seed, cellX, cellZ, SALT.ROAM_COUNT) * (V.school[1] - V.school[0] + 1));
   const heading = hashCell(seed, cellX, cellZ, SALT.ROAM_HEADING) * Math.PI * 2;
   const members = buildMembers(seed, cellX, cellZ, V, count, x, z);
-  return { type, V, x, z, heading, members };
+  return { type, V, x, z, heading, members, cellX, cellZ };
 }
 
 /**
@@ -339,11 +343,21 @@ export function instantiateLegend(seed: number, type: string, V: CreatureVis): S
   return null;
 }
 
-let roamCounter = 0;
+/**
+ * The id is the roam cell, not a counter.
+ *
+ * It used to be `roam:${roamCounter++}`, incremented per client. Every other thing about a roamer
+ * — whether it exists, its species, its offset in the cell, its heading, its members — is already
+ * a hash of the cell, so two clients always agreed on *what* was out there. The id was the one
+ * per-client part, and school.ts now hashes motion off the id (see its `idKey`/`schoolRoll`), so
+ * that counter was enough to make the same school swim differently on two screens: the counter
+ * follows the order *you* drove into cells, which is never the order someone else did.
+ *
+ * One roamer per cell (`tryRoamCell` rolls a single candidate), so the cell is already unique.
+ */
 export function instantiateRoamer(spawn: RoamSpawn): SchoolState {
-  roamCounter = (roamCounter + 1) % 1_000_000;
   return {
-    id: `roam:${roamCounter}`,
+    id: `roam:${spawn.cellX}:${spawn.cellZ}`,
     type: spawn.type,
     cx: spawn.x, cz: spawn.z, heading: spawn.heading,
     phase: spawn.heading * 11.7, vx: 0, vz: 0, turnRate: 0, turn: 0, flee: 0, fleeHeading: spawn.heading, bowRide: 0,
