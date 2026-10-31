@@ -97,6 +97,9 @@ export interface SchoolState {
   /** Members actually drawn and speared, set per frame only when worked water thins the school
    * (thin.ts). Undefined = all of them, which is every school in pristine or offline water. */
   shown?: number;
+  /** Drawn count as a float while a fish is fading out or in (fish/thin.ts). Undefined on a
+   * pristine school, so untouched water never enters the thinning path at all. */
+  shownAnim?: number;
   /** Species key into @keysrun/shared/content/creatures' VIS. */
   type: string;
   cx: number;

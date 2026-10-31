@@ -94,7 +94,7 @@ export interface OceanLedger {
   /** Call as the boat moves (cheap; fine every frame). Starts a background fetch when needed. */
   update(x: number, z: number): void;
   /** A fish was landed at (x, z). */
-  recordCatch(x: number, z: number): void;
+  recordCatch(x: number, z: number, amount?: number): void;
   /** Requests started, for the tests. */
   stats(): { gets: number; posts: number; cached: number };
 }
@@ -254,17 +254,21 @@ export function createOceanLedger(env: OceanEnv): OceanLedger {
     void fetchCells(s, cells);
   }
 
-  function recordCatch(x: number, z: number): void {
+  function recordCatch(x: number, z: number, amount = 1): void {
     const s = who();
     if (!s) return; // offline: the game keeps no ledger at all
     const cx = cellOf(x), cz = cellOf(z);
     if (!Number.isFinite(cx) || !Number.isFinite(cz) || !inWorld(cx, cz)) return;
+    // A trophy costs a spot more than a schoolie (sim/ocean.ts `catchPressure`); a median fish is
+    // still worth 1, so the tuning is unchanged. Guarded here too because this is what goes on
+    // the wire and the route caps the field anyway.
+    const amt = Number.isFinite(amount) && amount > 0 ? Math.min(100, amount) : 1;
     const k = keyOf(cx, cz), now = env.now();
     const c = cache.get(k);
-    const p = c ? pressureAfterCatch(c.pressure, (now - c.lastMs) / HOUR_MS) : 1;
+    const p = c ? pressureAfterCatch(c.pressure, (now - c.lastMs) / HOUR_MS, amt) : Math.min(PRESSURE_CAP, amt);
     cache.set(k, { pressure: p, lastMs: now, fetchedMs: now, local: true });
     const o = owed.get(k);
-    if (o) o.amount = Math.min(100, o.amount + 1); else owed.set(k, { cx, cz, amount: 1 });
+    if (o) o.amount = Math.min(100, o.amount + amt); else owed.set(k, { cx, cz, amount: amt });
     void flushOwed();
   }
 

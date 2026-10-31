@@ -73,10 +73,14 @@ export function decayedPressure(pressure: number, hours: number): number {
 
 /**
  * Pressure to store after one more catch. `pressure` and `hoursSinceLast` describe the cell as
- * last stored. Decays first, then adds one, then caps.
+ * last stored. Decays first, then adds the catch, then caps.
+ *
+ * `amount` is what that fish was worth (`catchPressure`); it defaults to 1, which is a median
+ * fish, so every existing caller and the whole of the tuning above are unchanged.
  */
-export function pressureAfterCatch(pressure: number, hoursSinceLast: number): number {
-  return Math.min(PRESSURE_CAP, decayedPressure(pressure, hoursSinceLast) + 1);
+export function pressureAfterCatch(pressure: number, hoursSinceLast: number, amount = 1): number {
+  const a = Number.isFinite(amount) && amount > 0 ? amount : 1;
+  return Math.min(PRESSURE_CAP, decayedPressure(pressure, hoursSinceLast) + a);
 }
 
 /**
@@ -124,4 +128,32 @@ export function rarityScale(rec: number): number {
 export function applyOceanSize(weight: number, speciesMin: number, speciesMax: number, rec: number): number {
   const w = orElse(weight, speciesMin) * sizeScale(rec);
   return clamp(w, speciesMin, speciesMax);
+}
+
+/**
+ * Least and most pressure one fish may be worth. Within a species the natural spread is roughly
+ * 0.4 to 1.7 (a 4 lb mutton snapper against a 22 lb one, median 13), so these are guard rails for
+ * absurd or missing data rather than limits anyone meets in play.
+ */
+export const CATCH_MIN = 0.4;
+export const CATCH_MAX = 3;
+
+/**
+ * What one landed fish costs the water it came from.
+ *
+ * Every catch used to be worth exactly 1, so a 3 lb grunt thinned a reef as much as the eighty
+ * pound grouper that had lived under that ledge for years. Pressure is now the fish's weight
+ * against the middle of its own species' range, which keeps the existing tuning exactly where it
+ * was — a median fish is still worth 1, so "30 catches" still means pressure 30 — while making a
+ * trophy cost the spot more than a schoolie, and comparing each species only against itself (a
+ * big snapper is not a small tarpon).
+ *
+ * Bad or missing species data falls back to 1 rather than to zero: an unrecognised fish is still
+ * a fish out of the water.
+ */
+export function catchPressure(weight: number, min: number, max: number): number {
+  const w = orElse(weight, 0), lo = orElse(min, 0), hi = orElse(max, 0);
+  const mid = (lo + hi) / 2;
+  if (!(w > 0) || !(mid > 0)) return 1;
+  return clamp(w / mid, CATCH_MIN, CATCH_MAX);
 }

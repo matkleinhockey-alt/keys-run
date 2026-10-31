@@ -24,6 +24,7 @@ import { clamp } from '../../core/math.js';
 import { toast } from '../../ui/toast.js';
 import { submitCatch } from '../../ui/leaderboard/submit-catch.js';
 import { ocean } from '../../net/ocean.js';
+import { catchPressure } from '@keysrun/shared/sim/ocean';
 import { beamBetween } from '../../entities/boat/hull.js';
 import { makeFishMesh } from '../fishing/fish-mesh.js';
 import { buildPulleyBlock } from './pulley.js';
@@ -46,6 +47,11 @@ export interface CaughtFishInfo {
   x: number;
   z: number;
   zone: string;
+  /** Landed by the portrait debug hook rather than by fishing, so it has no real position (it
+   * passes 0,0) and must not touch the ocean ledger — a screenshot script iterating fifty species
+   * would otherwise pile fifty catches of pressure onto the chunk at the world origin, on a real
+   * signed-in account. Normal play never sets this. */
+  synthetic?: boolean;
   /** Which path landed it — rod fishing (the default, boat-deck grip-and-grin/gin-pole photo) or
    * the speargun (the underwater grip-and-grin, see underwater-trophy.ts). Optional/defaults to
    * 'rod' so game/fishing's existing call site (which predates this field) needs no change. */
@@ -241,8 +247,15 @@ export function createCatchFlow(deps: CatchFlowDeps) {
     // submitCatch itself never throws (see its own header) — nothing downstream of a landed fish
     // may ever be allowed to break the catch card or the frame loop over this.
     try { submitCatch(fish.key, fish.weight); } catch (e) { console.error('submitCatch', e); }
-    // The water remembers: this chunk is now fished a little harder (net/ocean.ts; a no-op offline).
-    try { ocean.recordCatch(fish.x, fish.z); } catch (e) { console.error('ocean.recordCatch', e); }
+    // The water remembers: this chunk is now fished a little harder (net/ocean.ts; a no-op
+    // offline). Weighted by the fish, so a trophy costs the spot more than a schoolie, against
+    // its own species' range — a median fish is worth 1 and leaves the tuning where it was.
+    if (!fish.synthetic) {
+      try {
+        const def = SPECIES[fish.key];
+        ocean.recordCatch(fish.x, fish.z, def ? catchPressure(fish.weight, def.min, def.max) : 1);
+      } catch (e) { console.error('ocean.recordCatch', e); }
+    }
 
     // Paid on landing, before keep/release: see sim/economy.ts's `stepCatch` for why. Wrapped for
     // the same reason as submitCatch above.
@@ -495,10 +508,10 @@ export function createCatchFlow(deps: CatchFlowDeps) {
   // `THREE.WebGLRenderer` instance across `page.evaluate`'s serialization boundary. No normal
   // code path reads `window.__catchPortraitDebug`.
   (window as unknown as { __catchPortraitDebug?: unknown }).__catchPortraitDebug = {
-    land(key: string, weight: number, tag?: TaggedFish): void { landFish({ key, weight, x: 0, z: 0, zone: 'Reef', tag }); },
+    land(key: string, weight: number, tag?: TaggedFish): void { landFish({ key, weight, x: 0, z: 0, zone: 'Reef', tag, synthetic: true }); },
     /** Same idea, for the underwater trophy card (underwater-trophy.ts) — `source: 'spear'`
      * routes `landFish` to `trophy.show` instead of the boat-deck photo. */
-    landSpeared(key: string, weight: number): void { landFish({ key, weight, x: 0, z: 0, zone: 'Reef', source: 'spear' }); },
+    landSpeared(key: string, weight: number): void { landFish({ key, weight, x: 0, z: 0, zone: 'Reef', source: 'spear', synthetic: true }); },
     renderFrame(t: number): void {
       const renderer = (window as unknown as { __renderer?: THREE.WebGLRenderer }).__renderer;
       if (renderer) renderPortrait(t, renderer);

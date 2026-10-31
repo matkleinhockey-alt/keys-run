@@ -29,7 +29,7 @@ import { wrecksFor, WRECK_RESIDENTS } from '@keysrun/shared/world/wrecks';
 import { swimClock } from './swim-clock.js';
 import { fishCapsule } from './hitbox.js';
 import type { SchoolState, Threat } from './types.js';
-import { shownCount } from './thin.js';
+import { shownCount, stepShownAnim } from './thin.js';
 import { chumPull, type Carcass } from '@keysrun/shared/sim/chum';
 import { WORLD_SEED } from '../../state/constants.js';
 
@@ -403,8 +403,18 @@ export function createFishWorld(
       if (oceanRecovery) {
         let rec = 1;
         try { rec = oceanRecovery(state.cx, state.cz); } catch { rec = 1; }
-        const n = shownCount(state.members.length, rec);
-        if (n < state.members.length) state.shown = n;
+        const len = state.members.length;
+        const n = shownCount(len, rec);
+        // Only ease a school that is already thinned or already animating; one that has never
+        // been touched snaps straight to `n`, which for pristine water is `len` and leaves both
+        // fields undefined — the no-op path, byte for byte.
+        if (n < len || state.shownAnim !== undefined) {
+          state.shownAnim = stepShownAnim(state.shownAnim, n, dt);
+          // the part-faded fish is still in the water, so it still counts and can still be speared
+          const s = Math.ceil(state.shownAnim - 1e-6);
+          if (s < len) state.shown = s;
+          else state.shownAnim = undefined; // fully refilled: back to the untouched path
+        }
       }
       renderSchool(state, pool, view);
       fishCount += state.shown ?? state.members.length;
