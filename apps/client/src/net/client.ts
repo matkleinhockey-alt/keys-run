@@ -148,8 +148,18 @@ export class NetClient {
   sendTourneyCatch(species: string, weight: number): void { this.sendRaw(encodeTourneyCatch(species, weight)); }
   sendTourneyDock(): void { this.sendRaw(encodeTourneyDock()); }
 
+  /**
+   * True when a message sent now would actually leave the machine. `sendRaw` drops anything sent
+   * before the welcome, silently and by design — which is right for pose updates (the next one is
+   * 33 ms away) and wrong for a button press, because the caller has no way to tell the player
+   * that nothing happened. The tournament asks this first; see game/tournament/index.ts.
+   */
+  isReady(): boolean {
+    return !!this.ws && this.welcomed && this.ws.readyState === WebSocket.OPEN;
+  }
+
   private sendRaw(bytes: Uint8Array): void {
-    if (this.ws && this.welcomed && this.ws.readyState === WebSocket.OPEN) this.ws.send(bytes);
+    if (this.isReady()) this.ws!.send(bytes);
   }
 
   getLatencyMs(): number | null {

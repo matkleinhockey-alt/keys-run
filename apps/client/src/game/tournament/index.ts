@@ -57,7 +57,19 @@ const fmtClock = (s: number): string => {
 const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 export function createTournamentMode(deps: TourneyDeps) {
-  let link: TourneyLink = createLocalLink();
+  /**
+   * The tournament you can always run: you against the AI boats, on this machine.
+   *
+   * Signing in installs the online link (main.ts) the moment the gate closes, whether or not the
+   * socket ever connects — and the online `start()` is one fire-and-forget packet that `sendRaw`
+   * drops in silence until the connection is welcomed. So with the sim server unreachable, a
+   * signed-in player pressing Tournament got nothing at all: no tournament, no toast, no error,
+   * press after press. This is the floor under that. The whole mode works offline, so being
+   * unable to reach the shared world is a reason to run it alone, not a reason to do nothing.
+   */
+  const solo = createLocalLink();
+  let netLink: TourneyLink | null = null;
+  let link: TourneyLink = solo;
   const fleet = createTourneyFleet();
   deps.scene.add(fleet.group);
   const ceremony = createCeremony({ scene: deps.scene, onBuilt: deps.onBuilt });
@@ -215,6 +227,11 @@ export function createTournamentMode(deps: TourneyDeps) {
 
   // --- control -------------------------------------------------------------
   function toggle(): void {
+    // Prefer the shared world, but only while it can actually hear us.
+    if (netLink && !netLink.current() && link === netLink && !netLink.ready()) {
+      link = solo;
+      deps.toast("Can't reach the shared world — running this one just for you.");
+    }
     const t = link.current();
     if (!t || phaseOf(t, link.now()) === 'over') { link.start(); return; }
     if (link.abort) { link.abort(); deps.toast('Tournament abandoned.'); return; }
@@ -235,6 +252,9 @@ export function createTournamentMode(deps: TourneyDeps) {
   }
 
   function update(dt: number, t3: number): void {
+    // Back to the shared world as soon as it is reachable again — but never mid-tournament, which
+    // would drop the one the player is in.
+    if (netLink && link === solo && !solo.current() && netLink.ready()) link = netLink;
     link.step();
     const t = link.current();
     if (!t) {
@@ -302,7 +322,7 @@ export function createTournamentMode(deps: TourneyDeps) {
   }
 
   return {
-    setLink(l: TourneyLink): void { link = l; },
+    setLink(l: TourneyLink): void { netLink = l; if (!solo.current()) link = l; },
     toggle,
     onKeep,
     update,

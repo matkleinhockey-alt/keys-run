@@ -26,6 +26,10 @@ export interface TourneyLink {
   /** Display name for an entry id (your own included — the HUD says "You" itself). */
   nameOf(id: string): string;
   start(): void;
+  /** Whether `start()` would actually reach anyone. The local link is always ready; the online
+   * one is not ready until the socket has been welcomed, and was silently dropping the press
+   * until then (and forever, if the sim server is unreachable). */
+  ready(): boolean;
   /** Offline only: walk away from it. Online a tournament belongs to everyone and runs out. */
   abort?(): void;
   /** You kept a fish. */
@@ -57,6 +61,7 @@ export function createLocalLink(): TourneyLink {
     current: () => t,
     selfId: () => ME,
     nameOf: (id) => (id === ME ? 'You' : isNpcId(id) ? npcName(id) : id),
+    ready: () => true,
     start() {
       if (t && phaseOf(t, clock()) !== 'over') return;
       t = createTourney((Math.random() * 0x100000000) >>> 0, clock());
@@ -94,6 +99,7 @@ export function createNetLink(net: NetClient, myName: string): TourneyLink & { o
       const slot = Number(id.slice(1));
       return net.nameOf(slot) ?? `Player ${slot}`;
     },
+    ready: () => net.isReady(),
     start() { net.sendTourneyStart(); },
     reportCatch(key, weight) {
       if (!t) return;
