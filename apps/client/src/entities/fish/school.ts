@@ -29,7 +29,9 @@ import { depthAt, offshoreF, WB } from '@keysrun/shared/world/depth';
 import { shoreInfo } from '@keysrun/shared/world/chain';
 import type { CreatureVis } from '@keysrun/shared/content/creatures';
 import { chumPull, CARCASS_MILL_R } from '@keysrun/shared/sim/chum';
-import { clamp, lerp, rand } from '../../core/math.js';
+import { hashCell } from '@keysrun/shared/rng';
+import { clamp, lerp } from '../../core/math.js';
+import { SALT, WORLD_SEED } from '../../state/constants.js';
 import { swimAngSpeed } from './swim.js';
 import {
   angLerp, fleeClassFor, fleeParamsFor, nearestTrigger, ACT_DUR, ACT_CD,
@@ -121,6 +123,39 @@ const CURIOUS_FULL_SPEED = 0.35;
  * that fully adopted the diver as its anchor would follow them around the reef. */
 const CURIOUS_PULL = 0.92;
 
+/** FNV-1a of a school id: the stable per-school key every roll below is hashed from. Residents are
+ * `res:cx,cz`, near-field and wreck schools are keyed off their cell/wreck — placement-derived, so
+ * two clients that built the same school derive the same key. */
+function idKey(id: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193);
+  return h | 0;
+}
+
+/**
+ * A deterministic stand-in for `Math.random()` in the per-step stepper, 0..1.
+ *
+ * ⚠ Every roll in here (glide, frenzy and dive timers, act cooldowns, the boundary-turn side, the
+ * humpback breach) used to be `Math.random()` / core/math's `rand`. Placement was already
+ * hashCell-derived, so two players near the same bait ball agreed on WHERE the fish were and then
+ * disagreed on what they did the moment the first timer rolled. Sending school motion over the
+ * wire would fix that for kilobytes a second; hashing the roll costs nothing.
+ *
+ * Stateless on purpose: the key is (school id, member seed, sim time in ms, call-site salt), not an
+ * advancing PRNG. A stream would need a counter on `SchoolState` (spawn.ts builds those literals)
+ * and would be order-dependent: a school stepped one extra time by a client that activated it
+ * late would be shifted against everyone else's for good, whereas a time-keyed hash is a pure
+ * function of `t`. Distinct salts keep two rolls in the same frame (dive target vs dive timer)
+ * independent; the id (and per-member `seed`) decorrelate schools and fish from each other, so no
+ * two schools bolt, dive or surface on the same frame.
+ */
+function schoolRoll(g: SchoolState, salt: number, t: number, m?: FishMember): number {
+  const who = m ? (idKey(g.id) + Math.imul(Math.floor(m.seed * 65536), 0x9e3779b1)) | 0 : idKey(g.id);
+  return hashCell(WORLD_SEED, who, Math.floor(t * 1000), salt);
+}
+const rollRange = (g: SchoolState, salt: number, t: number, a: number, b: number, m?: FishMember): number =>
+  a + schoolRoll(g, salt, t, m) * (b - a);
+
 export function stepSchool(state: SchoolState, V: CreatureVis, ctx: SchoolCtx): SchoolEvent[] {
   const { t, dt, threats } = ctx;
   const events: SchoolEvent[] = [];
@@ -142,7 +177,7 @@ export function stepSchool(state: SchoolState, V: CreatureVis, ctx: SchoolCtx): 
   const cls = fleeClassFor(g.type, V);
   const trigger = nearestTrigger(g.cx, g.cz, cls, triggerThreats);
   if (trigger) {
-    if (g.flee <= 0 && V.act === 'glide' && !g.glide) g.glide = rand(1.6, 3.4);
+    if (g.flee <= 0 && V.act === 'glide' && !g.glide) g.glide = rollRange(g, SALT.FISH_GLIDE_LEN, t, 1.6, 3.4);
     g.flee = 1.5;
     // AWAY from the trigger, not toward it. Heading's forward vector is (-sin h, -cos h), so
     // `atan2(-dx, -dz)` is the *toward* form — it is what bow-riding uses a few lines below to
@@ -153,7 +188,7 @@ export function stepSchool(state: SchoolState, V: CreatureVis, ctx: SchoolCtx): 
     // it away as the flee path rather than the anchor).
     g.fleeHeading = fleeHeadingFrom(g.cx, g.cz, trigger);
   }
-  if (V.act === 'glide' && !g.glide && Math.random() < dt * 0.03) g.glide = rand(1.6, 3.4);
+  if (V.act === 'glide' && !g.glide && schoolRoll(g, SALT.FISH_GLIDE_ROLL, t) < dt * 0.03) g.glide = rollRange(g, SALT.FISH_GLIDE_LEN, t, 1.6, 3.4);
 
   // School-wide feeding frenzy, for the species that bust. Runs on its own clock rather than
   // per member, so the whole school comes up together, works the surface for a few seconds and
@@ -162,12 +197,12 @@ export function stepSchool(state: SchoolState, V: CreatureVis, ctx: SchoolCtx): 
   if (V.act === 'bust') {
     if (g.frenzy > 0) {
       g.frenzy -= dt;
-      if (g.frenzy <= 0) g.frenzyTimer = rand(FRENZY_CD_S[0], FRENZY_CD_S[1]);
+      if (g.frenzy <= 0) g.frenzyTimer = rollRange(g, SALT.FISH_FRENZY_CD, t, FRENZY_CD_S[0], FRENZY_CD_S[1]);
     } else {
       g.frenzyTimer -= dt;
       if (g.frenzyTimer <= 0) {
-        if (g.flee > 0) g.frenzyTimer = rand(4, 10);
-        else g.frenzy = rand(FRENZY_S[0], FRENZY_S[1]);
+        if (g.flee > 0) g.frenzyTimer = rollRange(g, SALT.FISH_FRENZY_RETRY, t, 4, 10);
+        else g.frenzy = rollRange(g, SALT.FISH_FRENZY_LEN, t, FRENZY_S[0], FRENZY_S[1]);
       }
     }
   }
@@ -288,7 +323,7 @@ const tang = 0.55 * (1 - pull); // fades out the further from home, so a stray s
   let fx = -Math.sin(g.heading), fz = -Math.cos(g.heading);
   const la = 5 + sp * 2, lx = g.cx + fx * la, lz = g.cz + fz * la, ld = depthAt(lx, lz);
   if (ld < V.dMin || ld > V.dMax * 1.5 || shoreInfo(lx, lz).d < 4) {
-    if (!g.turn) g.turn = Math.random() < 0.5 ? -1 : 1;
+    if (!g.turn) g.turn = schoolRoll(g, SALT.FISH_TURN_SIDE, t) < 0.5 ? -1 : 1;
     g.heading += g.turn * 1.8 * dt;
     sp *= 0.6;
     fx = -Math.sin(g.heading); fz = -Math.cos(g.heading);
@@ -318,8 +353,8 @@ const tang = 0.55 * (1 - pull); // fades out the further from home, so a stray s
   // dive cycles: sound for a while, then come back up; spooked fish head down
   g.diveTimer -= dt;
   if (g.diveTimer <= 0) {
-    g.diveTarget = g.diveTarget > 0.3 ? 0 : (d > 3 ? rand(0.4, 1) : 0);
-    g.diveTimer = g.diveTarget ? rand(5, 14) : rand(6, 18);
+    g.diveTarget = g.diveTarget > 0.3 ? 0 : (d > 3 ? rollRange(g, SALT.FISH_DIVE_DEPTH, t, 0.4, 1) : 0);
+    g.diveTimer = g.diveTarget ? rollRange(g, SALT.FISH_DIVE_TIMER, t, 5, 14) : rollRange(g, SALT.FISH_DIVE_TIMER, t, 6, 18);
   }
   g.dive = lerp(g.dive, g.flee > 0 && d > 3 ? 0.9 : g.diveTarget, Math.min(1, dt * 0.35));
 
@@ -370,8 +405,8 @@ function stepMember(
       m.act = V.act; m.actPhase = 0; m.splashed = false; m.splashed2 = false;
       // Rare bonus breach (task brief: "if you're feeling ambitious, a rare breach") — humpback
       // only, rolled fresh each time a blow cycle starts. Cosmetic timing only (same precedent as
-      // the glide roll above), not placement, so plain Math.random() is fine here.
-      m.breaching = V.act === 'blow' && g.type === 'humpback' && Math.random() < 0.04;
+      // the glide roll above), not placement, so it needs no placement stream, but it does need to agree between clients: hashed per member.
+      m.breaching = V.act === 'blow' && g.type === 'humpback' && schoolRoll(g, SALT.FISH_BREACH, t, m) < 0.04;
     }
     if (m.act) {
       m.actPhase += dt / ACT_DUR[m.act];
@@ -400,7 +435,7 @@ function stepMember(
           events.push({ type: 'splash', x: mx, z: mz, r: 9, p: 0.7 }); // fluke breaking the surface on the way back down
         }
       }
-      if (m.actPhase >= 1) { m.act = null; const cd = ACT_CD[V.act]; m.actTimer = rand(cd[0], cd[1]); }
+      if (m.actPhase >= 1) { m.act = null; const cd = ACT_CD[V.act]; m.actTimer = rollRange(g, SALT.FISH_ACT_CD, t, cd[0], cd[1], m); }
     }
   }
   if (g.glide > 0) { y = surf + 0.45 + Math.sin(t * 3 + m.seed) * 0.12; pitch = 0.05; }

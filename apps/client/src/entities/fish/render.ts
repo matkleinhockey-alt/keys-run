@@ -49,10 +49,21 @@ export function beginRenderStats(): void {
 
 export function renderSchool(state: SchoolState, pool: SpeciesPool, view: RenderView): void {
   const baseLen = pool.V.len;
-  for (const m of state.members) {
+  const live = state.shown ?? state.members.length;
+  // One fish may be part-way out of (or back into) the water — fish/thin.ts. It is the member at
+  // the boundary of the eased float, and it draws scaled by the fraction so it shrinks away
+  // instead of vanishing between two frames.
+  const anim = state.shownAnim;
+  const fadeIdx = anim !== undefined && anim < live ? Math.floor(anim) : -1;
+  const fadeK = fadeIdx >= 0 ? anim! - fadeIdx : 1;
+  for (let i = 0; i < live; i++) {
+    const m = state.members[i];
+    // below this it is a speck not worth a draw call, and a zero scale is a degenerate matrix
+    const fade = i === fadeIdx ? fadeK : 1;
+    if (fade < 0.02) continue;
     const dx = m.wx - view.camX, dy = m.wy - view.camY, dz = m.wz - view.camZ;
     const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-    const worldLen = baseLen * m.worldScale;
+    const worldLen = baseLen * m.worldScale * fade;
 
     const lod = lodFor(worldLen, dist);
     if (lod === null) { renderStats.culledDistance++; continue; }
@@ -64,7 +75,7 @@ export function renderSchool(state: SchoolState, pool: SpeciesPool, view: Render
     _sphere.radius = worldLen * 0.75;
     if (!view.frustum.intersectsSphere(_sphere)) { renderStats.culledFrustum++; continue; }
 
-    if (pushInstance(pool, lod, m.wx, m.wy, m.wz, m.yaw, m.pitch, m.roll, m.worldScale, m.swimPhase)) {
+    if (pushInstance(pool, lod, m.wx, m.wy, m.wz, m.yaw, m.pitch, m.roll, m.worldScale * fade, m.swimPhase)) {
       renderStats.submitted++;
       renderStats.byTier[lod]++;
     }

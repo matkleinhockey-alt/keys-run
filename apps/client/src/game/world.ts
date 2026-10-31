@@ -64,6 +64,7 @@ import { createDiverBubbles } from '../entities/diver/bubbles.js';
 import { updateDiverCamera } from '../entities/diver/camera.js';
 import { updateDiverHud, showDiverHud, clearBlackoutOverlay } from '../entities/diver/hud.js';
 import type { LocalBody } from '../net/client.js';
+import { ocean } from '../net/ocean.js';
 import { createLandSystem } from '../entities/land/index.js';
 
 import { SPEAR_RANGE_MAX, closestDistSqSegmentSegment } from '@keysrun/shared/sim/spear';
@@ -259,9 +260,12 @@ export function initWorld(wrap: HTMLElement): World {
   // `registerCustomMaterial`, NOT `applyToSubtree`: the fish material already owns an
   // `onBeforeCompile` (the VAT swim shader), and plain CSM setup overwrites that wholesale — see
   // core/shadows.ts's header. Same path water and the palm fronds take.
+  // Verification-only override (window.__oceanDebug) so a capture script can show the same reef
+  // pristine and worked-out without a signed-in account; null in play, so the ledger decides.
+  let oceanForce: number | null = null;
   const fishWorld = createFishWorld(undefined, (_mesh, material, baseCompile) => {
     shadows.registerCustomMaterial(material, baseCompile);
-  });
+  }, (x, z) => oceanForce ?? ocean.recoveryAt(x, z));
   scene.add(fishWorld.group);
 
   // 9. clouds (one InstancedMesh — see world/clouds.ts header; count fixed at boot per the
@@ -656,6 +660,7 @@ export function initWorld(wrap: HTMLElement): World {
     boatInput: input,
     getBoat: () => stateBox.state,
     spots: life.spots,
+    oceanRecovery: (x, z) => ocean.recoveryAt(x, z),
     onLanded(fish) { catchFlow.landFish({ key: fish.key, weight: fish.weight, x: fish.fx, z: fish.fz, zone: fish.zone, tag: fish.tag, ashore: fish.ashore }); },
     // Fishing off a pier, a private dock or a marina's planks (game/fishing/shore.ts). `land` is
     // built below; these only run once the game is.
@@ -752,6 +757,7 @@ export function initWorld(wrap: HTMLElement): World {
     onEaten: (station) => trollSpread.sound(station),
     outriggers: () => model.setOutriggers,
     zone: () => zoneAt(stateBox.state.x, stateBox.state.z),
+    oceanRecovery: (x, z) => ocean.recoveryAt(x, z),
     // A weedline or a hump fishes faster than open water. `life.spots` already answers "what is
     // under me" for the rod, so trolling asks the same question rather than inventing its own.
     richness: () => {
@@ -1135,6 +1141,7 @@ export function initWorld(wrap: HTMLElement): World {
     // After the boat has moved, so the speed the spread is judged on is this step's.
     trolling.update(dt, next);
     stateBox.state = next;
+    ocean.update(next.x, next.z); // a lookup unless the boat changed chunk; any request runs detached
     fishing.update(dt, simTime, next, sw, ch);
     return next.events;
   }
@@ -1579,6 +1586,7 @@ export function initWorld(wrap: HTMLElement): World {
   // code path reads `window.__fishDebug`.
   // DEV/VERIFICATION HOOK ONLY — world/underwater/index.ts's `debugCaustics()` doc comment.
   (window as unknown as { __uwInspect?: unknown }).__uwInspect = () => underwater.debugCaustics();
+  (window as unknown as { __oceanDebug?: unknown }).__oceanDebug = { force: (r: number | null) => { oceanForce = r; } };
   (window as unknown as { __fishDebug?: unknown }).__fishDebug = {
     findResidentNear: fishWorld.findResidentNear,
     waterColumnAt: fishWorld.waterColumnAt,

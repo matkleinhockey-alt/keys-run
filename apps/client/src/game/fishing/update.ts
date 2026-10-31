@@ -57,6 +57,8 @@ export interface FishingDeps {
   /** Bird/bait frenzies, weedlines and rigs — `entities/life`'s `HotspotWorld`. */
   spots: SpotQuery;
   onLanded(fish: LandedFish): void;
+  /** How recovered the water at (x, z) is, 0..1 (net/ocean.ts); omitted = pristine, today's fish. */
+  oceanRecovery?(x: number, z: number): number;
   /** The equipped rod-and-line outfit (shared/content/tackle). Omitted = the starter 30 lb; this is
    * the seam a tackle shop plugs into — see content/tackle.ts. */
   getTackle?(): Tackle;
@@ -171,7 +173,7 @@ export function createFishingLogic(deps: FishingDeps) {
    * before the strike). */
   function chooseFishLocal(): void {
     const hump = nearHump(F.bob.x, F.bob.z);
-    const fish = chooseFish(F.zone, F.bob, { hotspot: !!F.hs, hump, rareMul: rig?.rareMul }, clientRng);
+    const fish = chooseFish(F.zone, F.bob, { hotspot: !!F.hs, hump, rareMul: rig?.rareMul, recovery: deps.oceanRecovery?.(F.bob.x, F.bob.z) }, clientRng);
     F.key = fish.key; F.sp = SPECIES[fish.key]; F.weight = fish.weight;
     // A tagged fish in range may be this one — then it fights at its own grown weight.
     F.tag = deps.tags?.pickRecapture(fish.key, F.bob.x, F.bob.z, clientRng) ?? null;

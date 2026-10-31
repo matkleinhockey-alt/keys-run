@@ -32,6 +32,8 @@ import {
   real,
   serial,
   boolean,
+  doublePrecision,
+  primaryKey,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
@@ -257,3 +259,24 @@ export const playerSaves = pgTable('player_saves', {
   data: jsonb('data').notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * The ocean ledger: only the DEVIATION from the deterministic fish baseline. Fish are a pure
+ * function of (world seed, chunk) on every client (apps/client/src/entities/fish/spawn.ts), so
+ * nothing is stored for water nobody has touched; a row exists only for a chunk that has been
+ * fished, and no row means pristine. `(cx, cz)` are those same chunk coords, floor(x / 64) and
+ * floor(z / 64), so a client maps a position to a row with the function it already has. The
+ * table records what happened (pressure, when) and no policy: how fast pressure recovers, or what
+ * it does to the fish, is decided by the reader from `last_caught_at` and the clock.
+ */
+export const oceanCells = pgTable('ocean_cells', {
+  cx: integer('cx').notNull(),
+  cz: integer('cz').notNull(),
+  /** Accumulated fishing pressure, in the unit POST /ocean/catch is given (routes/ocean.ts). */
+  pressure: doublePrecision('pressure').notNull(),
+  lastCaughtAt: timestamp('last_caught_at', { withTimezone: true }).notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  // The composite key is the only index: every read is by exact (cx, cz), which it serves.
+  primaryKey({ columns: [t.cx, t.cz] }),
+]);

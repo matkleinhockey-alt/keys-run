@@ -24,10 +24,12 @@ import {
   instantiateLegend,
   wreckSchoolsFor, instantiateWreckSchool,
 } from './spawn.js';
+import { legendPoseAt } from './legend-path.js';
 import { wrecksFor, WRECK_RESIDENTS } from '@keysrun/shared/world/wrecks';
 import { swimClock } from './swim-clock.js';
 import { fishCapsule } from './hitbox.js';
 import type { SchoolState, Threat } from './types.js';
+import { shownCount, stepShownAnim } from './thin.js';
 import { chumPull, type Carcass } from '@keysrun/shared/sim/chum';
 import { WORLD_SEED } from '../../state/constants.js';
 
@@ -166,7 +168,11 @@ const SCHOOL_QUERY_MARGIN = 20;
  * levels materialise on first use, long after world.ts's one boot-time sweep; see pool.ts's
  * `MeshReadyHook`.
  */
-export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshReadyHook): FishWorld {
+export function createFishWorld(
+  seed: number = WORLD_SEED, onMeshReady?: MeshReadyHook,
+  /** How recovered the water at (x, z) is, 0..1 (net/ocean.ts). Omitted = every school whole. */
+  oceanRecovery?: (x: number, z: number) => number,
+): FishWorld {
   const group = new THREE.Group();
   group.name = 'fish';
 
@@ -192,6 +198,13 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
    * waiting for you.
    */
   const legend: SchoolState | null = instantiateLegend(seed, 'goldbluefin', VIS.goldbluefin);
+  const placeLegend = (l: SchoolState): void => {
+    const pose = legendPoseAt(seed, Date.now(), VIS.goldbluefin.dMin);
+    if (!pose) return;
+    l.cx = pose.x; l.cz = pose.z; l.heading = pose.heading;
+    l.vx = -Math.sin(pose.heading) * pose.speed; l.vz = -Math.cos(pose.heading) * pose.speed;
+  };
+  if (legend) placeLegend(legend);
   const dormant = new Map<string, DormantEntry>(); // id -> frozen roamer
 
   // Whale blow/spout visual — see spout.ts. One shared effect pool for the whole fish world,
@@ -384,14 +397,38 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
       const events = stepSchool(state, pool.V, ctx);
       for (const ev of events) if (ev.type === 'blow') { spoutSystem.spawn(ev.x, ev.y, ev.z); blowCount++; }
       if (!touched.has(pool)) { beginPoolFrame(pool); touched.add(pool); }
+      // Worked water holds fewer fish (thin.ts). Undefined unless a school is actually thinned,
+      // so pristine and offline water never touch the new path.
+      state.shown = undefined;
+      if (oceanRecovery) {
+        let rec = 1;
+        try { rec = oceanRecovery(state.cx, state.cz); } catch { rec = 1; }
+        const len = state.members.length;
+        const n = shownCount(len, rec);
+        // Only ease a school that is already thinned or already animating; one that has never
+        // been touched snaps straight to `n`, which for pristine water is `len` and leaves both
+        // fields undefined — the no-op path, byte for byte.
+        if (n < len || state.shownAnim !== undefined) {
+          state.shownAnim = stepShownAnim(state.shownAnim, n, dt);
+          // the part-faded fish is still in the water, so it still counts and can still be speared
+          const s = Math.ceil(state.shownAnim - 1e-6);
+          if (s < len) state.shown = s;
+          else state.shownAnim = undefined; // fully refilled: back to the untouched path
+        }
+      }
       renderSchool(state, pool, view);
-      fishCount += state.members.length;
+      fishCount += state.shown ?? state.members.length;
     };
     for (const state of residents.values()) runSchool(state);
     for (const state of nearField.values()) runSchool(state);
     for (const list of wreckSchools.values()) for (const state of list) runSchool(state);
     for (const state of roamers.values()) runSchool(state);
-    if (legend) runSchool(legend);
+    if (legend) {
+      // Position is the world's, not the session's (legend-path.ts): set it before the step so the
+      // step's own wander only ever animates the fish around a point every client agrees on.
+      placeLegend(legend);
+      runSchool(legend);
+    }
 
     let draws = 0, triangles = 0;
     for (const pool of touched) {
@@ -485,7 +522,9 @@ export function createFishWorld(seed: number = WORLD_SEED, onMeshReady?: MeshRea
     const catchable = isCatchable(state.type);
     const r2 = radius * radius;
 
-    for (let i = 0; i < state.members.length; i++) {
+    // A fish that is not drawn cannot be speared: thinned members are skipped here as in render.ts.
+    const live = state.shown ?? state.members.length;
+    for (let i = 0; i < live; i++) {
       const m = state.members[i];
       // NOTE: there used to be an `if (m.slot < 0) continue` here, meaning "skip members with no
       // render slot". That guard made spearfishing impossible.
