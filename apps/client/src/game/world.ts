@@ -1580,6 +1580,16 @@ export function initWorld(wrap: HTMLElement): World {
   // can't pass a live renderer instance across `page.evaluate`'s serialization boundary, so it
   // has to be found here instead. No normal code path reads `window.__renderer`.
   (window as unknown as { __renderer?: THREE.WebGLRenderer }).__renderer = renderer;
+  // DEV/VERIFICATION HOOK ONLY, same spirit as __renderer above — test/profile-gpu.mjs walks the
+  // scene to attribute draw calls to the subsystem that owns each object. `renderer.info` says
+  // HOW MANY draw calls there are but never where they came from, and the first run of that
+  // script measured 2,150 topside against the < 400 budget in docs/ARCHITECTURE.md with no way
+  // to tell what was responsible. No normal code path reads `window.__scene`.
+  (window as unknown as { __scene?: THREE.Scene }).__scene = scene;
+  // ...and the camera it is rendered with, so that script can rebuild the view frustum and count
+  // what actually survives culling. Without it, attributing draw calls means hiding one group at
+  // a time and re-rendering, which at software-WebGL frame rates takes ten minutes and drifts.
+  (window as unknown as { __camera?: THREE.Camera }).__camera = camera;
   // DEV/VERIFICATION HOOK ONLY (see the __fishDebugDiver comment above frame()'s fishWorld.update
   // call) — lets test/capture-fish-screenshots.mjs find a deterministic resident of a given
   // species and teleport the boat there, instead of guessing world coordinates blind. No normal

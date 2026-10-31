@@ -24,6 +24,7 @@
  * using the centre puts docks through the neighbour's garden.
  */
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { hashCell } from '@keysrun/shared/rng';
 import { islands, islandDist, chainZ, type Island } from '@keysrun/shared/world/chain';
 import { landH, depthAt, onCourse, creekDist } from '@keysrun/shared/world/depth';
@@ -115,11 +116,69 @@ export function createWaterfront(): WaterfrontResult {
   const mats: THREE.Material[] = [];
 
   const keep = <T extends THREE.BufferGeometry>(g: T): T => { geos.push(g); return g; };
+  /**
+   * One material per distinct look, not per call.
+   *
+   * This used to return a new `MeshStandardMaterial` every time, and most of the calls are inside
+   * the per-estate build — the stucco, the porch trim, the roof tile, the lift motor. Every
+   * estate in the world therefore had its own copy of materials identical to its neighbour's,
+   * which is the same hazard docs/ARCHITECTURE.md records against `makeBoat`, and it is what
+   * stops anything here from being drawn in one go: two meshes can only share a draw call if
+   * they share a material.
+   */
+  const matCache = new Map<string, THREE.MeshStandardMaterial>();
   const M = (c: number, o: { rough?: number; metal?: number; flat?: boolean } = {}): THREE.MeshStandardMaterial => {
-    const m = new THREE.MeshStandardMaterial({ color: c, roughness: o.rough ?? 0.75, metalness: o.metal ?? 0, flatShading: o.flat ?? true });
-    mats.push(m);
+    const rough = o.rough ?? 0.75, metal = o.metal ?? 0, flat = o.flat ?? true;
+    const key = `${c}|${rough}|${metal}|${flat}`;
+    let m = matCache.get(key);
+    if (!m) {
+      m = new THREE.MeshStandardMaterial({ color: c, roughness: rough, metalness: metal, flatShading: flat });
+      matCache.set(key, m);
+      mats.push(m);
+    }
     return m;
   };
+
+  /**
+   * THE WATERFRONT IN A HANDFUL OF DRAW CALLS.
+   *
+   * Measured before this existed (test/profile-gpu-attrib.mjs): 2,100+ draw calls topside
+   * against the < 400 budget in docs/ARCHITECTURE.md, 3,445 geometries, and roughly half the
+   * whole bill owned by this module. The cause was that every piece of every estate was its own
+   * `THREE.Mesh` with its own freshly allocated geometry — a dock alone is a piling every 5 m
+   * down both sides, so a single estate spent twenty-odd draw calls before the house.
+   *
+   * Everything static here is now accumulated by (shape, material) and emitted as one
+   * `InstancedMesh` each, world-wide. Shapes are UNIT geometries carrying the per-instance size
+   * in the matrix scale, so one unit cube serves every box in every estate.
+   *
+   * `frustumCulled = false` on the result: an InstancedMesh culls on its base geometry's bounds,
+   * which for a unit cube at the origin is meaningless, and these batches span the whole chain
+   * anyway so a correct bound would never cull either. The cost is drawing every instance every
+   * frame — about 100 k triangles against a 2.5 M budget — and the gain is that the number of
+   * draw calls stops depending on how many estates exist at all.
+   */
+  interface Batch { geo: THREE.BufferGeometry; mat: THREE.Material; xf: THREE.Matrix4[]; cast: boolean; recv: boolean; }
+  const batches = new Map<string, Batch>();
+  const matIds = new Map<THREE.Material, number>();
+  const matId = (m: THREE.Material): number => {
+    let id = matIds.get(m);
+    if (id === undefined) { id = matIds.size; matIds.set(m, id); }
+    return id;
+  };
+  const _v = new THREE.Vector3(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3();
+  function put(
+    shape: string, make: () => THREE.BufferGeometry, m: THREE.Material,
+    x: number, y: number, z: number, ry: number,
+    sx: number, sy: number, sz: number,
+    cast = true, recv = true,
+  ): void {
+    const key = `${shape}|${matId(m)}`;
+    let b = batches.get(key);
+    if (!b) { b = { geo: keep(make()), mat: m, xf: [], cast, recv }; batches.set(key, b); }
+    _e.set(0, ry, 0); _q.setFromEuler(_e);
+    b.xf.push(new THREE.Matrix4().compose(_v.set(x, y, z), _q, _s.set(sx, sy, sz)));
+  }
 
   const wood = new THREE.MeshStandardMaterial({
     color: 0x9c7a55, roughness: 0.92, flatShading: true,
@@ -160,12 +219,9 @@ export function createWaterfront(): WaterfrontResult {
     return [gx / l, gz / l];
   }
 
-  const box = (w: number, h: number, d: number, x: number, y: number, z: number, m: THREE.Material, ry = 0): THREE.Mesh => {
-    const mesh = new THREE.Mesh(keep(new THREE.BoxGeometry(w, h, d)), m);
-    mesh.position.set(x, y, z); mesh.rotation.y = ry;
-    mesh.castShadow = mesh.receiveShadow = true;
-    group.add(mesh);
-    return mesh;
+  /** One unit cube, sized per instance. Returned nothing before and returns nothing now. */
+  const box = (w: number, h: number, d: number, x: number, y: number, z: number, m: THREE.Material, ry = 0): void => {
+    put('box', () => new THREE.BoxGeometry(1, 1, 1), m, x, y, z, ry, w, h, d);
   };
 
   const coastal = islands.filter((I) => I.coast && !I.small && !I.miami);
@@ -226,9 +282,7 @@ export function createWaterfront(): WaterfrontResult {
     const tint = hashCell(WORLD_SEED, ii, k + 11, SALT.HOUSE_ROT);
 
     // ---- the lot: a cut lawn and a pool deck between the house and the water
-    const lawn = new THREE.Mesh(keep(new THREE.BoxGeometry(44, 0.3, 54)), lawnM);
-    lawn.position.set(hx + nx * 8, y - 0.1, hz + nz * 8); lawn.rotation.y = yaw;
-    lawn.receiveShadow = true; group.add(lawn);
+    put('box', () => new THREE.BoxGeometry(1, 1, 1), lawnM, hx + nx * 8, y - 0.1, hz + nz * 8, yaw, 44, 0.3, 54, false, true);
 
     // ---- the house
     const hw = 20, hd = 13;
@@ -256,24 +310,22 @@ export function createWaterfront(): WaterfrontResult {
         box(0.26, 3.3, 0.26, px, y + 2.9, pz, M(0xf4f2ec, { rough: 0.8 }));
         box(0.26, 3.3, 0.26, px, y + 6.3, pz, M(0xf4f2ec, { rough: 0.8 }));
       }
-      const roof = new THREE.Mesh(keep(new THREE.ConeGeometry(hw * 0.82, 3.4, 4).rotateY(Math.PI / 4)), M(0xb8bcc2, { rough: 0.45, metal: 0.4 }));
-      roof.scale.set(1, 1, hd / hw * 1.15);
-      roof.position.set(hx, y + 8.9, hz); roof.rotation.y = yaw; roof.castShadow = true; group.add(roof);
+      const a = hw * 0.82;
+      put('cone4', () => new THREE.ConeGeometry(1, 1, 4).rotateY(Math.PI / 4), M(0xb8bcc2, { rough: 0.45, metal: 0.4 }),
+        hx, y + 8.9, hz, yaw, a, 3.4, a * (hd / hw * 1.15));
     } else {
       // Mediterranean: stucco, arches, barrel tile.
       const wallM = M([0xf0e2cc, 0xeeded0, 0xf4ead9][Math.floor(tint * 3)], { rough: 0.9 });
       box(hw, 6.4, hd, hx, y + 3.2, hz, wallM, yaw);
       box(hw * 0.46, 3.4, hd * 0.6, hx - nx * 5, y + 8, hz - nz * 5, wallM, yaw);
       const tile = M(0xb4603c, { rough: 0.8 });
-      const roof = new THREE.Mesh(keep(new THREE.BoxGeometry(hw + 2.2, 0.5, hd + 2.2)), tile);
-      roof.position.set(hx, y + 6.6, hz); roof.rotation.y = yaw; group.add(roof);
+      box(hw + 2.2, 0.5, hd + 2.2, hx, y + 6.6, hz, tile, yaw);
       // Arcade along the water side.
       for (let i = -2; i <= 2; i++) {
         const ox = i * 4.4;
         const px = hx + Math.cos(yaw) * ox + nx * (hd / 2 + 1.6);
         const pz = hz - Math.sin(yaw) * ox + nz * (hd / 2 + 1.6);
-        const arch = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.3, 0.3, 3.6, 8)), wallM);
-        arch.position.set(px, y + 1.8, pz); group.add(arch);
+        put('cyl8', () => new THREE.CylinderGeometry(0.3, 0.3, 1, 8), wallM, px, y + 1.8, pz, 0, 1, 3.6, 1);
       }
       box(hw * 0.9, 0.4, 3.2, hx + nx * (hd / 2 + 1.6), y + 3.7, hz + nz * (hd / 2 + 1.6), tile, yaw);
     }
@@ -281,8 +333,7 @@ export function createWaterfront(): WaterfrontResult {
     // ---- the pool, between the house and the water, with its deck
     const pxC = hx + nx * 15, pzC = hz + nz * 15;
     box(18, 0.22, 13, pxC, y + 0.12, pzC, deckM, yaw);
-    const pool = new THREE.Mesh(keep(new THREE.BoxGeometry(11, 0.6, 6)), poolM);
-    pool.position.set(pxC, y + 0.08, pzC); pool.rotation.y = yaw; group.add(pool);
+    put('box', () => new THREE.BoxGeometry(1, 1, 1), poolM, pxC, y + 0.08, pzC, yaw, 11, 0.6, 6);
     // Loungers, because an empty pool deck reads as a car park.
     for (const o of [-3.4, 3.4]) {
       box(0.9, 0.25, 2.1, pxC + Math.cos(yaw) * o - nx * 4.4, y + 0.42, pzC - Math.sin(yaw) * o - nz * 4.4, M(0xf4f4f2, { rough: 0.7 }), yaw);
@@ -300,8 +351,10 @@ export function createWaterfront(): WaterfrontResult {
     for (let s = 0; s <= planks; s += 5) {
       const px = hx + nx * (d0 + s), pz = hz + nz * (d0 + s);
       for (const o of [-dockW / 2, dockW / 2]) {
-        const pil = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.17, 0.19, 5.4, 7)), pileM);
-        pil.position.set(px + Math.cos(yaw) * o, -1.1, pz - Math.sin(yaw) * o); pil.castShadow = true; group.add(pil);
+        // tapered (0.17 top, 0.19 foot), so this one keeps its real dimensions rather than
+        // scaling a unit cylinder — every piling in the world is the same piling
+        put('pile', () => new THREE.CylinderGeometry(0.17, 0.19, 5.4, 7), pileM,
+          px + Math.cos(yaw) * o, -1.1, pz - Math.sin(yaw) * o, 0, 1, 1, 1);
       }
     }
 
@@ -333,15 +386,12 @@ export function createWaterfront(): WaterfrontResult {
       const bx = cx + nx * o, bz = cz + nz * o;
       for (const sgn of [-1, 1]) {
         const px = bx + Math.cos(yaw) * sgn * postHalf, pz = bz - Math.sin(yaw) * sgn * postHalf;
-        const post = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.15, 0.15, postH, 6)), railM);
-        post.position.set(px, topY + 0.5 - postH / 2, pz); post.castShadow = true; group.add(post);
+        put('post', () => new THREE.CylinderGeometry(0.15, 0.15, 1, 6), railM,
+          px, topY + 0.5 - postH / 2, pz, 0, 1, postH, 1);
         // The cable from the top beam down to the cradle, which is what a lift actually is.
-        const cable = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.025, 0.025, topY - cradleY, 4)), cableM);
-        cable.position.set(
+        put('cable', () => new THREE.CylinderGeometry(0.025, 0.025, 1, 4), cableM,
           bx + Math.cos(yaw) * sgn * (postHalf - 0.12), (topY + cradleY) / 2,
-          bz - Math.sin(yaw) * sgn * (postHalf - 0.12),
-        );
-        group.add(cable);
+          bz - Math.sin(yaw) * sgn * (postHalf - 0.12), 0, 1, topY - cradleY, 1, false, false);
       }
       box(B + 1.5, 0.22, 0.22, bx, cradleY, bz, railM, yaw);   // cradle beam
       box(B + 1.9, 0.3, 0.3, bx, topY, bz, railM, yaw);        // top beam
@@ -376,6 +426,63 @@ export function createWaterfront(): WaterfrontResult {
    * and never again — `makeBoat` is the player's own model, and building 50 of them up front for
    * the two you will visit is what the laziness is for.
    */
+  /**
+   * Collapse a moored boat to one mesh per material.
+   *
+   * `makeBoat` builds the PLAYER's boat — console, T-top, rails, cleats, screens, outboards — as
+   * thirty-odd separate meshes, because on the player's own boat those parts move: props spin,
+   * the wheel turns, the screens update. A boat sitting on a lift or tied alongside does none of
+   * that; it is scenery. Measured (test/profile-gpu-owners.mjs): these hulls were 893 of 1,960
+   * draw calls topside, far and away the biggest owner in the frame.
+   *
+   * Geometry is CLONED, never disposed: `makeBoat` is cache-backed, so the parts belong to every
+   * other boat of that type in the world too (see entities/boat/model.ts). Materials are reused
+   * as they are, which is what lets the merge group by them at all.
+   */
+  function flattenStatic(root: THREE.Object3D): void {
+    root.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
+    const byMat = new Map<THREE.Material, THREE.Mesh[]>();
+    root.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || Array.isArray(m.material) || !m.geometry) return;
+      for (let q: THREE.Object3D | null = o; q && q !== root; q = q.parent) if (!q.visible) return;
+      const mat = m.material as THREE.Material;
+      const list = byMat.get(mat) ?? [];
+      list.push(m);
+      byMat.set(mat, list);
+    });
+
+    for (const [mat, meshes] of byMat) {
+      if (meshes.length < 2) continue;
+      const geos = meshes.map((m) => {
+        const g = m.geometry.clone();
+        for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(name)) g.deleteAttribute(name);
+        if (!g.getAttribute('normal')) g.computeVertexNormals();
+        if (!g.getAttribute('uv')) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.getAttribute('position').count * 2), 2));
+        g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, m.matrixWorld));
+        return g;
+      });
+      // `mergeGeometries` refuses a mixed set and returns null. The parts of a boat are a mix of
+      // indexed primitives and non-indexed lathed/extruded shapes, so without this the merge
+      // failed for those materials — and the first version of this function had already detached
+      // the meshes by then, which silently deleted 20,220 triangles of boat (measured) rather
+      // than merging them. Normalising to non-indexed costs some vertices and always succeeds.
+      const mixed = geos.some((g) => !g.index) && geos.some((g) => g.index);
+      const parts = mixed ? geos.map((g) => (g.index ? g.toNonIndexed() : g)) : geos;
+      const merged = mergeGeometries(parts, false);
+      if (mixed) for (let i = 0; i < geos.length; i++) if (parts[i] !== geos[i]) geos[i].dispose();
+      if (!merged) { for (const g of parts) g.dispose(); continue; } // leave the meshes as they are
+      for (const g of parts) g.dispose();
+
+      const mesh = new THREE.Mesh(merged, mat);
+      mesh.castShadow = meshes.some((m) => m.castShadow);
+      mesh.receiveShadow = meshes.some((m) => m.receiveShadow);
+      for (const m of meshes) m.parent?.remove(m);
+      root.add(mesh);
+    }
+  }
+
   function buildHulls(lot: Lot): void {
     const g = new THREE.Group();
     // Bow out to open water. `makeBoat` models bow-to--z, and local +z here is the outward
@@ -383,16 +490,31 @@ export function createWaterfront(): WaterfrontResult {
     const lifted = makeBoat(lot.spec, deps());
     lifted.group.position.set(lot.cx, lot.hoistY, lot.cz);
     lifted.group.rotation.y = lot.yaw + Math.PI;
+    // Each hull is flattened on its OWN group, never on `g`. The tied boat's group is handed to
+    // `floating`, which bobs it on the water every frame; merging the two hulls together would
+    // bake that boat into the lifted one's frame and it would stop moving.
+    flattenStatic(lifted.group);
     g.add(lifted.group);
     if (lot.tied) {
       const t = makeBoat(lot.tied.spec, deps());
       t.group.position.set(lot.tied.x, 0, lot.tied.z);
       t.group.rotation.y = lot.yaw + Math.PI;
+      flattenStatic(t.group);
       g.add(t.group);
       floating.push(t.group);
     }
     lot.g = g;
     group.add(g);
+  }
+
+  // Every static piece of every estate, as one InstancedMesh per (shape, material).
+  for (const b of batches.values()) {
+    const im = new THREE.InstancedMesh(b.geo, b.mat, b.xf.length);
+    for (let i = 0; i < b.xf.length; i++) im.setMatrixAt(i, b.xf[i]);
+    im.instanceMatrix.needsUpdate = true;
+    im.castShadow = b.cast; im.receiveShadow = b.recv;
+    im.frustumCulled = false; // see the doc comment on `put`
+    group.add(im);
   }
 
   return {

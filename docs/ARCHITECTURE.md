@@ -517,10 +517,38 @@ every pack — this matters for Steam and is miserable to reconstruct later.
 60 fps on an M1 Air / GTX 1650 · < 400 draw calls topside, < 300 underwater ·
 < 2.5 M triangles · < 512 MB texture memory · < 15 MB before playable.
 
-Existing hazards to fix en route: 60 cloud `Group`s that should be one
-`InstancedMesh` (~270 needless draw calls); `makeBoat` creating fresh materials
-per call (every joining player instantiates one); `depthAt` on hot paths where
-`depthFast` exists; 5.9 MB `DEPTHG`/`INLETG` allocated at boot.
+Measure before tuning: `test/profile-gpu.mjs` reports `renderer.info` totals and
+`test/profile-gpu-owners.mjs` attributes every draw call to the subsystem that
+owns it, by rebuilding the view frustum from `window.__camera` and applying the
+same cull test `render()` does. Its one pass agrees with the renderer's own
+count to within two calls, and it replaced a hide-one-group-and-re-render
+approach that took ten minutes and drifted while it measured.
+
+The hazard list this section used to carry was stale and partly wrong: it named
+60 cloud `Group`s that had already been rebuilt as one `InstancedMesh`, and it
+did not name what actually dominated. Measured topside at the start position:
+**2,212 draw calls against this 400 budget**, 3,353 geometries. Two causes, both
+in `world/waterfront.ts` and both now fixed, taking it to ~1,150:
+
+- Every piece of every estate was its own `Mesh` with its own freshly allocated
+  geometry, and `M()` minted a new material per call from inside the per-estate
+  build — so no two estates could share a draw call even where they were
+  identical. Static estate geometry is now accumulated by (shape, material) and
+  emitted as one `InstancedMesh` each, world-wide, off shared unit geometries.
+- The boats moored at those estates are `makeBoat` output — the *player's* model,
+  thirty-odd meshes because on the player's boat those parts move. On a moored
+  boat nothing moves, so each hull is merged to one mesh per material at build
+  time. That alone was 893 of 1,960 draw calls.
+
+Still over budget and still unattributed: two unnamed top-level groups of ~614
+and ~419 meshes are the largest remaining owners. Underwater is comfortable
+(~127). When merging geometry, note that `mergeGeometries` returns `null` for a
+set that mixes indexed and non-indexed inputs — normalise first, and never
+detach the originals before the merge has succeeded, or it deletes scenery
+silently (it cost 20,220 triangles of boat before that was caught).
+
+Other known hazards: `depthAt` on hot paths where `depthFast` exists; 5.9 MB
+`DEPTHG`/`INLETG` allocated at boot.
 
 ## Phase order
 
