@@ -12,11 +12,32 @@
 
 export const WORLD_SEED = 20240817;
 
-/** Open water in Boot Key Harbor, clear of the marinas, bow west down the harbor's open mouth.
- * Legacy's `SPAWN` (index.html:367) had dz 305, which the real Boot Key outline now crowds. */
-export const SPAWN_X = -1150;
-export const SPAWN_DZ = 150;
-export const SPAWN_H = Math.PI / 2;
+/**
+ * Out in the rig field, on the boat, in blue water — you start where the fishing is.
+ *
+ * It used to be open water inside Boot Key Harbor (x -1150, dz 150, 2.7 m under the keel), bow
+ * west down the harbour's mouth. `dz` is an offset from the chain, not a world z: the real
+ * position is `chainZ(SPAWN_X) + SPAWN_DZ` (entities/life/hotspots.ts's RIG_SITES are written
+ * the same way, which is what let this be chosen against them).
+ *
+ * Picked by sweeping the sailable box against the real `depthAt`/`landH` and the actual rig
+ * positions rather than by eye: 156 m of water, 276 m off the nearest structure — close enough
+ * to read as being among them, far enough not to start inside one — with NINE structures inside
+ * 800 m, because the inshore row and the deep row of floaters overlap here and nowhere else.
+ * It is 4.1 km from Boot Key Harbor, which is the run home (and the tournament finish).
+ */
+export const SPAWN_X = -3375;
+export const SPAWN_DZ = 3500;
+/**
+ * The nearest platform off the bow, but not dead on it.
+ *
+ * Headings here are the sim's: forward is `(-sin h, -cos h)` (see @keysrun/shared/sim/boat), so
+ * the bearing to that rig is `atan2(-(rigX - x), -(rigZ - z))` = -2.7981 and not what you might
+ * expect. Pointed exactly at it, the chase camera put the rig directly behind the boat's own
+ * tower and outriggers, which is the one thing in the frame that can hide it. Swung a sixth of a
+ * radian off so it sits clear on the bow quarter.
+ */
+export const SPAWN_H = -2.7981 + 0.17;
 
 /** One salt per independent scatter attribute. Grouped by system; values just need to be distinct. */
 export const SALT = {
