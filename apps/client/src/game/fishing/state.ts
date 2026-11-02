@@ -45,7 +45,19 @@ export interface FishingState {
   drag: number;
   charging: boolean;
   charge: number;
+  /**
+   * Seconds the cast has been winding up, on the WALL clock.
+   *
+   * It used to accumulate the simulation's `dt`, and fishing is stepped inside the fixed-step
+   * loop whose accumulator only ever receives `Math.min(0.05, dt)` a frame (game/world.ts's
+   * `frame`). That clamp is right for the physics — it is what stops a long frame spiralling —
+   * but it also means that below 20 fps the whole sim runs in slow motion, and a timed bar is
+   * where a player sees that first: measured at ~3 fps, a cast advertised at 1.3 s had reached
+   * 31% after 2.6 s of holding the key, which reads as a power meter that does not work.
+   */
   chargeT: number;
+  /** `performance.now()` when the wind-up started; -1 when not charging. */
+  chargeStartMs: number;
   nibs: number;
   nibT: number;
   dipT: number;
@@ -67,7 +79,7 @@ export function createFishingState(): FishingState {
     zone: '', hs: null, sp: null, key: null, weight: 0, tag: null,
     fx: 0, fz: 0, ofx: 0, ofz: 0,
     drag: 3,
-    charging: false, charge: 0, chargeT: 0,
+    charging: false, charge: 0, chargeT: 0, chargeStartMs: -1,
     nibs: 0, nibT: 0, dipT: 0,
     reeling: false,
     caughtT: 0, lastPts: 0, lastStats: null,

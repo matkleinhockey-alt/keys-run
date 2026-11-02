@@ -27,6 +27,10 @@ import { strikeWindowS, STRIKE_BASE_S, type HandInputs } from '@keysrun/shared/s
 import { resolveCastSpot, type SpotQuery } from './spot.js';
 import type { ShoreAngler } from './shore.js';
 
+/** Wall-clock milliseconds, for things a player times with their own thumb rather than things
+ * the simulation steps — see state.ts's `chargeT`. */
+const nowMs = (): number => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+
 function $(id: string): HTMLElement | null { return document.getElementById(id); }
 
 export interface LandedFish {
@@ -112,7 +116,7 @@ export function createFishingLogic(deps: FishingDeps) {
 
   function startCharge(boat: BoatState): void {
     if (Math.abs(boat.speed) > 1.6) { toast('Slow under 3 knots to cast.'); return; }
-    F.charging = true; F.charge = 0; F.chargeT = 0;
+    F.charging = true; F.charge = 0; F.chargeT = 0; F.chargeStartMs = nowMs();
     setRod(true);
     $('castbar')?.classList.remove('hidden');
   }
@@ -120,6 +124,7 @@ export function createFishingLogic(deps: FishingDeps) {
   function releaseCast(boat: BoatState): void {
     if (!F.charging) return;
     F.charging = false;
+    F.chargeStartMs = -1;
     $('castbar')?.classList.add('hidden');
     cast(F.charge, boat);
   }
@@ -293,7 +298,9 @@ export function createFishingLogic(deps: FishingDeps) {
     simNow = t;
 
     if (F.charging) {
-      F.chargeT += dt;
+      // Wall clock, not `dt`: see state.ts's `chargeT`. A cast takes 1.3 s to wind up because
+      // that is what the bar promises, on a machine running at 120 fps or at 12.
+      F.chargeT = F.chargeStartMs >= 0 ? (nowMs() - F.chargeStartMs) / 1000 : F.chargeT + dt;
       F.charge = Math.min(1, F.chargeT / 1.3);
       const fill = $('castFill'); if (fill) fill.style.width = F.charge * 100 + '%';
       setText('castDist', Math.round(12 + F.charge * 73) + ' m');
