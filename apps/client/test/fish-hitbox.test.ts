@@ -21,7 +21,7 @@ import { segmentHitsCapsule } from '@keysrun/shared/sim/spear';
 import { mulberry32 } from '@keysrun/shared/rng';
 import { buildCreatureGeo } from '../src/entities/fish/geometry.js';
 import { computeSwimProfile, lateralSwimAmp, SWIM_ANG_BASE, swimWavenumber, swimPhaseAt } from '../src/entities/fish/swim.js';
-import { fishCapsule, hitRadius, type HitCapsule, type HitPose } from '../src/entities/fish/hitbox.js';
+import { fishCapsule, hitRadius, HIT_GIRTH_K, type HitCapsule, type HitPose } from '../src/entities/fish/hitbox.js';
 
 /** The construction `pushSchoolTargets` had before this pass (index.ts), verbatim in effect. */
 function legacyCapsule(V: CreatureVis, p: HitPose): HitCapsule {
@@ -190,5 +190,30 @@ describe('fish spear hitbox vs the rendered mesh', () => {
     expect(next.recall).toBeGreaterThan(0.84);
     // hitRadius is what's left of the deliberate forgiveness: never below a sane fraction of girth
     expect(hitRadius(VIS.yellowtail)).toBeLessThan(0.12);
+
+    /*
+     * A long thin fish does not get a sausage.
+     *
+     * The aggregate above is dominated by the big deep-bodied species — they present the most
+     * area, so they cast the most rays — and it moved by 0.004 when the per-length floor was
+     * cut from 0.08 to 0.015. That hid the point of the change completely. The fish it was
+     * hurting are the long thin fast ones people actually aim at, and on those the floor had
+     * stopped being a small-fish margin and become the dominant term: a 1.6 m wahoo is 0.2 m
+     * through the body, girth asked for 0.14, the floor handed it 0.178.
+     *
+     * So assert it where it shows. Measured, floor 0.08 -> 0.015: wahoo precision 0.33 -> 0.46,
+     * barracuda 0.30 -> 0.39, ladyfish 0.40 -> 0.46, all three for a recall change of ~0.00.
+     */
+    for (const key of ['wahoo', 'barracuda', 'cero', 'kingfish', 'ladyfish', 'spanishmack']) {
+      const V = VIS[key];
+      const girth = Math.max(V.h || V.len * 0.17, V.w || V.len * 0.16) / 2;
+      // the floor may still lift a very slim fish, but it may not be what decides the radius
+      expect(hitRadius(V)).toBeLessThanOrEqual(girth * HIT_GIRTH_K + 1e-9);
+    }
+    expect(next.perSpecies.wahoo.p).toBeGreaterThan(0.42);
+    expect(next.perSpecies.barracuda.p).toBeGreaterThan(0.36);
+    // and the thin fish did not pay for it in missed shots
+    expect(next.perSpecies.wahoo.r).toBeGreaterThan(0.85);
+    expect(next.perSpecies.barracuda.r).toBeGreaterThan(0.85);
   });
 });
