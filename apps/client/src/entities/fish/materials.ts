@@ -23,6 +23,7 @@ import * as THREE from 'three';
 import type { CreatureVis } from '@keysrun/shared/content/creatures';
 import type { VatBake } from './vat.js';
 import { swimClock } from './swim-clock.js';
+import { EXTINCTION, INSCATTER_COLOR, SURFACE_BAND } from '../../world/underwater/depth-bands.js';
 
 interface PbrParams {
   roughness: number;
@@ -158,11 +159,35 @@ float gLatLine = 0.0;`)
     roughnessFactor = clamp(roughnessFactor + 0.18 * gScaleEdge - 0.10 * gLatLine, 0.03, 1.0);`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
     normal = normalize(normal + vec3(dFdx(gScaleEdge), dFdy(gScaleEdge), 0.0) * 0.5);`)
+      // WATER BETWEEN YOU AND THE FISH, not how deep the fish is.
+      //
+      // This used to be `haze = 1 - exp(-fishDepth * 0.16)`, mixed up to 96% into a flat teal.
+      // Nothing in it referred to the camera, so a snapper 1 m from your mask at 9.6 m down came
+      // out 77% flat teal, and below ~24 m everything in the ocean sat pinned at the 96% cap:
+      // every species the same grey-blue cut-out, no eye, no stripe, no countershading. All the
+      // work above it — the procedural scales, the lateral line, the per-species iridescence —
+      // was being painted over and thrown away. Photographed on the Sombrero crest, which is
+      // what showed it.
+      //
+      // world/underwater/depth-bands.ts already owns this problem for the reef and says in its
+      // own header that consumers must agree with it rather than re-derive it. It models the
+      // water as per-channel extinction over the path light actually travels — object-to-eye
+      // plus the diver's own depth for the downwelling leg — which is why the reef keeps its
+      // warm colours close up and still goes blue in the distance. Fish now use that same model
+      // and the same constants, so a fish and the coral behind it finally agree.
+      //
+      // Above the surface the path is the fish's own depth instead: from the boat you are
+      // looking down through roughly that much water. `sub` crossfades the two across the same
+      // surface band everything else uses, so breaking the surface does not pop.
       .replace('#include <dithering_fragment>', `
     float fres = pow(1.0 - abs(dot(normalize(normal), normalize(vViewPosition))), 3.0);
-    float dpt = max(0.0, -vWY - 0.3); float haze = 1.0 - exp(-dpt * 0.16);
-    gl_FragColor.rgb += vec3(0.75, 0.85, 0.95) * fres * 0.28 * uShn * (1.0 - haze);
-    gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.03, 0.22, 0.30), min(0.96, haze));
+    float camDepth = max(0.0, -cameraPosition.y);
+    float sub = smoothstep(${SURFACE_BAND.toFixed(3)}, ${(-SURFACE_BAND).toFixed(3)}, cameraPosition.y);
+    float waterPath = mix(max(0.0, -vWY), length(vViewPosition) + camDepth, sub);
+    vec3 trans = exp(-vec3(${EXTINCTION.r.toFixed(5)}, ${EXTINCTION.g.toFixed(5)}, ${EXTINCTION.b.toFixed(5)}) * waterPath);
+    gl_FragColor.rgb += vec3(0.75, 0.85, 0.95) * fres * 0.28 * uShn * trans.g;
+    gl_FragColor.rgb = gl_FragColor.rgb * trans
+      + vec3(${INSCATTER_COLOR.r}, ${INSCATTER_COLOR.g}, ${INSCATTER_COLOR.b}) * (1.0 - trans);
     #include <dithering_fragment>`);
   };
   mat.onBeforeCompile = baseOnBeforeCompile;

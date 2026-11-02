@@ -61,6 +61,18 @@ function ledger(srv: ReturnType<typeof fakeServer>, signedIn = true) {
   return createOceanLedger(env);
 }
 const settle = () => new Promise<void>((r) => setTimeout(r, 0));
+/**
+ * A frame's worth of waiting, for loops that run thousands of them.
+ *
+ * `settle()` is a real macrotask, and Node floors `setTimeout(0)` near a millisecond. The
+ * 100-chunk run below ticks 2,560 frames, so settling every one of them cost tens of seconds and
+ * tipped over the 30 s timeout whenever the suite was under load — passing alone and failing in
+ * the full run, which is the worst way for a test to fail. Nearly all of those frames cannot
+ * produce a request at all (mid-chunk, `update` is two comparisons), so they only need the
+ * microtask flush that lets an in-flight promise chain advance; a real macrotask every eighth
+ * frame keeps the timers and fetch resolution honest.
+ */
+const settleFast = (i: number) => (i % 8 === 0 ? settle() : Promise.resolve());
 /** Boat sits at (x, z) for `ms` of game-clock time, ticking at 10 Hz and letting requests land. */
 async function sit(srv: ReturnType<typeof fakeServer>, l: ReturnType<typeof ledger>, x: number, z: number, ms: number) {
   for (let t = 0; t < ms; t += 100) { srv.clock.now += 100; l.update(x, z); await settle(); }
@@ -191,7 +203,9 @@ describe('no request storm', () => {
     const l = ledger(srv);
     // 100 chunks at ~25 units/s (a hard-running boat), 10 Hz.
     const z = 500;
-    for (let x = 0; x < 100 * CELL_SIZE; x += 2.5) { srv.clock.now += 100; l.update(x, z); await settle(); }
+    let frame = 0;
+    for (let x = 0; x < 100 * CELL_SIZE; x += 2.5) { srv.clock.now += 100; l.update(x, z); await settleFast(frame++); }
+    await settle(); // let the last request land before counting
     const total = srv.log.gets.reduce((a, b) => a + b, 0);
     console.log(`ocean-net: 100-chunk run -> ${srv.log.gets.length} GETs, ${total} cells asked, max batch ${Math.max(...srv.log.gets)}, cached ${l.stats().cached}`);
     expect(srv.log.gets.length).toBeLessThanOrEqual(110); // one per crossing at most, never per frame (2,560 frames)
