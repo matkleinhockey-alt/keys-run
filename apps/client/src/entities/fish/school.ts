@@ -107,6 +107,17 @@ const MID_LEVEL = 0.46;
 
 /** rad — about 21 degrees. A banking fish, not a barrel roll. */
 const BANK_MAX = 0.37;
+/**
+ * Climbing and diving, in radians and metres/second.
+ *
+ * CLIMB_MAX 0.5 rad is about 29 degrees: steep enough to read clearly as a fish going down after
+ * something, short of the near-vertical angle only a set-piece act (a bust, a porpoise) should
+ * reach. CLIMB_V_MAX caps the rise BEFORE it becomes an angle, so a spawn (a member's `wy`
+ * starts at 0), a dormant school resuming, or a wave-driven jump in the surface cannot pitch a
+ * body end over end for a frame. CLIMB_EASE matches the bank's easing, so the two read as one
+ * body moving rather than two independent dials.
+ */
+const CLIMB_MAX = 0.5, CLIMB_V_MAX = 3, CLIMB_EASE = 3.5;
 
 /** How far a school will notice a motionless diver, metres. */
 const CURIOUS_RANGE = 36;
@@ -468,6 +479,29 @@ function stepMember(
   // Scaled by THIS species' baked rate, not the old global 7.5: that constant is no longer what
   // anything beats at (swim.ts derives the rate from length and swimming mode), so using it here
   // would have over-driven a slow-beating marlin and under-driven a baitfish.
+  // Nose into the climb. Outside the set-piece acts above, `pitch` was left at exactly 0, so a
+  // school changing depth — diving away from the boat, lifting onto a bait ball, following the
+  // sand up off a slope — stayed dead level and travelled vertically, which is the one thing no
+  // fish does. The angle is simply the fish's own path angle: how fast it is going up or down
+  // against how fast it is going along.
+  if (pitch === 0) {
+    // `m.wy` is still LAST frame's height at this point — it is written at the end of this
+    // function — which is what makes the rise available here without storing a second copy.
+    const rise = clamp((y - m.wy) / Math.max(dt, 1e-3), -CLIMB_V_MAX, CLIMB_V_MAX);
+    // The 0.3 floor under the along-speed only has to stop a divide-by-nothing: schools do not
+    // hover. Measured across free and anchored schools, the slowest any of them cruises is an
+    // anchored grouper at 0.37 m/s, so a speed-proportional fade on top of this was written,
+    // measured to change nothing in any case that occurs, and taken out again — CLIMB_MAX
+    // already bounds the result.
+    const want = clamp(Math.atan2(rise, Math.max(0.3, Math.hypot(g.vx, g.vz))), -CLIMB_MAX, CLIMB_MAX);
+    m.climb = lerp(m.climb, want, Math.min(1, dt * CLIMB_EASE));
+    pitch = m.climb;
+  } else {
+    // An act owns the body while it runs; carry its angle so that leaving one eases out of the
+    // attitude it finished in instead of snapping back through level.
+    m.climb = pitch;
+  }
+
   const spd = Math.hypot(g.vx, g.vz);
   const rate = clamp(spd / Math.max(0.05, V.speed), BEAT_MIN, BEAT_MAX);
   m.swimPhase += (rate - 1) * swimAngSpeed(g.type, V) * dt;

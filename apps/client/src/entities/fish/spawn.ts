@@ -202,7 +202,7 @@ function buildMembers(seed: number, cx: number, cz: number, V: CreatureVis, coun
     // wreck fish too, so a goliath over the steel is unmistakably the big one.
     const baseScale = VSC * Math.cbrt(0.35 + 2.3 * sizeU);
     members.push({
-      ox: Math.cos(ang) * r, oz: Math.sin(ang) * r, oy, swimPhase, seed: swimPhase, bank: 0, sizeU,
+      ox: Math.cos(ang) * r, oz: Math.sin(ang) * r, oy, swimPhase, seed: swimPhase, bank: 0, climb: 0, sizeU,
       scale: memberScale(baseScale, V, originX, originZ),
       act: null, actPhase: 0, actTimer: 1 + 7 * hashCell(seed, cx, cz, SALT.MEMBER_PHASE + 500 + i),
       splashed: false, splashed2: false, breaching: false,

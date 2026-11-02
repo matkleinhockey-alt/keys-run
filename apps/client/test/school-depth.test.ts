@@ -18,7 +18,7 @@ function school(type: string): SchoolState {
   const V = VIS[type];
   const members: SchoolState['members'] = Array.from({ length: Math.max(4, V.school[0]) }, (_, i) => ({
     ox: (i % 3) - 1, oz: Math.floor(i / 3) - 1, oy: (i % 3) - 1, swimPhase: i * 0.7, seed: i * 0.7,
-    bank: 0, scale: 1, sizeU: 0.5, act: null, actPhase: 0, actTimer: 2 + i,
+    bank: 0, climb: 0, scale: 1, sizeU: 0.5, act: null, actPhase: 0, actTimer: 2 + i,
     splashed: false, splashed2: false, breaching: false,
     wx: AX, wy: -4, wz: AZ, yaw: 0, pitch: 0, roll: 0, worldScale: 1,
   }));

@@ -43,6 +43,10 @@ export interface FishMember {
   /** Smoothed bank angle, radians — eased toward the school's turn rate so a fish rolls into a
    * corner and back out of it rather than snapping upright the instant the turn ends. */
   bank: number;
+  /** Smoothed climb angle, radians, positive nose-up — eased toward the fish's own path angle so
+   * it noses into a dive and levels out of it. Outside the set-piece acts this used to be fixed
+   * at zero, which left a school changing depth perfectly level, travelling vertically. */
+  climb: number;
   /** Per-member size multiplier (legacy `s`). */
   scale: number;
   /**
