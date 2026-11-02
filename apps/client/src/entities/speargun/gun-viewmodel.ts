@@ -81,14 +81,45 @@ export function createGunViewModel(camera: THREE.Camera): GunViewModel {
   const dark = new THREE.MeshStandardMaterial({ color: 0x3c4a54, roughness: 0.4, metalness: 0.5 });
   const steel = new THREE.MeshStandardMaterial({ color: 0xc7ced4, roughness: 0.25, metalness: 0.85 });
   const rubber = new THREE.MeshStandardMaterial({ color: 0x262b2f, roughness: 0.8 });
+  /**
+   * Natural amber latex for the bands, not black.
+   *
+   * Sized correctly at 16 mm and sat where they really sit — just outboard of a 28 mm barrel —
+   * black bands disappeared completely against the black barrel in the verification shot. The
+   * previous model solved that by pushing them out to 42 mm, three barrel-widths apart, which
+   * bought the silhouette at the cost of the gun's actual shape. Colour buys it for free and
+   * costs no accuracy: amber natural latex is what half the market ships (Salvimar go further
+   * and sell acid green), so this reads as a real band rather than as a thicker one.
+   */
+  const latex = new THREE.MeshStandardMaterial({ color: 0xc08a3e, roughness: 0.55 });
 
-  const BARREL_LEN = 0.78;
-  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.02, BARREL_LEN, 10).rotateX(Math.PI / 2), dark);
+  /**
+   * BUILT TO A REAL GUN'S DIMENSIONS.
+   *
+   * The whole industry agrees on these three numbers, which is what makes them worth matching:
+   * an aluminium barrel of 28 mm, a Tahitian shaft of 6.5 mm and 16 mm bands are the spec of the
+   * Omer Cayman, the Salvimar Wild Pro, the Mares Sniper, the Seac and the Labrax Nova alike.
+   *
+   * What was here was built by eye and was fat in a way that read as a toy: a 36-40 mm barrel
+   * (a 20:1 length-to-width stick, where a real gun is past 30:1), and 30 mm bands — 0.79 of the
+   * barrel's width against a real 0.57, which is the proportion the eye actually reads. The
+   * shaft was the one part already about right at 0.21 of the barrel against a real 0.23.
+   */
+  const BARREL_LEN = 0.78;              // a 75-80 cm reef gun: the right tool for this water
+  const BARREL_R = 0.014;               // 28 mm
+  const SHAFT_R = 0.00325;              // 6.5 mm Tahitian
+  const BAND_R = 0.008;                 // 16 mm
+  /** The shaft rides a groove along the TOP of the barrel, not down the middle of it — that
+   * offset silhouette is what makes a speargun read as a speargun and not as a pipe. */
+  const RAIL_Y = BARREL_R + SHAFT_R;
+
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(BARREL_R, BARREL_R, BARREL_LEN, 10).rotateX(Math.PI / 2), dark);
   barrel.position.z = -BARREL_LEN / 2;
   base.add(barrel);
 
-  const muzzleRing = new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.006, 6, 12), steel);
-  muzzleRing.position.z = -BARREL_LEN;
+  // The muzzle head the shaft passes through, up on the rail line rather than on the barrel axis.
+  const muzzleRing = new THREE.Mesh(new THREE.TorusGeometry(0.009, 0.0035, 6, 12), steel);
+  muzzleRing.position.set(0, RAIL_Y, -BARREL_LEN);
   base.add(muzzleRing);
 
   // bands (two, either side) — animate with reload (see `update`'s BAND_SHORT/BAND_LONG): a real
@@ -98,12 +129,12 @@ export function createGunViewModel(camera: THREE.Camera): GunViewModel {
   const BAND_ANCHOR_Z = -BARREL_LEN + 0.06;
   const bands: THREE.Mesh[] = [];
   for (const side of [-1, 1]) {
-    const band = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 6).rotateX(Math.PI / 2), rubber);
-    // Offset far enough past the barrel's own ~0.02 radius to read as a separate element rather
-    // than overlapping it in silhouette (an earlier, tighter 0.025 offset — barely past the
-    // barrel's radius at all — measured as visually indistinguishable from the barrel in this
-    // task's verification screenshots).
-    band.position.set(side * 0.042, 0.012, BAND_ANCHOR_Z);
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 6).rotateX(Math.PI / 2), latex);
+    // Just outboard of the barrel and up at the rail, where a real band sits: it runs from the
+    // muzzle back to the shaft's notch, so it belongs beside the shaft rather than slung wide of
+    // the gun. The old 0.042 was pushed out to clear a 0.02-radius barrel and still read as its
+    // own element; against this 0.014 barrel, barrel radius + band radius + 2 mm already does.
+    band.position.set(side * (BARREL_R + BAND_R + 0.002), RAIL_Y, BAND_ANCHOR_Z);
     base.add(band);
     bands.push(band);
   }
@@ -120,11 +151,12 @@ export function createGunViewModel(camera: THREE.Camera): GunViewModel {
   // the loaded shaft, poking out the muzzle; slides back to `reloadFrac=0` on fire and back out
   // as the gun reloads.
   const SHAFT_POKE = 0.3;
-  const loadedShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, SHAFT_POKE, 6).rotateX(Math.PI / 2), steel);
+  const loadedShaft = new THREE.Mesh(new THREE.CylinderGeometry(SHAFT_R, SHAFT_R, SHAFT_POKE, 6).rotateX(Math.PI / 2), steel);
+  loadedShaft.position.y = RAIL_Y;
   base.add(loadedShaft);
 
   const muzzle = new THREE.Object3D();
-  muzzle.position.z = -BARREL_LEN;
+  muzzle.position.set(0, RAIL_Y, -BARREL_LEN);
   base.add(muzzle);
 
   // The hauling hand: a neoprene-gloved fist closed around the band tail. Only shown while the gun
@@ -163,7 +195,10 @@ export function createGunViewModel(camera: THREE.Camera): GunViewModel {
   // gun showed two prongs sticking out past the barrel end and a draw looked like the gun growing
   // antlers; BAND_LONG reaches the grip (~0.74 m of the 0.86 m the gun spans).
   const BAND_SHORT = 0.3, BAND_LONG = 0.74;
-  const BAND_RADIUS_RELAXED = 0.015, BAND_RADIUS_DRAWN = 0.008;
+  // Relaxed is the real 16 mm. Drawn is thinner because rubber under tension is: a band stretched
+  // to about 3.5x its length loses roughly the square root of that in width, so 16 mm becomes
+  // about 8.5 mm.
+  const BAND_RADIUS_RELAXED = BAND_R, BAND_RADIUS_DRAWN = 0.0045;
 
   // Ready pose vs loading pose. In the loading pose the gun is brought in toward the centre of the
   // body, muzzle tipped up and forward, butt against the hip — where a real diver braces it to

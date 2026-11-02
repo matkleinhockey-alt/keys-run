@@ -27,8 +27,11 @@ export function createShaftVisual(scene: THREE.Scene): ShaftVisual {
   group.visible = false;
   scene.add(group);
 
+  // 6.5 mm, the real Tahitian shaft diameter and the same figure the gun's loaded shaft is built
+  // to (speargun/gun-viewmodel.ts). It was 12 mm here, so firing visibly doubled the thickness of
+  // the very object the player is following.
   const mesh = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.006, 0.006, SHAFT_LEN, 6).rotateX(Math.PI / 2),
+    new THREE.CylinderGeometry(0.00325, 0.00325, SHAFT_LEN, 6).rotateX(Math.PI / 2),
     new THREE.MeshStandardMaterial({ color: 0xc9ced3, metalness: 0.8, roughness: 0.3 }),
   );
   group.add(mesh);
