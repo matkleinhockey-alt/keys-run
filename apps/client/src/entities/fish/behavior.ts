@@ -17,7 +17,7 @@
 import type { CreatureVis } from '@keysrun/shared/content/creatures';
 import type { Threat } from './types.js';
 
-export type FleeClass = 'apex' | 'glide' | 'wary' | 'skittish';
+export type FleeClass = 'apex' | 'glide' | 'wary' | 'skittish' | 'flusher';
 
 /** Apex/ambush predators and large pelagics — shrug off a boat, barely react to a diver. */
 const APEX_KEYS = new Set([
@@ -28,7 +28,19 @@ const APEX_KEYS = new Set([
  * "Slow, massive" per the task brief — even less hurried than a dolphin, see FLEE_PARAMS.glide. */
 const GLIDE_KEYS = new Set(['turtle', 'manatee', 'stingray', 'eagleray', 'dolphin', 'pilotwhale', 'humpback']);
 
+/**
+ * Fish that burst out well ahead of a hull rather than scattering as it arrives.
+ *
+ * Not about being more timid — about WHERE the reaction happens. At the skittish radius a boat
+ * doing 18 m/s is on top of a school 1.4 s after it spooks, so the one thing flying fish are
+ * famous for happened beside and behind the cockpit where nobody was looking. Flushing them
+ * from 46 m puts the burst out in front of the bow, which is both what it looks like from a
+ * real boat and the only place the player can watch it.
+ */
+const FLUSH_KEYS = new Set(['flyingfish']);
+
 export function fleeClassFor(key: string, V: CreatureVis): FleeClass {
+  if (FLUSH_KEYS.has(key)) return 'flusher';
   if (GLIDE_KEYS.has(key)) return 'glide';
   if (V.kind === 'shark' || APEX_KEYS.has(key)) return 'apex';
   if (V.school[1] <= 2) return 'wary';
@@ -95,6 +107,10 @@ const FLEE_PARAMS: Record<FleeClass, FleeParams> = {
   glide: { boatRadius: 10, boatSpeedRadius: 0.4, diverRadius: 5, spearRadius: 8, speedMul: 1.15 },
   wary: { boatRadius: 12, boatSpeedRadius: 0.5, diverRadius: 7, spearRadius: 10, speedMul: 2.2 },
   skittish: { boatRadius: 14, boatSpeedRadius: 0.6, diverRadius: 9, spearRadius: 12, speedMul: 3.2 },
+  // See FLUSH_KEYS. Underwater they are ordinary skittish baitfish, so only the boat numbers
+  // differ; the speed radius is what carries it, since a drifting boat should not clear the water
+  // ahead of it the way one up on plane does.
+  flusher: { boatRadius: 26, boatSpeedRadius: 1.1, diverRadius: 9, spearRadius: 12, speedMul: 3.2 },
 };
 
 export function fleeParamsFor(cls: FleeClass): FleeParams {
