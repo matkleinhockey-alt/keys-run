@@ -42,6 +42,26 @@ export const BEND_FIT = 0.57;
 const REAR_U = 0.9;
 
 /**
+ * How far past the peduncle the capsule runs, as a fraction of body length.
+ *
+ * The capsule used to stop dead at the peduncle, on the reasoning that a tail-fin graze is not a
+ * spear hit. True of the trailing edge; not true of the tail ROOT, which is solid fish and which
+ * the mesh carries well past len/2. Shots through it were being thrown away: wahoo recall 0.88.
+ *
+ * This is the cheap direction to grow in, and it is worth saying why, because the obvious lever
+ * is the wrong one. Measured against the rendered mesh:
+ *
+ *     wider  (girth 1.4 -> 1.8)   recall 0.863 -> 0.880   precision 0.511 -> 0.410
+ *     longer (tail +10% len)      recall 0.863 -> 0.899   precision 0.511 -> 0.488
+ *
+ * Width buys 1.7 points of recall for 10 of precision; length buys 3.6 for 2.3, about ten times
+ * the exchange rate. A fish is long and thin, so a wider capsule is mostly more water, while a
+ * longer one is still mostly fish. The nose end is deliberately NOT extended — a capsule poking
+ * out in front of the fish is what made shots land in open water ahead of it (see header, 1).
+ */
+const TAIL_EXT = 0.10;
+
+/**
  * Capsule radius (m, before the member's own scale).
  *
  * Girth is the body's real half-height/half-width. A pure-girth hitbox is brutal on small
@@ -121,7 +141,9 @@ export function fishCapsule(key: string, V: CreatureVis, pose: HitPose, swimT: n
     const theta = swimPhaseAt(swimT, swimAngSpeed(key, V), pose.swimPhase);
     off = lateralSwimAmp(key, V, REAR_U) * Math.sin(theta - REAR_U * swimWavenumber(key, V)) * pose.worldScale * BEND_FIT;
   }
-  // rear end: tail-ward along the body axis, pushed sideways by the wave
-  const bx = pose.wx - nx * reach + lx * off, by = pose.wy - ny * reach + ly * off, bz = pose.wz - nz * reach + lz * off;
+  // rear end: tail-ward along the body axis and on past the peduncle into the tail root, pushed
+  // sideways by the wave
+  const rear = reach + TAIL_EXT * L;
+  const bx = pose.wx - nx * rear + lx * off, by = pose.wy - ny * rear + ly * off, bz = pose.wz - nz * rear + lz * off;
   return { ax: fx, ay: fy, az: fz, bx, by, bz, radius: r };
 }

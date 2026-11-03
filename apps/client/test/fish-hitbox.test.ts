@@ -185,9 +185,17 @@ describe('fish spear hitbox vs the rendered mesh', () => {
     // new species' own precision at 0.55, above the aggregate it had supposedly dragged down.
     // Isolated afterwards with stable seeds, that species moves precision by 0.000 and recall by
     // 0.002. A threshold a species' alphabetical position can cross is not measuring the capsule.
-    expect(next.precision).toBeGreaterThan(legacy.precision + 0.25);
-    expect(next.precision).toBeGreaterThan(0.49);
-    expect(next.recall).toBeGreaterThan(0.84);
+    /*
+     * These floors were 0.25-over-legacy / 0.49 / 0.84 when the capsule stopped at the peduncle.
+     * The capsule was then deliberately lengthened into the tail root (hitbox.ts's TAIL_EXT),
+     * which is a trade and was asked for: recall 0.863 -> 0.899 for precision 0.511 -> 0.488.
+     * So precision's floors come down and recall's goes UP, to hold the side of the trade that
+     * was bought. Precision is still nearly double legacy's 0.249, which is what the
+     * over-legacy margin is actually for.
+     */
+    expect(next.precision).toBeGreaterThan(legacy.precision + 0.22);
+    expect(next.precision).toBeGreaterThan(0.47);
+    expect(next.recall).toBeGreaterThan(0.87);
     // hitRadius is what's left of the deliberate forgiveness: never below a sane fraction of girth
     expect(hitRadius(VIS.yellowtail)).toBeLessThan(0.12);
 
