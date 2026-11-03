@@ -360,7 +360,7 @@ body.photoing #gauges,body.photoing #mapbox,body.photoing #scorebox,body.photoin
 }
 
 /* --- race mode (game/race/**) ------------------------------------------- */
-.raceHud{position:absolute;left:50%;top:84px;transform:translateX(-50%);z-index:6;pointer-events:none;
+.raceHud{position:absolute;left:50%;top:var(--centreHudTop,84px);transform:translateX(-50%);z-index:6;pointer-events:none;
   font:600 13px/1.25 system-ui,-apple-system,sans-serif;color:#eaf4f8;text-align:center;
   background:rgba(6,24,40,.62);backdrop-filter:blur(7px);border:1px solid rgba(160,220,240,.16);
   border-radius:12px;padding:10px 16px;min-width:220px;box-shadow:0 6px 22px rgba(0,0,0,.3)}

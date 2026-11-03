@@ -53,6 +53,31 @@ async function boot(): Promise<void> {
   new ResizeObserver(() => world.resize()).observe(wrap!);
   world.resize();
 
+  /*
+   * Keep the centre HUD (the race and tournament cards, `.raceHud`) clear of the score panel.
+   *
+   * `.raceHud` was pinned at top:84px and `#scorebox` starts at 14px and WRAPS — three rows of
+   * buttons on a normal window — so a running tournament drew its card straight over Gear, Dive
+   * and Pistol for the whole fifteen minutes. The panel sets `pointer-events:none`, so the
+   * buttons still took clicks; you simply could not see them.
+   *
+   * A fixed offset cannot fix it: the row count changes with window width, and under the narrow
+   * breakpoint `#scorebox` moves to the BOTTOM of the screen, where anything measured off its
+   * height would push the card off the top. So measure it, and only duck under it while it is
+   * actually up there.
+   */
+  const scorebox = document.getElementById('scorebox');
+  if (scorebox) {
+    const place = (): void => {
+      const r = scorebox.getBoundingClientRect();
+      const below = r.height > 0 && r.top < window.innerHeight / 2 ? r.bottom + 10 : 84;
+      document.documentElement.style.setProperty('--centreHudTop', `${Math.round(below)}px`);
+    };
+    new ResizeObserver(place).observe(scorebox);
+    window.addEventListener('resize', place);
+    place();
+  }
+
   world.renderer.domElement.addEventListener('webglcontextlost', (e) => {
     e.preventDefault();
     try { toast('Graphics hiccup — refreshing the screen…'); } catch { /* noop */ }
