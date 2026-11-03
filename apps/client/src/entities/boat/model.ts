@@ -502,11 +502,46 @@ export function makeBoat(S: Boat, deps: BoatBuildDeps): BoatModel {
   const rodPivot = new THREE.Group();
   rodPivot.position.set(rs.bs - cap * 0.5, rs.ys + 0.05, rs.z);
   rodPivot.rotation.order = 'YXZ';
-  const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.04, 3, 6).translate(0, 1.5, 0), M(0x1c1f24));
-  rodPivot.add(rod);
-  const reel = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.12, 10), M(0xc9a227));
-  reel.rotation.z = Math.PI / 2; reel.position.y = 0.45;
+  /*
+   * THE DECK ROD, AT A REAL ROD'S DIMENSIONS.
+   *
+   * This was one hexagonal cylinder 80 mm across at the butt and 36 mm at the tip, with a 180 mm
+   * gold drum stuck to it for a reel, no grip and no guides. A boat rod's blank is nearer 20 mm
+   * at the butt and a few mm at the tip (a 7 ft medium blank measures 11.5-13.8 mm butt and
+   * about 2 mm tip; a stand-up boat stick is stouter than that, not four times it), so what was
+   * on the gunwale was a fence post with a trophy on it.
+   *
+   * Built in four tapering sections rather than one cone, because a rod's taper is not linear
+   * and the join lines read as ferrules at this distance. Guides shrink toward the tip — that run
+   * of rings is what says "rod" from across the cockpit.
+   */
+  const ROD_L = 3, ROD_BUTT = 0.010, ROD_TIP = 0.0018;
+  const rodMat = M(0x1c1f24);
+  const rodR = (u: number): number => ROD_BUTT + (ROD_TIP - ROD_BUTT) * Math.pow(u, 0.85);
+  for (let i = 0; i < 4; i++) {
+    const u0 = i / 4, u1 = (i + 1) / 4, segL = ROD_L / 4;
+    const seg = new THREE.Mesh(
+      new THREE.CylinderGeometry(rodR(u1), rodR(u0), segL, 12).translate(0, u0 * ROD_L + segL / 2, 0), rodMat);
+    rodPivot.add(seg);
+  }
+  // EVA/cork grip over the butt, and the reel seat above it
+  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.017, 0.38, 14).translate(0, 0.19, 0), M(0x2a2e33));
+  rodPivot.add(grip);
+  const guideMat = M(0xc9ced3);
+  for (const u of [0.22, 0.38, 0.55, 0.72, 0.88]) {
+    const blank = rodR(u);
+    const ring = Math.max(0.004, 0.016 * (1 - u) + 0.003);
+    const gd = new THREE.Mesh(new THREE.TorusGeometry(ring, 0.0013, 6, 14), guideMat);
+    gd.position.set(0, u * ROD_L, -(blank + ring + 0.002));
+    rodPivot.add(gd);
+  }
+  // A conventional reel is about 100 mm across the sideplate, not 180.
+  const reel = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.085, 16), M(0x23272c));
+  reel.rotation.z = Math.PI / 2; reel.position.y = 0.46;
   rodPivot.add(reel);
+  const spool = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.038, 0.088, 16), M(0xc9a227));
+  spool.rotation.z = Math.PI / 2; spool.position.y = 0.46;
+  rodPivot.add(spool);
   const tip = new THREE.Object3D();
   tip.position.y = 3;
   rodPivot.add(tip);

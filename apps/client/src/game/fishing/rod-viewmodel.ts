@@ -39,21 +39,66 @@ export function createRodViewModel(camera: THREE.Camera): RodViewModel {
   let tip: THREE.Object3D;
   const rodMat = new THREE.MeshStandardMaterial({ color: 0x1d2126, roughness: 0.3, metalness: 0.3 });
   const SEGL = 0.52;
+  /*
+   * BUILT TO A REAL BLANK'S DIMENSIONS.
+   *
+   * A 7 ft medium spinning blank measures .454-.544 inch at the butt and a size-5 tip: 11.5-13.8
+   * mm down to about 2 mm (CRB IS701M, MHX SJ843). This was 44 mm at the butt and 8 mm at the
+   * tip — three to four times over — on eight radial segments, so the thing in your hands was a
+   * fat octagonal stick. A real rod is a fine line that tapers away to nothing, and that is most
+   * of what makes one look like a rod rather than a prop.
+   */
+  const BUTT_R = 0.0065, TIP_R = 0.001;             // 13 mm -> 2 mm
+  const rAt = (u: number): number => BUTT_R + (TIP_R - BUTT_R) * u;
   let parent: THREE.Object3D = base;
   for (let i = 0; i < 5; i++) {
     const sg = new THREE.Group();
     if (i > 0) sg.position.y = SEGL;
     parent.add(sg);
-    const r0 = 0.022 - 0.0034 * i, r1 = Math.max(0.004, r0 - 0.0034);
-    sg.add(new THREE.Mesh(new THREE.CylinderGeometry(r1, r0, SEGL, 8).translate(0, SEGL / 2, 0), rodMat));
-    if (i > 0) {
-      const gd = new THREE.Mesh(new THREE.TorusGeometry(0.018 - 0.002 * i, 0.003, 4, 10), new THREE.MeshStandardMaterial({ color: 0xc9ced3, metalness: 0.8, roughness: 0.2 }));
-      gd.position.set(0, 0.02, -0.02);
-      sg.add(gd);
-    }
+    const r0 = rAt(i / 5), r1 = rAt((i + 1) / 5);
+    // 14 sides, not 8: at a third of a metre from the lens an octagon reads as an octagon, and
+    // the blank is now thin enough that the extra triangles are nothing.
+    sg.add(new THREE.Mesh(new THREE.CylinderGeometry(r1, r0, SEGL, 14).translate(0, SEGL / 2, 0), rodMat));
     segs.push(sg);
     parent = sg;
   }
+
+  /*
+   * Guides: eight of them, closing up toward the tip, standing clear of the blank.
+   *
+   * There were four, one at the base of each segment, evenly spaced and all the same size — and
+   * each ring was SMALLER than the blank it sat on (ring outer 0.019 against a 0.0186 blank), so
+   * they were buried in the rod rather than mounted on it. The wire was a 4-segment torus, which
+   * is to say square. A real rod's guides run large at the stripper and shrink to the tip, spaced
+   * tighter as they go, each held off the blank on a foot — that run of shrinking rings is the
+   * rod's most recognisable detail after the taper itself.
+   */
+  const guideMat = new THREE.MeshStandardMaterial({ color: 0xc9ced3, metalness: 0.85, roughness: 0.18 });
+  const wrapMat = new THREE.MeshStandardMaterial({ color: 0x14181c, roughness: 0.55 });
+  // [segment, local y along that segment] — two per segment past the stripper, so spacing in
+  // world terms tightens as the segments themselves carry less rod.
+  const GUIDES: Array<[number, number]> = [
+    [0, 0.46], [1, 0.22], [1, 0.46], [2, 0.20], [2, 0.44], [3, 0.18], [3, 0.42], [4, 0.24],
+  ];
+  for (const [si, ly] of GUIDES) {
+    const u = (si + ly / SEGL) / 5;
+    const blank = rAt(u);
+    // The ring shrinks with the blank but never below something a line could pass through.
+    const ring = Math.max(0.0035, 0.016 * (1 - u) + 0.003);
+    const wire = 0.0011;
+    const stand = blank + ring + 0.0015;            // ring centre, clear of the blank
+    const g = new THREE.Mesh(new THREE.TorusGeometry(ring, wire, 8, 16), guideMat);
+    g.position.set(0, ly, -stand);
+    sg_add(si, g);
+    // the foot and its thread wrap, which is what actually holds a guide on
+    const foot = new THREE.Mesh(new THREE.CylinderGeometry(wire, wire, stand - blank, 6).rotateX(Math.PI / 2), guideMat);
+    foot.position.set(0, ly - ring * 0.5, -(blank + (stand - blank) / 2));
+    sg_add(si, foot);
+    const wrap = new THREE.Mesh(new THREE.CylinderGeometry(blank * 1.25, blank * 1.25, 0.012, 10), wrapMat);
+    wrap.position.set(0, ly - ring * 0.5 - 0.008, 0);
+    sg_add(si, wrap);
+  }
+  function sg_add(i: number, m: THREE.Object3D): void { segs[i].add(m); }
   tip = new THREE.Object3D();
   tip.position.y = SEGL;
   parent.add(tip);
@@ -62,7 +107,9 @@ export function createRodViewModel(camera: THREE.Camera): RodViewModel {
   const cork = new THREE.MeshStandardMaterial({ color: 0xb8925e, roughness: 0.9 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x22262b, roughness: 0.35, metalness: 0.5 });
   const gold = new THREE.MeshStandardMaterial({ color: 0xc9a227, roughness: 0.25, metalness: 0.8 });
-  s0.add(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.032, 0.34, 10).translate(0, 0.12, 0), cork));
+  // 25 mm of cork, not 60. A spinning rod's grip is something you close a hand around; this was
+  // wider than the reel's own spool.
+  s0.add(new THREE.Mesh(new THREE.CylinderGeometry(0.0125, 0.0135, 0.34, 16).translate(0, 0.12, 0), cork));
 
   const reel = new THREE.Group();
   reel.name = 'reel';
