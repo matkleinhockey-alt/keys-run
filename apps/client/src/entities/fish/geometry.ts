@@ -155,7 +155,7 @@ export function buildFishGeo(key: string, V: CreatureVis, detail: FishDetail = '
 
   const { part: bodyPart, profile } = buildBodyLoft(V, S, detail);
   const parts: GeoPart[] = [bodyPart];
-  parts.push(...buildMidFins(S, V.len, profile, fin, detail));
+  parts.push(...buildMidFins(S, V.len, profile, fin, detail, V.sickle));
   parts.push(...buildTail(S, profile.Hh, profile.W, V.len, fin, back, detail));
   parts.push(...buildFinlets(S, V, V.len, profile, back, detail));
   parts.push(...buildPairedFins(S, key, V.len, profile, fin, back, detail));

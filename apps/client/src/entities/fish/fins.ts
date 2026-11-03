@@ -163,11 +163,34 @@ function buildMidFin(spec: readonly [number, number, number, string], top: boole
   return { g: finGeo(pts, bowZ, double), m: new THREE.Matrix4(), c: fin };
 }
 
-export function buildMidFins(S: FishShape, L: number, profile: BodyProfile, fin: THREE.Color, detail: FishDetail): GeoPart[] {
+export function buildMidFins(
+  S: FishShape, L: number, profile: BodyProfile, fin: THREE.Color, detail: FishDetail, sickle?: number,
+): GeoPart[] {
   const { finSteps: steps, double } = DETAIL_PARAMS[detail];
   const parts: GeoPart[] = [];
   (S.dor || []).forEach((s) => parts.push(buildMidFin(s, true, L, profile, fin, steps, double)));
   (S.anal || []).forEach((s) => parts.push(buildMidFin(s, false, L, profile, fin, steps, double)));
+
+  /*
+   * The tunas' second dorsal and anal — the sickles.
+   *
+   * `CreatureVis.sickle` has been carried on every tuna since the table was written, graded by
+   * species exactly as the field marks run: yellowfin .95, bigeye .5, bluefin .42, albacore .4,
+   * skipjack .35. Nothing ever read it. The shape table gives the tunas one triangular first
+   * dorsal and NO anal fin at all, so a yellowfin — a fish whose whole identity is the pair of
+   * long bright-yellow sickles trailing most of the way to its tail — was a plain blue torpedo,
+   * while the blackfin beside it, which spells its own fins out in the table, had them.
+   *
+   * Built from that existing number rather than a new column, and skipped for anything that
+   * already declares an anal fin (the jacks and the blackfin do), so nothing grows a second set.
+   * They take `fin`, which is already the right colour per species: #f2c62e on a yellowfin,
+   * near-black on a bluefin.
+   */
+  if (sickle && !(S.anal && S.anal.length)) {
+    const h = 0.62 * sickle;
+    parts.push(buildMidFin([0.52, 0.60 + 0.12 * sickle, h, 'sickle'], true, L, profile, fin, steps, double));
+    parts.push(buildMidFin([0.55, 0.62 + 0.11 * sickle, h * 0.88, 'sickle'], false, L, profile, fin, steps, double));
+  }
   return parts;
 }
 
