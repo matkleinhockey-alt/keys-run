@@ -87,6 +87,70 @@ export function glowTex(): THREE.CanvasTexture {
   return _glow;
 }
 
+let _flame: THREE.CanvasTexture | null = null;
+/**
+ * A gas flare's flame: an OPAQUE body, not a halo.
+ *
+ * `glowTex` is a soft radial gradient meant to be blended additively onto dark metal, and a
+ * flare built from it simply vanishes against the sky — additive can only brighten, and the sky
+ * is already bright in daylight and at sunset alike. A real flare reads because the flame is a
+ * solid luminous object that occludes what is behind it, white-hot at the root and dropping
+ * through yellow to deep orange at the tip.
+ */
+export function flameTex(): THREE.CanvasTexture {
+  if (_flame) return _flame;
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 256;
+  const x = c.getContext('2d') as CanvasRenderingContext2D;
+  // teardrop: wide and white at the base, tapering to a torn orange tip
+  for (let row = 0; row < 256; row++) {
+    const u = row / 255;                       // 0 root .. 1 tip
+    const halfW = 52 * Math.pow(1 - u, 0.62) * (0.82 + 0.18 * Math.sin(u * 9));
+    if (halfW <= 0.5) continue;
+    const g = x.createLinearGradient(64 - halfW, 0, 64 + halfW, 0);
+    const core = u < 0.18 ? '#fffdf0' : u < 0.45 ? '#ffd24a' : u < 0.75 ? '#ff9a22' : '#f2641a';
+    const a = u < 0.86 ? 1 : (1 - u) / 0.14;   // only the very tip softens
+    g.addColorStop(0, 'rgba(255,150,40,0)');
+    g.addColorStop(0.28, core);
+    g.addColorStop(0.72, core);
+    g.addColorStop(1, 'rgba(255,150,40,0)');
+    x.globalAlpha = Math.max(0, Math.min(1, a));
+    x.fillStyle = g;
+    x.fillRect(64 - halfW, 255 - row, halfW * 2, 1);
+  }
+  x.globalAlpha = 1;
+  _flame = new THREE.CanvasTexture(c);
+  return _flame;
+}
+
+let _smoke: THREE.CanvasTexture | null = null;
+/** The plume above the flame — dark, soft-edged. In daylight this is what you actually pick a
+ * flare out by from miles off, long before the flame itself resolves. */
+export function smokeTex(): THREE.CanvasTexture {
+  if (_smoke) return _smoke;
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 256;
+  const x = c.getContext('2d') as CanvasRenderingContext2D;
+  // A plume, not a puff: densest where it leaves the flame, widening and thinning as it lifts.
+  // A radial blob read as a separate grey cloud parked above the rig with a gap under it.
+  for (let row = 0; row < 256; row++) {
+    const u = row / 255;                        // 0 at the flame .. 1 at the top
+    const halfW = 16 + 44 * Math.pow(u, 0.7) * (0.9 + 0.1 * Math.sin(u * 7 + 1.3));
+    const a = 0.62 * Math.pow(1 - u, 1.35) * Math.min(1, u / 0.06);  // fades out, and in at the root
+    if (a <= 0.004) continue;
+    const g = x.createLinearGradient(64 - halfW, 0, 64 + halfW, 0);
+    g.addColorStop(0, 'rgba(74,74,80,0)');
+    g.addColorStop(0.5, 'rgba(58,58,64,1)');
+    g.addColorStop(1, 'rgba(74,74,80,0)');
+    x.globalAlpha = a;
+    x.fillStyle = g;
+    x.fillRect(64 - halfW, 255 - row, halfW * 2, 1);
+  }
+  x.globalAlpha = 1;
+  _smoke = new THREE.CanvasTexture(c);
+  return _smoke;
+}
+
 let _quilt: THREE.CanvasTexture | null = null;
 export function quiltTex(): THREE.CanvasTexture {
   if (_quilt) return _quilt;

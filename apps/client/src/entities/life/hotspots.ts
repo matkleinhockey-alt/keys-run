@@ -22,7 +22,7 @@
 import * as THREE from 'three';
 import { makeSeabird, poseBird, moveBird, type Bird } from './seabirds.js';
 import { beamBetween } from '../boat/hull.js';
-import { glowTex } from '../boat/decor-textures.js';
+import { glowTex, flameTex, smokeTex } from '../boat/decor-textures.js';
 import type { LightMatEntry } from '../../core/time-of-day.js';
 import { WB, HUMPS, CREEKS, depthAt, zoneAt, type Zone } from '@keysrun/shared/world/depth';
 import { steadyCurrentAt, chainTangent } from '@keysrun/shared/world/current';
@@ -203,7 +203,7 @@ export interface Rig extends GullSite {
    * matched by `nearRig` (legacy's own `R.g&&...`), kept only as inert anchor data for whoever
    * wires fish-group anchoring (`ensureAnchors`) up later — see this module's header. */
   g?: THREE.Group;
-  fl?: THREE.Mesh;
+  fl?: THREE.Object3D;
   fish: number;
   twin: boolean;
   told: boolean;
@@ -251,6 +251,33 @@ function spawnRigs(scene: THREE.Scene, lightMats: LightMatEntry[]): Rig[] {
   const orangeM = new THREE.MeshStandardMaterial({ color: 0xe4572e, roughness: 0.6 });
   const heliM = new THREE.MeshStandardMaterial({ color: 0x2f6e4a, roughness: 0.7 });
   const flameM = new THREE.MeshBasicMaterial({ map: glowTex(), color: 0xff8a2a, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+  /*
+   * A flare you can see in daylight.
+   *
+   * It was one additive plane of `glowTex`, and additive can only ADD light — against a sky that
+   * is already bright, in daylight and at sunset alike, it contributed nothing. Photographed
+   * from 34 m with the mesh reporting `visible: true` and filling a third of the frame, the boom
+   * tip was simply empty; the only reason the deck lamps read at all is that they sit against
+   * dark metal rather than sky.
+   *
+   * So the flame is now an opaque body that occludes what is behind it, the halo stays for the
+   * bloom it was always good at, and there is a smoke plume above — which in daylight is the
+   * thing you actually pick a flare out by, long before the flame resolves.
+   */
+  const flameCoreM = new THREE.MeshBasicMaterial({ map: flameTex(), transparent: true, depthWrite: false, toneMapped: false });
+  const smokeM = new THREE.MeshBasicMaterial({ map: smokeTex(), transparent: true, depthWrite: false, opacity: 0.55 });
+  /** `h` is the flame's height in metres; everything else is proportioned off it. */
+  const makeFlare = (h: number): THREE.Group => {
+    const grp = new THREE.Group();
+    const halo = new THREE.Mesh(new THREE.PlaneGeometry(h * 1.5, h * 1.5), flameM);
+    halo.position.y = h * 0.35; grp.add(halo);
+    const core = new THREE.Mesh(new THREE.PlaneGeometry(h * 0.52, h), flameCoreM);
+    core.position.y = h * 0.42; grp.add(core);
+    // Base overlapping the flame tip, so the plume leaves the flame rather than hovering over it.
+    const smoke = new THREE.Mesh(new THREE.PlaneGeometry(h * 1.15, h * 1.9), smokeM);
+    smoke.position.y = h * 1.32; grp.add(smoke);
+    return grp;
+  };
   const lampM = new THREE.SpriteMaterial({ map: glowTex(), color: 0xffe6a8, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.2 });
   lightMats.push({ m: lampM, day: 0.15, night: 1 });
   const V = (a: number, b: number, c: number): THREE.Vector3 => new THREE.Vector3(a, b, c);
@@ -357,7 +384,7 @@ function spawnRigs(scene: THREE.Scene, lightMats: LightMatEntry[]): Rig[] {
       const sp = new THREE.Sprite(lampM); sp.scale.setScalar(scale); sp.position.set(px, py, pz); g.add(sp);
     };
     const seabed = -Math.min(40, depthAt(x, z));
-    let fl: THREE.Mesh | undefined;
+    let fl: THREE.Object3D | undefined;
 
     if (kind === 'platform') {
       // The full manned production platform: two decks, accommodation block, derrick, helipad and
@@ -393,8 +420,8 @@ function spawnRigs(scene: THREE.Scene, lightMats: LightMatEntry[]): Rig[] {
       beam(g, V(12, top + 7, 12), V(12, top + 12, 12), 0.7, steel);
       beam(g, V(12, top + 12, 12), V(-4, top + 22, 20), 0.35, orangeM);
       beam(g, V(17, top + 6, -6), V(36, top + 16, -12), 0.4, steel);
-      fl = new THREE.Mesh(new THREE.PlaneGeometry(9, 9), flameM);
-      fl.position.set(37, top + 17.5, -12.5); g.add(fl);
+      fl = makeFlare(9);
+      fl.position.set(37, top + 15.5, -12.5); g.add(fl);
       box(6, 0.4, 3, deckM, H + 3, 1.6, 0);
       beam(g, V(H + 3, 1.8, -1.5), V(H, top, -1.5), 0.15, steel);
       beam(g, V(H + 3, 1.8, 1.5), V(H, top, 1.5), 0.15, steel);
@@ -518,8 +545,8 @@ function spawnRigs(scene: THREE.Scene, lightMats: LightMatEntry[]): Rig[] {
       box(2.6, 1, 2.6, orangeM, 5, dTop3 + 0.5, 0);
       // Flare boom out one side, well clear of the deck.
       beam(g, V(11, top + 5, 8), V(27, top + 13, 16), 0.34, steel);
-      fl = new THREE.Mesh(new THREE.PlaneGeometry(7, 7), flameM);
-      fl.position.set(28, top + 14, 16.6); g.add(fl);
+      fl = makeFlare(7);
+      fl.position.set(28, top + 12.6, 16.6); g.add(fl);
       const heli3 = new THREE.Mesh(new THREE.CylinderGeometry(5.5, 5.5, 0.5, 20), heliM);
       heli3.position.set(7, top + 9.6, 6); g.add(heli3);
       for (const [mx, mz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const) {
