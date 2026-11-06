@@ -34,6 +34,7 @@ import { createReef } from '../world/reef/index.js';
 import { createFishWorld } from '../entities/fish/index.js';
 import type { Threat } from '../entities/fish/types.js';
 import { createClouds } from '../world/clouds.js';
+import { createRunTo } from '../ui/runto.js';
 import { createMarinas } from '../world/marinas.js';
 import { createChannelBuoys } from '../world/channel-buoys.js';
 import { createLighthouse } from '../world/lighthouse.js';
@@ -823,6 +824,35 @@ export function initWorld(wrap: HTMLElement): World {
 
   // 13d-2. handgun mode (entities/handgun/**): a fourth peer beside boat / diver / land. Everything
   // mode-shaped lives in the facade; this file touches it only where marked `handgun.` below.
+  /*
+   * "Run to": the named spots and the docks, and the boat put down beside them.
+   *
+   * The spawn is out in the rig field now, 4.1 km from Boot Key Harbor, so every session used to
+   * open with a long run before anything happened and close with a longer one carrying a full
+   * cooler. It refuses whenever teleporting would spoil something in progress — the same set of
+   * reasons the handgun refuses for, plus a live race or tournament, where moving the boat for
+   * free would simply be cheating.
+   */
+  const runTo = createRunTo(wrap, {
+    boat: () => ({ x: stateBox.state.x, z: stateBox.state.z }),
+    refuse: () => (diver.mode === 'diver' ? 'Climb back aboard first.' : land.mode === 'land' ? 'Back to the boat first (B).'
+      : FishF.state === 'fight' ? 'Land your fish first.' : catchFlow.current ? 'Finish with your catch first.'
+      : raceMode.isActive() ? 'Not in the middle of a race.'
+      : tournament.isActive() ? 'Not in the middle of a tournament.' : null),
+    go(x, z, name) {
+      const S = boatSpec;
+      if (FishF.charging || (FishF.state !== 'idle' && FishF.state !== 'caught')) fishing.reelIn();
+      // Same arbiter the spawn and `unstick` use, so a destination can never put the hull on a
+      // flat, inside a jacket or through a dock.
+      const spot = findClearSpot(x, z, { draft: S.draft, len: S.len, dockRects, pilings }, { x, z });
+      stateBox.state = createBoatState(spot.x, spot.z, stateBox.state.h);
+      curState = stateBox.state;
+      model.group.position.set(spot.x, stateBox.state.y, spot.z);
+      toast(`Run to ${name}.`);
+    },
+  });
+  document.getElementById('btnRunTo')?.addEventListener('click', () => runTo.toggle());
+
   const handgun = createHandgunSystem({
     scene, camera, canvas: renderer.domElement, sky: sceneCtx.sky, sunDisc: sceneCtx.sunDisc, sunDir,
     camState, fpState, isTouch: isTouch(), getBoat: () => stateBox.state, getModel: () => model,
