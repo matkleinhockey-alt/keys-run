@@ -1272,6 +1272,7 @@ export function initWorld(wrap: HTMLElement): World {
     water.update(simTime, Math.max(sw * 1.1, ch), sw, ch);
     islands.update(simTime);
     tod.update(clamped);
+    clouds.update(clamped); // drifts the field on the wind; rewrites its matrices at 4 Hz
     // Real diver threat (entities/diver/**) — species-differentiated flee response
     // (entities/fish/behavior.ts) now reacts to the actual diver position/speed, not a stand-in.
     // `window.__fishDebugDiver` stays as a fallback for verification scripts that want to inject a
